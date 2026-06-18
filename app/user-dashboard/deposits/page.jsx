@@ -7,6 +7,10 @@ import Swal from "sweetalert2";
 
 const BDT_TO_USD_RATE = 0.009;
 
+function SkeletonField() {
+  return <div className="h-[46px] bg-slate-200 rounded-xl animate-pulse" />;
+}
+
 export default function DepositsPage() {
   const router = useRouter();
   const { user, loading: authLoading } = useAuth();

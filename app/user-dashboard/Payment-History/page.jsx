@@ -3,6 +3,21 @@
 import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "@/app/Component/Auth/AuthProvider";
 
+function SkeletonRow() {
+  return (
+    <tr className="animate-pulse">
+      <td className="px-4 py-3"><div className="h-3 w-24 bg-slate-200 rounded" /></td>
+      <td className="px-4 py-3"><div className="h-3 w-20 bg-slate-200 rounded" /></td>
+      <td className="px-4 py-3 text-right"><div className="h-4 w-16 bg-slate-200 rounded ml-auto" /></td>
+      <td className="px-4 py-3 text-right"><div className="h-4 w-16 bg-slate-200 rounded ml-auto" /></td>
+      <td className="px-4 py-3"><div className="h-3 w-28 bg-slate-200 rounded" /></td>
+      <td className="px-4 py-3"><div className="h-3 w-16 bg-slate-200 rounded" /></td>
+      <td className="px-4 py-3 text-center"><div className="h-5 w-16 bg-slate-200 rounded-full mx-auto" /></td>
+      <td className="px-4 py-3"><div className="h-3 w-20 bg-slate-200 rounded" /></td>
+    </tr>
+  );
+}
+
 export default function PaymentHistoryPage() {
   const { user, loading: authLoading } = useAuth();
   const [deposits, setDeposits] = useState([]);
@@ -32,7 +47,37 @@ export default function PaymentHistoryPage() {
     return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   };
 
-  if (authLoading || loading) return <div className="max-w-7xl mx-auto px-4 py-10 text-slate-600 font-medium">Loading payment history...</div>;
+  if (authLoading) return <div className="max-w-7xl mx-auto px-4 py-10 text-slate-600 font-medium">Loading payment history...</div>;
+
+  if (loading) {
+    return (
+      <div className="max-w-7xl mx-auto px-4 py-8">
+        <div className="mb-8 animate-pulse">
+          <div className="h-3 w-16 bg-slate-200 rounded" />
+          <div className="h-8 w-48 bg-slate-200 rounded mt-2" />
+          <div className="h-4 w-64 bg-slate-200 rounded mt-2" />
+        </div>
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-slate-50 border-b border-slate-200">
+                  {["Date", "Account", "Amount (BDT)", "Credited (USD)", "Transaction Ref", "Payment Method", "Status", "Rejection Reason"].map((h) => (
+                    <th key={h} className="px-4 py-3 text-left">
+                      <div className="h-3 w-16 bg-slate-200 rounded" />
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {Array.from({ length: 5 }).map((_, i) => <SkeletonRow key={i} />)}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   const statusBadge = (status) => {
     const colors = {

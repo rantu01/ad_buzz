@@ -4,6 +4,38 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/app/Component/Auth/AuthProvider";
 
+function SkeletonCard() {
+  return (
+    <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm animate-pulse">
+      <div className="h-3 w-28 bg-slate-200 rounded" />
+      <div className="h-8 w-24 bg-slate-200 rounded mt-3" />
+      <div className="h-3 w-20 bg-slate-200 rounded mt-3" />
+    </div>
+  );
+}
+
+function SkeletonPanel() {
+  return (
+    <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm animate-pulse">
+      <div className="flex items-center justify-between mb-4">
+        <div className="h-5 w-36 bg-slate-200 rounded" />
+        <div className="h-3 w-16 bg-slate-200 rounded" />
+      </div>
+      <div className="space-y-2">
+        {Array.from({ length: 3 }).map((_, i) => (
+          <div key={i} className="flex items-center justify-between p-3 rounded-xl bg-slate-50">
+            <div className="space-y-2">
+              <div className="h-4 w-20 bg-slate-200 rounded" />
+              <div className="h-3 w-28 bg-slate-200 rounded" />
+            </div>
+            <div className="h-5 w-20 bg-slate-200 rounded" />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function BalancePage() {
   const router = useRouter();
   const { user, loading: authLoading } = useAuth();
@@ -45,10 +77,32 @@ export default function BalancePage() {
     loadData();
   }, [user?.uid]);
 
+  if (authLoading) return <div className="max-w-7xl mx-auto px-4 py-10 text-slate-600 font-medium">Loading balance...</div>;
+
+  if (isLoading) {
+    return (
+      <div className="max-w-7xl mx-auto px-4 py-8">
+        <div className="mb-8 animate-pulse">
+          <div className="h-3 w-16 bg-slate-200 rounded" />
+          <div className="h-8 w-48 bg-slate-200 rounded mt-2" />
+          <div className="h-4 w-64 bg-slate-200 rounded mt-2" />
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-10">
+          <SkeletonCard />
+          <SkeletonCard />
+          <SkeletonCard />
+          <SkeletonCard />
+        </div>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          <SkeletonPanel />
+          <SkeletonPanel />
+        </div>
+      </div>
+    );
+  }
+
   const approvedDeposits = deposits.filter(d => d.status === "approved").reduce((s, d) => s + Number(d.amount), 0);
   const approvedWithdrawals = withdrawals.filter(w => w.status === "approved").reduce((s, w) => s + Number(w.amount), 0);
-
-  if (authLoading || isLoading) return <div className="max-w-7xl mx-auto px-4 py-10 text-slate-600 font-medium">Loading balance...</div>;
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-8">
@@ -70,11 +124,7 @@ export default function BalancePage() {
           <p className="text-3xl font-bold text-emerald-700 mt-2">${formatMoney(approvedDeposits)}</p>
           <p className="text-xs text-emerald-600 mt-2 font-medium">All approved deposits</p>
         </div>
-        <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
-          <p className="text-xs text-slate-400 uppercase tracking-wider font-semibold">Total Withdrawn</p>
-          <p className="text-3xl font-bold text-red-700 mt-2">${formatMoney(approvedWithdrawals)}</p>
-          <p className="text-xs text-red-600 mt-2 font-medium">All approved withdrawals</p>
-        </div>
+       
         <div className="bg-white rounded-2xl border-2 border-orange-400/30 p-6 shadow-sm relative overflow-hidden">
           <div className="absolute top-0 right-0 w-32 h-32 bg-orange-500/5 rounded-full -mr-10 -mt-10"></div>
           <p className="text-xs text-slate-400 uppercase tracking-wider font-semibold relative z-10">Net Balance</p>

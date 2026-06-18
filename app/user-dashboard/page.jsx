@@ -4,6 +4,56 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/app/Component/Auth/AuthProvider";
 
+function SkeletonCard() {
+  return (
+    <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm flex flex-col justify-between animate-pulse">
+      <div>
+        <div className="flex items-center justify-between">
+          <div className="h-3 w-24 bg-slate-200 rounded" />
+          <div className="h-9 w-9 bg-slate-200 rounded-lg" />
+        </div>
+        <div className="h-8 w-28 bg-slate-200 rounded mt-4" />
+      </div>
+      <div className="h-4 w-20 bg-slate-200 rounded mt-4" />
+    </div>
+  );
+}
+
+function SkeletonTable({ rows = 3 }) {
+  return (
+    <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm animate-pulse">
+      <div className="flex items-center justify-between mb-4">
+        <div className="h-5 w-32 bg-slate-200 rounded" />
+        <div className="h-3 w-16 bg-slate-200 rounded" />
+      </div>
+      <div className="space-y-3">
+        {Array.from({ length: rows }).map((_, i) => (
+          <div key={i} className="flex items-center justify-between p-3 rounded-xl bg-slate-50">
+            <div className="space-y-2">
+              <div className="h-4 w-24 bg-slate-200 rounded" />
+              <div className="h-3 w-16 bg-slate-200 rounded" />
+            </div>
+            <div className="h-5 w-16 bg-slate-200 rounded-full" />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+const statusBadge = (status) => {
+  const colors = {
+    pending: "bg-amber-50 text-amber-700",
+    approved: "bg-emerald-50 text-emerald-700",
+    rejected: "bg-red-50 text-red-700",
+  };
+  return (
+    <span className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-medium capitalize ${colors[status] || "bg-slate-50 text-slate-600"}`}>
+      {status}
+    </span>
+  );
+};
+
 export default function UserDashboardPage() {
   const router = useRouter();
   const { user, loading } = useAuth();
@@ -49,10 +99,32 @@ export default function UserDashboardPage() {
     loadDashboard();
   }, [user?.uid]);
 
-  if (loading || isLoading) return <div className="max-w-7xl mx-auto px-4 py-10 text-slate-600 font-medium">Loading dashboard...</div>;
+  if (loading) return <div className="max-w-7xl mx-auto px-4 py-10 text-slate-600 font-medium">Loading dashboard...</div>;
 
   if (!user) {
     return (<div className="max-w-7xl mx-auto px-4 py-10 text-center"><h1 className="text-2xl font-bold text-slate-900">User Dashboard</h1><p className="mt-2 text-slate-600">Please login to view your dashboard.</p></div>);
+  }
+
+  if (isLoading) {
+    return (
+      <div className="max-w-7xl mx-auto px-4 py-8">
+        <div className="mb-8">
+          <div className="h-3 w-24 bg-slate-200 rounded animate-pulse" />
+          <div className="h-8 w-48 bg-slate-200 rounded mt-2 animate-pulse" />
+          <div className="h-4 w-72 bg-slate-200 rounded mt-2 animate-pulse" />
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-10">
+          <SkeletonCard />
+          <SkeletonCard />
+          <SkeletonCard />
+          <SkeletonCard />
+        </div>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          <SkeletonTable rows={3} />
+          <SkeletonTable rows={3} />
+        </div>
+      </div>
+    );
   }
 
   const totalBudget = adAccounts.reduce((s, a) => s + Number(a.budget || 0), 0);
@@ -137,36 +209,68 @@ export default function UserDashboardPage() {
             <h3 className="text-lg font-bold text-slate-900">Recent Deposits</h3>
             <span onClick={() => router.push("/user-dashboard/deposits")} className="text-xs text-blue-600 font-medium cursor-pointer hover:underline">View All</span>
           </div>
-          <div className="space-y-3">
-            {deposits.length ? deposits.slice(0, 3).map((deposit) => (
-              <div key={deposit._id} className="flex items-center justify-between p-3 rounded-xl bg-slate-50 border border-slate-100 transition hover:bg-slate-100/50">
-                <div>
-                  <p className="font-bold text-slate-900">${formatMoney(deposit.amount)}</p>
-                  <p className="text-[11px] text-slate-400 mt-0.5">{new Date(deposit.createdAt).toLocaleDateString()}</p>
-                </div>
-                <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium capitalize ${deposit.status === 'approved' ? 'bg-emerald-50 text-emerald-700' : deposit.status === 'pending' ? 'bg-amber-50 text-amber-700' : 'bg-red-50 text-red-700'}`}>{deposit.status}</span>
-              </div>
-            )) : <p className="text-sm text-slate-500 py-2">No deposits registered yet.</p>}
-          </div>
+          {deposits.length === 0 ? (
+            <p className="text-sm text-slate-500 py-2">No deposits registered yet.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm text-left">
+                <thead>
+                  <tr className="border-b border-slate-100 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+                    <th className="pb-2 pr-3">Date</th>
+                    <th className="pb-2 pr-3 text-right">Amount</th>
+                    <th className="pb-2 pr-3">Method</th>
+                    <th className="pb-2">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-50">
+                  {deposits.slice(0, 5).map((deposit) => (
+                    <tr key={deposit._id} className="hover:bg-slate-50/50 transition-colors">
+                      <td className="py-2.5 pr-3 text-xs text-slate-500 whitespace-nowrap">{new Date(deposit.createdAt).toLocaleDateString()}</td>
+                      <td className="py-2.5 pr-3 text-right font-semibold text-slate-900 whitespace-nowrap">${formatMoney(deposit.amount)}</td>
+                      <td className="py-2.5 pr-3 text-xs text-slate-600 capitalize whitespace-nowrap">{(deposit.paymentMethod || "bank_transfer").replace(/_/g, " ")}</td>
+                      <td className="py-2.5">{statusBadge(deposit.status)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
 
-        {/* <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
+        <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-bold text-slate-900">Recent Withdrawals</h3>
-            <span onClick={() => router.push("/user-dashboard/withdrawals")} className="text-xs text-blue-600 font-medium cursor-pointer hover:underline">View All</span>
+            <h3 className="text-lg font-bold text-slate-900">Quick Actions</h3>
           </div>
           <div className="space-y-3">
-            {withdrawals.length ? withdrawals.slice(0, 3).map((withdrawal) => (
-              <div key={withdrawal._id} className="flex items-center justify-between p-3 rounded-xl bg-slate-50 border border-slate-100 transition hover:bg-slate-100/50">
-                <div>
-                  <p className="font-bold text-slate-900">${formatMoney(withdrawal.amount)}</p>
-                  <p className="text-[11px] font-mono text-slate-400 mt-0.5 truncate max-w-[180px]">{withdrawal.walletAddress}</p>
-                </div>
-                <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium capitalize ${withdrawal.status === 'approved' ? 'bg-emerald-50 text-emerald-700' : withdrawal.status === 'pending' ? 'bg-amber-50 text-amber-700' : 'bg-red-50 text-red-700'}`}>{withdrawal.status}</span>
+            <button onClick={() => router.push("/user-dashboard/ad-account")} className="w-full flex items-center gap-3 p-3 rounded-xl bg-slate-50 border border-slate-100 hover:bg-slate-100/50 transition text-left">
+              <span className="p-2 bg-blue-50 rounded-lg text-blue-600">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" /></svg>
+              </span>
+              <div>
+                <p className="text-sm font-semibold text-slate-900">Top Up Ad Account</p>
+                <p className="text-xs text-slate-500">Add budget to your ad accounts</p>
               </div>
-            )) : <p className="text-sm text-slate-500 py-2">No withdrawals registered yet.</p>}
+            </button>
+            <button onClick={() => router.push("/user-dashboard/deposits")} className="w-full flex items-center gap-3 p-3 rounded-xl bg-slate-50 border border-slate-100 hover:bg-slate-100/50 transition text-left">
+              <span className="p-2 bg-emerald-50 rounded-lg text-emerald-600">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M12 6v6m0 0v6m0-6h6m-6 0H6" /></svg>
+              </span>
+              <div>
+                <p className="text-sm font-semibold text-slate-900">New Deposit</p>
+                <p className="text-xs text-slate-500">Add funds to your wallet</p>
+              </div>
+            </button>
+            <button onClick={() => router.push("/user-dashboard/profile")} className="w-full flex items-center gap-3 p-3 rounded-xl bg-slate-50 border border-slate-100 hover:bg-slate-100/50 transition text-left">
+              <span className="p-2 bg-purple-50 rounded-lg text-purple-600">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
+              </span>
+              <div>
+                <p className="text-sm font-semibold text-slate-900">Profile Settings</p>
+                <p className="text-xs text-slate-500">Update your personal information</p>
+              </div>
+            </button>
           </div>
-        </div> */}
+        </div>
       </div>
     </div>
   );

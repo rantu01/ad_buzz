@@ -277,7 +277,6 @@ export default function AdminAdAccountsPage() {
 
   const filtered = adAccounts.filter((a) => {
     if (showUnassigned && a.uid) return false;
-    if (!showUnassigned && (!a.uid || a.uid === "")) return false;
     if (!search) return true;
     const q = search.toLowerCase();
     return a.name?.toLowerCase().includes(q) || a.accountId?.toLowerCase().includes(q) || a.email?.toLowerCase().includes(q) || a.uid?.toLowerCase().includes(q);

@@ -3,6 +3,18 @@
 import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "@/app/Component/Auth/AuthProvider";
 
+function SkeletonRow() {
+  return (
+    <tr className="animate-pulse">
+      <td className="px-4 py-3"><div className="h-3 w-28 bg-slate-200 rounded" /></td>
+      <td className="px-4 py-3"><div className="h-5 w-16 bg-slate-200 rounded-full" /></td>
+      <td className="px-4 py-3 text-right"><div className="h-4 w-16 bg-slate-200 rounded ml-auto" /></td>
+      <td className="px-4 py-3 text-right"><div className="h-4 w-16 bg-slate-200 rounded ml-auto" /></td>
+      <td className="px-4 py-3 hidden md:table-cell"><div className="h-3 w-40 bg-slate-200 rounded" /></td>
+    </tr>
+  );
+}
+
 export default function BalanceHistoryPage() {
   const { user, loading: authLoading } = useAuth();
   const [logs, setLogs] = useState([]);
@@ -77,7 +89,7 @@ export default function BalanceHistoryPage() {
             </thead>
             <tbody className="divide-y divide-slate-100">
               {isLoading ? (
-                <tr><td colSpan={5} className="px-4 py-8 text-center text-slate-500">Loading balance logs...</td></tr>
+                Array.from({ length: 5 }).map((_, i) => <SkeletonRow key={i} />)
               ) : logs.length === 0 ? (
                 <tr><td colSpan={5} className="px-4 py-8 text-center text-slate-500">No balance logs found.</td></tr>
               ) : logs.map((log) => (
@@ -98,7 +110,7 @@ export default function BalanceHistoryPage() {
         </div>
       </div>
 
-      {totalPages > 1 && (
+      {!isLoading && totalPages > 1 && (
         <div className="flex items-center justify-between gap-4">
           <p className="text-sm text-slate-500">Page {page} of {totalPages}</p>
           <div className="flex gap-2">
