@@ -404,7 +404,7 @@ export default function AdminAdAccountsPage() {
                         )}
                       </td>
                       <td className="py-3 px-4">
-                        <input type="number" step="0.01" defaultValue={(Number(acc.metaSpendCap || acc.spendCap || 0) / 100)} className="border border-slate-200 rounded-lg px-2 py-1 text-sm w-24 bg-white"
+                        <input key={acc.spendCap || 0} type="number" step="0.01" defaultValue={(Number(acc.metaSpendCap || acc.spendCap || 0) / 100)} className="border border-slate-200 rounded-lg px-2 py-1 text-sm w-24 bg-white"
                           onBlur={(e) => { const newVal = Number(e.target.value); const oldVal = Number(acc.metaSpendCap || acc.spendCap || 0) / 100; if (newVal !== oldVal) updateAccount(acc._id, { spendCap: Math.round(newVal * 100) }); }} />
                       </td>
                       <td className="py-3 px-4">
