@@ -127,7 +127,7 @@ export default function UserDashboardPage() {
     );
   }
 
-  const totalBudget = adAccounts.reduce((s, a) => s + Number(a.budget || 0), 0);
+  const totalBudget = adAccounts.reduce((s, a) => s + (Number(a.spendCap || 0) / 100), 0);
   const totalSpent = adAccounts.reduce((s, a) => s + Number(a.spent || 0), 0);
 
   return (

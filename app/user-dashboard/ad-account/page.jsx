@@ -31,6 +31,17 @@ export default function AdAccountPage() {
     return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   };
 
+  const getStatusBadge = (status, metaStatusLabel) => {
+    const label = metaStatusLabel || (status === "active" ? "Active" : status === "disabled" ? "Disabled" : "Paused");
+    const isActive = status === "active";
+    const isDisabled = status === "disabled";
+    return (
+      <span className={`px-2.5 py-0.5 text-xs font-medium rounded-full ${isActive ? "bg-emerald-50 text-emerald-700" : isDisabled ? "bg-red-50 text-red-700" : "bg-amber-50 text-amber-700"}`}>
+        {label}
+      </span>
+    );
+  };
+
   useEffect(() => {
     function handleClick(e) {
       if (menuRef.current && !menuRef.current.contains(e.target)) {
@@ -77,7 +88,7 @@ export default function AdAccountPage() {
     } catch {}
   };
 
-  const totalBudget = adAccounts.reduce((s, a) => s + Number(a.budget || 0), 0);
+  const totalBudget = adAccounts.reduce((s, a) => s + (Number(a.metaSpendCap || a.spendCap || 0) / 100), 0);
   const totalSpent = adAccounts.reduce((s, a) => s + Number(a.spent || 0), 0);
 
   const openTopUp = (account) => {
@@ -262,36 +273,37 @@ export default function AdAccountPage() {
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="border-b border-slate-200 text-xs font-semibold text-slate-400 uppercase tracking-wider">
-                <th className="pb-3 pr-4">Name</th>
-                <th className="pb-3 pr-4">Meta Account ID</th>
-                <th className="pb-3 pr-4">Status</th>
-                <th className="pb-3 pr-4">Budget</th>
-                <th className="pb-3 pr-4">Spent</th>
-                <th className="pb-3 pr-4">Last Refreshed</th>
-                <th className="pb-3"></th>
+                    <th className="pb-3 pr-4">Name</th>
+                    <th className="pb-3 pr-4">Meta Account ID</th>
+                    <th className="pb-3 pr-4">Meta Status</th>
+                    <th className="pb-3 pr-4">Budget</th>
+                    <th className="pb-3 pr-4">Spent</th>
+                    <th className="pb-3 pr-4">Meta Balance</th>
+                    <th className="pb-3 pr-4">Last Refreshed</th>
+                    <th className="pb-3"></th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-sm text-slate-700">
               {adAccounts.map((acc) => {
-                const budgetNum = Number(acc.budget || 0);
+                const budgetNum = Number(acc.metaSpendCap || acc.spendCap || 0) / 100;
                 const spentNum = Number(acc.spent || 0);
                 const spendPct = budgetNum > 0 ? Math.min((spentNum / budgetNum) * 100, 100) : 0;
+                const metaBalanceDollars = Number(acc.metaBalance || 0) / 100;
                 return (
                   <tr key={acc._id} className="hover:bg-slate-50/60 transition-colors">
-                    <td className="py-4 pr-4 font-medium text-slate-900 max-w-[220px] truncate">{acc.name}</td>
+                    <td className="py-4 pr-4 font-medium text-slate-900 max-w-[220px] truncate">{acc.metaAccountName || acc.name}</td>
                     <td className="py-4 pr-4 font-mono text-xs text-blue-600">{acc.metaAccountId || acc.accountId}</td>
                     <td className="py-4 pr-4">
-                      <span className={`px-2.5 py-0.5 text-xs font-medium rounded-full ${acc.status === "active" ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>
-                        {acc.status === "active" ? "Active" : "Paused"}
-                      </span>
+                      {getStatusBadge(acc.status, acc.metaStatusLabel)}
                     </td>
                     <td className="py-4 pr-4">
-                      <div className="text-sm font-semibold text-slate-900">${formatMoney(budgetNum)}</div>
+                      <div className="text-sm font-semibold text-slate-900">{acc.currency || "USD"} ${formatMoney(budgetNum)}</div>
                       <div className="w-20 h-1.5 bg-slate-100 rounded-full mt-1.5 overflow-hidden">
                         <div className={`h-full rounded-full ${spendPct > 90 ? "bg-red-500" : spendPct > 70 ? "bg-amber-500" : "bg-emerald-500"}`} style={{ width: `${spendPct}%` }}></div>
                       </div>
                     </td>
                     <td className="py-4 pr-4 text-sm">${formatMoney(spentNum)}</td>
+                    <td className="py-4 pr-4 text-sm font-medium text-slate-900">${formatMoney(metaBalanceDollars)}</td>
                     <td className="py-4 pr-4 text-xs text-slate-400">{acc.lastSyncedAt ? new Date(acc.lastSyncedAt).toLocaleString() : "Not synced"}</td>
                     <td className="py-4 text-right whitespace-nowrap">
                       <div className="flex items-center justify-end gap-2">
@@ -326,7 +338,7 @@ export default function AdAccountPage() {
               })}
               {adAccounts.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="py-10 text-center text-slate-400 text-sm">No ad accounts found</td>
+                  <td colSpan={8} className="py-10 text-center text-slate-400 text-sm">No ad accounts found</td>
                 </tr>
               )}
             </tbody>
@@ -351,7 +363,7 @@ export default function AdAccountPage() {
                 </div>
                 <div className="flex justify-between text-sm mb-2">
                   <span className="text-slate-500">Current Budget</span>
-                  <span className="text-slate-900 font-medium">${formatMoney(topUpModal.budget)}</span>
+                  <span className="text-slate-900 font-medium">${formatMoney(Number(topUpModal.metaSpendCap || topUpModal.spendCap || 0) / 100)}</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-slate-500">Wallet Balance</span>

@@ -233,11 +233,12 @@ export default function ReportsPage() {
                 <thead><tr className="bg-slate-50 text-slate-400 text-xs font-bold uppercase tracking-wider border-b border-slate-200"><th className="py-3 px-4">Account</th><th className="py-3 px-4">Status</th><th className="py-3 px-4">Budget</th><th className="py-3 px-4">Spent</th><th className="py-3 px-4">Utilization</th><th className="py-3 px-4">User</th><th className="py-3 px-4">Last Sync</th></tr></thead>
                 <tbody className="divide-y divide-slate-100 text-sm">
                   {adSpend.rows.length > 0 ? adSpend.rows.map((a, i) => {
-                    const util = a.budget > 0 ? (a.spent / a.budget) * 100 : 0;
+                    const budgetDollars = Number(a.spendCap || 0) / 100;
+                    const util = budgetDollars > 0 ? (a.spent / budgetDollars) * 100 : 0;
                     return (<tr key={a._id || i} className="hover:bg-slate-50/40">
                       <td className="py-3 px-4 max-w-[200px]"><p className="font-medium text-slate-900 truncate">{a.name}</p><p className="text-xs font-mono text-blue-600 truncate">{a.metaAccountId || a.accountId}</p></td>
                       <td className="py-3 px-4"><span className={`text-xs px-2 py-0.5 rounded-full font-medium ${a.status === "active" ? "bg-emerald-50 text-emerald-700" : a.status === "paused" ? "bg-amber-50 text-amber-700" : "bg-slate-100 text-slate-600"}`}>{a.status}</span></td>
-                      <td className="py-3 px-4 font-medium">${formatMoney(a.budget)}</td>
+                      <td className="py-3 px-4 font-medium">${formatMoney(budgetDollars)}</td>
                       <td className="py-3 px-4">${formatMoney(a.spent)}</td>
                       <td className="py-3 px-4"><div className="flex items-center gap-2"><div className="w-16 bg-slate-100 h-1.5 rounded-full overflow-hidden"><div className={`h-full rounded-full ${util > 90 ? "bg-red-500" : util > 70 ? "bg-amber-500" : "bg-emerald-500"}`} style={{ width: `${Math.min(util, 100)}%` }} /></div><span className={`text-xs font-medium ${util > 90 ? "text-red-600" : util > 70 ? "text-amber-600" : "text-emerald-600"}`}>{util.toFixed(1)}%</span></div></td>
                       <td className="py-3 px-4 text-xs text-slate-500 truncate max-w-[140px]">{a.email || "-"}</td>

@@ -275,14 +275,47 @@ export default function AdminAdAccountsPage() {
     return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   };
 
-  const filtered = adAccounts.filter((a) => {
+  const metaByAccountId = {};
+  for (const ma of metaAccounts) {
+    metaByAccountId[ma.metaAccountId] = ma;
+  }
+
+  const getMetaStatusLabel = (accountStatus) => {
+    switch (accountStatus) {
+      case 1: return "Active";
+      case 2: return "Disabled";
+      case 3: return "Inactive";
+      case 7: return "Pending Risk Review";
+      case 8: return "Pending Settlement";
+      case 9: return "In Grace Period";
+      case 100: return "Pending Closure";
+      case 101: return "Closed";
+      default: return "Unknown";
+    }
+  };
+
+  const getMetaStatusBadge = (accountStatus) => {
+    const label = getMetaStatusLabel(accountStatus);
+    const isActive = accountStatus === 1;
+    const isDisabled = accountStatus === 2 || accountStatus >= 100;
+    return (
+      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${isActive ? "bg-emerald-50 text-emerald-700" : isDisabled ? "bg-red-50 text-red-700" : "bg-amber-50 text-amber-700"}`}>
+        {label}
+      </span>
+    );
+  };
+
+  const filtered = adAccounts.map((acc) => {
+    const meta = acc.metaAccountId ? metaByAccountId[acc.metaAccountId] : null;
+    return { ...acc, _meta: meta };
+  }).filter((a) => {
     if (showUnassigned && a.uid) return false;
     if (!search) return true;
     const q = search.toLowerCase();
     return a.name?.toLowerCase().includes(q) || a.accountId?.toLowerCase().includes(q) || a.email?.toLowerCase().includes(q) || a.uid?.toLowerCase().includes(q);
   });
 
-  const totalBudget = adAccounts.reduce((s, a) => s + Number(a.budget || 0), 0);
+  const totalBudget = adAccounts.reduce((s, a) => s + (Number(a.metaSpendCap || a.spendCap || 0) / 100), 0);
   const totalSpent = adAccounts.reduce((s, a) => s + Number(a.spent || 0), 0);
 
   return (
@@ -326,18 +359,21 @@ export default function AdminAdAccountsPage() {
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="bg-slate-50 text-slate-400 text-xs font-bold uppercase tracking-wider border-b border-slate-200">
-                  <th className="py-3 px-4">Name / Account ID</th>
-                  <th className="py-3 px-4">User</th>
-                  <th className="py-3 px-4">Status</th>
-                  <th className="py-3 px-4">Budget</th>
-                  <th className="py-3 px-4">Spent</th>
-                  <th className="py-3 px-4">Sync</th>
-                  <th className="py-3 px-4">Actions</th>
+                    <th className="py-3 px-4">Name / Account ID</th>
+                    <th className="py-3 px-4">User</th>
+                    <th className="py-3 px-4">Local Status</th>
+                    <th className="py-3 px-4">Meta Status</th>
+                    <th className="py-3 px-4">Budget</th>
+                    <th className="py-3 px-4">Spent</th>
+                    <th className="py-3 px-4">Sync</th>
+                    <th className="py-3 px-4">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-sm">
                 {filtered.map((acc) => {
-                  const spendPct = acc.budget > 0 ? Math.min((acc.spent / acc.budget) * 100, 100) : 0;
+                  const budgetDollars = Number(acc.metaSpendCap || acc.spendCap || 0) / 100;
+                  const spendPct = budgetDollars > 0 ? Math.min((acc.spent / budgetDollars) * 100, 100) : 0;
+                  const meta = acc._meta;
                   return (
                     <tr key={acc._id} className="hover:bg-slate-50/40">
                       <td className="py-3 px-4 max-w-[220px]">
@@ -363,8 +399,13 @@ export default function AdminAdAccountsPage() {
                         </select>
                       </td>
                       <td className="py-3 px-4">
-                        <input type="number" step="0.01" defaultValue={Number(acc.budget || 0)} className="border border-slate-200 rounded-lg px-2 py-1 text-sm w-24 bg-white"
-                          onBlur={(e) => { if (Number(e.target.value) !== Number(acc.budget)) updateAccount(acc._id, { budget: e.target.value }); }} />
+                        {meta ? getMetaStatusBadge(meta.accountStatus) : (
+                          <span className="text-xs text-slate-400 italic">No Meta data</span>
+                        )}
+                      </td>
+                      <td className="py-3 px-4">
+                        <input type="number" step="0.01" defaultValue={(Number(acc.metaSpendCap || acc.spendCap || 0) / 100)} className="border border-slate-200 rounded-lg px-2 py-1 text-sm w-24 bg-white"
+                          onBlur={(e) => { const newVal = Number(e.target.value); const oldVal = Number(acc.metaSpendCap || acc.spendCap || 0) / 100; if (newVal !== oldVal) updateAccount(acc._id, { spendCap: Math.round(newVal * 100) }); }} />
                       </td>
                       <td className="py-3 px-4">
                         <span className="font-medium">${formatMoney(acc.spent)}</span>
@@ -490,7 +531,7 @@ export default function AdminAdAccountsPage() {
                               <p className="text-xs text-slate-400 font-mono truncate">{acc.metaAccountId || acc.accountId}</p>
                             </div>
                             <div className="text-right shrink-0">
-                              <p className="text-sm font-semibold text-slate-900">${formatMoney(acc.budget)}</p>
+                              <p className="text-sm font-semibold text-slate-900">${formatMoney(Number(acc.metaSpendCap || acc.spendCap || 0) / 100)}</p>
                               <p className="text-xs text-slate-400">{acc.currency || "USD"}</p>
                             </div>
                           </label>

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import clientPromise from "@/lib/mongodb";
 import { ObjectId } from "mongodb";
+import { updateSpendCap } from "@/lib/metaApiService";
 
 const DB_NAME = process.env.MONGODB_DB_NAME || "ad_buzz";
 
@@ -31,8 +32,21 @@ export async function POST(request) {
       return NextResponse.json({ success: false, message: "Ad account not found" }, { status: 404 });
     }
 
-    const previousBudget = Number(account.budget || 0);
-    const newBudget = previousBudget + topUpAmount;
+    const previousBudgetCents = Number(account.spendCap || 0);
+    const previousBudgetDollars = previousBudgetCents / 100;
+    const newBudgetDollars = previousBudgetDollars + topUpAmount;
+    const newBudgetCents = Math.round(newBudgetDollars * 100);
+
+    if (account.metaAccountId) {
+      try {
+        await updateSpendCap(account.metaAccountId, newBudgetDollars);
+      } catch (metaErr) {
+        return NextResponse.json({
+          success: false,
+          message: `Meta spend cap update failed: ${metaErr.message}. Top-up cancelled. Ensure your Meta API token has 'ads_management' permission.`,
+        }, { status: 500 });
+      }
+    }
 
     const newBalance = Number(user.availableBalance) - topUpAmount;
 
@@ -52,7 +66,7 @@ export async function POST(request) {
     const adResult = await db.collection("adAccounts").findOneAndUpdate(
       { _id: new ObjectId(accountId) },
       {
-        $set: { budget: newBudget, updatedAt: new Date() },
+        $set: { spendCap: newBudgetCents, updatedAt: new Date() },
       },
       { returnDocument: "after" }
     );
@@ -64,6 +78,13 @@ export async function POST(request) {
         { $set: { availableBalance: Number(user.availableBalance), updatedAt: new Date() } }
       );
       return NextResponse.json({ success: false, message: "Failed to update ad account budget" }, { status: 500 });
+    }
+
+    if (account.metaAccountId) {
+      await db.collection("metaAdAccounts").findOneAndUpdate(
+        { metaAccountId: account.metaAccountId },
+        { $set: { spendCap: newBudgetCents, updatedAt: new Date() } }
+      ).catch(() => {});
     }
 
     const logDoc = {
@@ -79,8 +100,8 @@ export async function POST(request) {
       metadata: {
         accountId,
         accountName: account.name || "",
-        previousBudget,
-        newBudget,
+        previousBudget: previousBudgetDollars,
+        newBudget: newBudgetDollars,
         topUpAmount,
         accountIdentifier: account.metaAccountId || account.accountId,
       },
@@ -90,9 +111,9 @@ export async function POST(request) {
 
     return NextResponse.json({
       success: true,
-      message: `Successfully topped up $${topUpAmount.toFixed(2)}`,
+      message: `Successfully topped up $${topUpAmount.toFixed(2)}. Spend cap updated in Meta.`,
       walletBalance: Number(updatedUser.availableBalance),
-      accountBudget: newBudget,
+      accountBudget: newBudgetDollars,
     });
   } catch (error) {
     return NextResponse.json({ success: false, message: error.message || "Top-up failed" }, { status: 500 });
