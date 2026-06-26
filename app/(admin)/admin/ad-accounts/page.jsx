@@ -11,6 +11,7 @@ export default function AdminAdAccountsPage() {
   const [search, setSearch] = useState("");
   const [syncing, setSyncing] = useState(false);
   const [showUnassigned, setShowUnassigned] = useState(false);
+  const [savingAccounts, setSavingAccounts] = useState({});
   const [users, setUsers] = useState([]);
 
   const [assignModal, setAssignModal] = useState(false);
@@ -64,18 +65,23 @@ export default function AdminAdAccountsPage() {
   }, []);
 
   const updateAccount = async (_id, updates) => {
-    const res = await fetch("/api/admin/ad-accounts", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ _id, ...updates }),
-    });
-    const result = await res.json();
-    if (!res.ok || !result.success) {
-      await Swal.fire({ icon: "error", title: "Update failed", text: result.message || "Try again." });
-      return;
+    setSavingAccounts((prev) => ({ ...prev, [_id]: true }));
+    try {
+      const res = await fetch("/api/admin/ad-accounts", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ _id, ...updates }),
+      });
+      const result = await res.json();
+      if (!res.ok || !result.success) {
+        await Swal.fire({ icon: "error", title: "Update failed", text: result.message || "Try again." });
+        return;
+      }
+      await Swal.fire({ icon: "success", title: "Updated", timer: 1000, showConfirmButton: false });
+      loadData();
+    } finally {
+      setSavingAccounts((prev) => { const next = { ...prev }; delete next[_id]; return next; });
     }
-    await Swal.fire({ icon: "success", title: "Updated", timer: 1000, showConfirmButton: false });
-    loadData();
   };
 
   const deleteAccount = async (_id) => {
@@ -404,8 +410,14 @@ export default function AdminAdAccountsPage() {
                         )}
                       </td>
                       <td className="py-3 px-4">
-                        <input key={acc.spendCap || 0} type="number" step="0.01" defaultValue={(Number(acc.metaSpendCap || acc.spendCap || 0) / 100)} className="border border-slate-200 rounded-lg px-2 py-1 text-sm w-24 bg-white"
-                          onBlur={(e) => { const newVal = Number(e.target.value); const oldVal = Number(acc.metaSpendCap || acc.spendCap || 0) / 100; if (newVal !== oldVal) updateAccount(acc._id, { spendCap: Math.round(newVal * 100) }); }} />
+                        <div className="relative">
+                          <input key={acc.spendCap || 0} type="number" step="0.01" defaultValue={(Number(acc.metaSpendCap || acc.spendCap || 0) / 100)} className={`border border-slate-200 rounded-lg px-2 py-1 text-sm w-24 bg-white ${savingAccounts[acc._id] ? "opacity-50" : ""}`}
+                            onBlur={(e) => { const newVal = Number(e.target.value); const oldVal = Number(acc.metaSpendCap || acc.spendCap || 0) / 100; if (newVal !== oldVal) updateAccount(acc._id, { spendCap: Math.round(newVal * 100) }); }}
+                            disabled={savingAccounts[acc._id]} />
+                          {savingAccounts[acc._id] && (
+                            <RefreshCw size={14} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 animate-spin" />
+                          )}
+                        </div>
                       </td>
                       <td className="py-3 px-4">
                         <span className="font-medium">${formatMoney(acc.spent)}</span>
