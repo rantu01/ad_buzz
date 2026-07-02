@@ -1,9 +1,16 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useAdmin } from "../components/AdminProvider";
+import { hasPermission } from "@/lib/permissions";
 import Swal from "sweetalert2";
 
 export default function AdminDepositsPage() {
+  const { profile } = useAdmin();
+  const role = profile?.role || "customer";
+  const canApprove = hasPermission(role, "approve_deposits");
+  const canReject = hasPermission(role, "reject_deposits");
+
   const [deposits, setDeposits] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState("pending");
@@ -43,7 +50,7 @@ export default function AdminDepositsPage() {
     try {
       const res = await fetch("/api/admin/deposits", {
         method: "PATCH", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ depositId, status: "approved", approverUid: "admin" }),
+        body: JSON.stringify({ depositId, status: "approved", approverUid: profile?.email || "admin" }),
       });
       const result = await res.json();
       if (!res.ok || !result.success) {
@@ -165,24 +172,31 @@ export default function AdminDepositsPage() {
                     <td className="px-4 py-3 text-center whitespace-nowrap">
                       {dep.status === "pending" ? (
                         <div className="flex gap-1.5 justify-center">
-                          <button
-                            onClick={() => handleApprove(dep._id)}
-                            disabled={processingId === dep._id}
-                            className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs text-white font-medium transition hover:bg-emerald-700 disabled:opacity-60 disabled:cursor-not-allowed"
-                          >
-                            {processingId === dep._id ? (
-                              <><span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-white/30 border-t-white" /> Processing</>
-                            ) : "Approve"}
-                          </button>
-                          <button
-                            onClick={() => handleReject(dep._id)}
-                            disabled={processingId === dep._id}
-                            className="inline-flex items-center gap-1.5 rounded-lg bg-red-600 px-3 py-1.5 text-xs text-white font-medium transition hover:bg-red-700 disabled:opacity-60 disabled:cursor-not-allowed"
-                          >
-                            {processingId === dep._id ? (
-                              <><span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-white/30 border-t-white" /> Processing</>
-                            ) : "Reject"}
-                          </button>
+                          {canApprove && (
+                            <button
+                              onClick={() => handleApprove(dep._id)}
+                              disabled={processingId === dep._id}
+                              className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs text-white font-medium transition hover:bg-emerald-700 disabled:opacity-60 disabled:cursor-not-allowed"
+                            >
+                              {processingId === dep._id ? (
+                                <><span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-white/30 border-t-white" /> Processing</>
+                              ) : "Approve"}
+                            </button>
+                          )}
+                          {canReject && (
+                            <button
+                              onClick={() => handleReject(dep._id)}
+                              disabled={processingId === dep._id}
+                              className="inline-flex items-center gap-1.5 rounded-lg bg-red-600 px-3 py-1.5 text-xs text-white font-medium transition hover:bg-red-700 disabled:opacity-60 disabled:cursor-not-allowed"
+                            >
+                              {processingId === dep._id ? (
+                                <><span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-white/30 border-t-white" /> Processing</>
+                              ) : "Reject"}
+                            </button>
+                          )}
+                          {!canApprove && !canReject && (
+                            <span className="text-xs text-slate-400">View only</span>
+                          )}
                         </div>
                       ) : (
                         <span className="text-slate-300 text-xs">—</span>

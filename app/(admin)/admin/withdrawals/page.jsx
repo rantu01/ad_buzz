@@ -1,9 +1,16 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useAdmin } from "../components/AdminProvider";
+import { hasPermission } from "@/lib/permissions";
 import Swal from "sweetalert2";
 
 export default function AdminWithdrawalsPage() {
+  const { profile } = useAdmin();
+  const role = profile?.role || "customer";
+  const canApprove = hasPermission(role, "approve_withdrawals");
+  const canReject = hasPermission(role, "reject_withdrawals");
+
   const [withdrawals, setWithdrawals] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState("pending");
@@ -114,12 +121,19 @@ export default function AdminWithdrawalsPage() {
 
               {w.status === "pending" && (
                 <div className="flex gap-2">
-                  <button onClick={() => handleApprove(w._id)} className="flex-1 rounded-lg bg-emerald-600 px-3 py-2 text-sm text-white font-medium hover:bg-emerald-700 transition">
-                    Approve
-                  </button>
-                  <button onClick={() => handleReject(w._id)} className="flex-1 rounded-lg bg-red-600 px-3 py-2 text-sm text-white font-medium hover:bg-red-700 transition">
-                    Reject
-                  </button>
+                  {canApprove && (
+                    <button onClick={() => handleApprove(w._id)} className="flex-1 rounded-lg bg-emerald-600 px-3 py-2 text-sm text-white font-medium hover:bg-emerald-700 transition">
+                      Approve
+                    </button>
+                  )}
+                  {canReject && (
+                    <button onClick={() => handleReject(w._id)} className="flex-1 rounded-lg bg-red-600 px-3 py-2 text-sm text-white font-medium hover:bg-red-700 transition">
+                      Reject
+                    </button>
+                  )}
+                  {!canApprove && !canReject && (
+                    <span className="flex-1 text-center text-xs text-slate-400 py-2">View only</span>
+                  )}
                 </div>
               )}
             </div>

@@ -21,12 +21,16 @@ export async function GET(request) {
     return NextResponse.json({
       success: true,
       dashboard: {
+        uid: user?.uid || uid,
         availableBalance: user?.availableBalance || 0,
         totalEarned: user?.totalEarned || 0,
-        role: user?.role || "user",
+        role: user?.role || "customer",
         accountStatus: user?.accountStatus || "active",
         accountType: user?.accountType || "main",
         isDemoAccount: Boolean(user?.isDemoAccount || user?.accountType === "demo"),
+        displayName: user?.displayName || "",
+        email: user?.email || "",
+        dollarRate: user?.dollarRate || null,
       },
     });
   } catch (error) {

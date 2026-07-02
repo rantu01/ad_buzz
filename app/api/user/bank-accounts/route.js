@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getBankAccountsByUid, createBankAccount, deleteBankAccount } from "@/lib/bankAccountModel";
+import { getPaymentMethodsByUid } from "@/lib/paymentMethodModel";
 
 export async function GET(request) {
   try {
@@ -8,7 +9,11 @@ export async function GET(request) {
     if (!uid) {
       return NextResponse.json({ success: false, message: "UID required" }, { status: 400 });
     }
-    const accounts = await getBankAccountsByUid(uid);
+    const [personalAccounts, assignedMethods] = await Promise.all([
+      getBankAccountsByUid(uid),
+      getPaymentMethodsByUid(uid),
+    ]);
+    const accounts = [...personalAccounts, ...assignedMethods];
     return NextResponse.json({ success: true, accounts });
   } catch (error) {
     return NextResponse.json({ success: false, message: error.message }, { status: 500 });

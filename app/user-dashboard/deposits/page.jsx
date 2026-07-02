@@ -3,16 +3,15 @@
 import { useState, useEffect, useCallback } from "react";
 import { useAuth } from "@/app/Component/Auth/AuthProvider";
 import { useSettings } from "@/app/Component/Settings/SettingsProvider";
-import { ChevronRight, DollarSign, Info, Check, Plus, Trash2, X, ArrowLeft, Upload } from "lucide-react";
+import { ChevronRight, DollarSign, Info, Check, ArrowLeft, Upload } from "lucide-react";
 import Swal from "sweetalert2";
-
-const BDT_TO_USD_RATE = 1 / 129;
-const USD_TO_BDT = 129;
 
 export default function DepositsPage() {
   const { user, loading: authLoading } = useAuth();
   const settings = useSettings();
   const activeColor = settings?.secondaryColor || "#F48E2B";
+  const defaultDollarRate = settings?.dollarRate || 129;
+  const [userDollarRate, setUserDollarRate] = useState(null);
 
   const [currentStep, setCurrentStep] = useState(1);
   const [selectedAccount, setSelectedAccount] = useState(null);
@@ -20,8 +19,6 @@ export default function DepositsPage() {
   const [isLoadingBalance, setIsLoadingBalance] = useState(true);
   const [bankAccounts, setBankAccounts] = useState([]);
   const [loadingAccounts, setLoadingAccounts] = useState(true);
-  const [showAddModal, setShowAddModal] = useState(false);
-  const [saving, setSaving] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
   const [amountBDT, setAmountBDT] = useState("");
@@ -29,16 +26,9 @@ export default function DepositsPage() {
   const [screenshot, setScreenshot] = useState(null);
   const [screenshotPreview, setScreenshotPreview] = useState("");
 
-  const [form, setForm] = useState({
-    bankName: "",
-    accountName: "",
-    accountNumber: "",
-    branch: "",
-    referenceId: "",
-  });
-
+  const effectiveRate = userDollarRate || defaultDollarRate;
   const creditedUSD = amountBDT && !isNaN(parseFloat(amountBDT))
-    ? (parseFloat(amountBDT) * BDT_TO_USD_RATE).toFixed(2)
+    ? (parseFloat(amountBDT) * (1 / effectiveRate)).toFixed(2)
     : "0.00";
 
   const loadBalance = useCallback(async () => {
@@ -46,7 +36,10 @@ export default function DepositsPage() {
     try {
       const res = await fetch(`/api/user/dashboard?uid=${encodeURIComponent(user.uid)}`);
       const data = await res.json();
-      if (data.success) setBalance(data.dashboard.availableBalance || 0);
+      if (data.success) {
+        setBalance(data.dashboard.availableBalance || 0);
+        if (data.dashboard.dollarRate) setUserDollarRate(data.dashboard.dollarRate);
+      }
     } catch { /* ignore */ }
     finally { setIsLoadingBalance(false); }
   }, [user?.uid]);
@@ -71,10 +64,6 @@ export default function DepositsPage() {
     setTransactionRef("");
     setScreenshot(null);
     setScreenshotPreview("");
-  }
-
-  function resetForm() {
-    setForm({ bankName: "", accountName: "", accountNumber: "", branch: "", referenceId: "" });
   }
 
   const formatMoney = (val) => {
@@ -143,54 +132,7 @@ export default function DepositsPage() {
     }
   }
 
-  async function handleAddAccount(e) {
-    e.preventDefault();
-    if (!form.bankName.trim() || !form.accountName.trim() || !form.accountNumber.trim() || !form.branch.trim()) {
-      Swal.fire("Required", "Please fill in all required fields.", "warning");
-      return;
-    }
-    setSaving(true);
-    try {
-      const res = await fetch("/api/user/bank-accounts", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...form, uid: user.uid }),
-      });
-      const data = await res.json();
-      if (!res.ok || !data.success) throw new Error(data.message || "Failed to add account.");
-      setBankAccounts((prev) => [data.account, ...prev]);
-      setShowAddModal(false);
-      resetForm();
-      Swal.fire({ icon: "success", title: "Added", text: "Bank account added successfully.", timer: 1500, showConfirmButton: false });
-    } catch (err) {
-      Swal.fire("Error", err.message, "error");
-    } finally {
-      setSaving(false);
-    }
-  }
 
-  async function handleDeleteAccount(id) {
-    const result = await Swal.fire({
-      title: "Remove account?",
-      text: "This action cannot be undone.",
-      icon: "warning",
-      showCancelButton: true,
-      confirmButtonColor: "#ef4444",
-      confirmButtonText: "Remove",
-      cancelButtonText: "Cancel",
-    });
-    if (!result.isConfirmed) return;
-    try {
-      const res = await fetch(`/api/user/bank-accounts?id=${id}&uid=${encodeURIComponent(user.uid)}`, { method: "DELETE" });
-      const data = await res.json();
-      if (!res.ok || !data.success) throw new Error(data.message || "Failed to delete.");
-      setBankAccounts((prev) => prev.filter((a) => a._id !== id));
-      if (selectedAccount?._id === id) { setSelectedAccount(null); setCurrentStep(1); }
-      Swal.fire({ icon: "success", title: "Removed", text: "Bank account removed.", timer: 1500, showConfirmButton: false });
-    } catch (err) {
-      Swal.fire("Error", err.message, "error");
-    }
-  }
 
   const steps = [
     { number: 1, label: "Select Method" },
@@ -251,7 +193,7 @@ export default function DepositsPage() {
           <div className="flex items-center gap-2 rounded-lg bg-amber-50 px-4 py-2.5">
             <Info className="h-4 w-4 shrink-0 text-amber-500" />
             <span className="text-sm text-amber-800">
-              Your conversion rate: <span className="font-semibold">{USD_TO_BDT} BDT</span> = <span className="font-semibold">1 USD</span>
+              Your conversion rate: <span className="font-semibold">{effectiveRate} BDT</span> = <span className="font-semibold">1 USD</span>
             </span>
           </div>
         </div>
@@ -264,8 +206,6 @@ export default function DepositsPage() {
           selectedAccount={selectedAccount}
           onSelect={setSelectedAccount}
           onContinue={() => { if (selectedAccount) setCurrentStep(2); else Swal.fire("Required", "Please select a bank account first.", "warning"); }}
-          onAdd={() => setShowAddModal(true)}
-          onDelete={handleDeleteAccount}
           activeColor={activeColor}
         />
       )}
@@ -299,47 +239,21 @@ export default function DepositsPage() {
           onSubmit={handleSubmit}
           submitting={submitting}
           activeColor={activeColor}
+          dollarRate={effectiveRate}
         />
       )}
 
-      {showAddModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
-          <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-xl border border-slate-200">
-            <div className="mb-5 flex items-center justify-between">
-              <h3 className="text-lg font-bold text-slate-900">Add Bank Account</h3>
-              <button onClick={() => { setShowAddModal(false); resetForm(); }} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700">
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-            <form onSubmit={handleAddAccount} className="space-y-4">
-              <InputField label="Bank Name *" value={form.bankName} onChange={(v) => setForm((p) => ({ ...p, bankName: v }))} placeholder="e.g. Eastern Bank PLC" />
-              <InputField label="Account Name *" value={form.accountName} onChange={(v) => setForm((p) => ({ ...p, accountName: v }))} placeholder="e.g. Md. Razu Ahmed" />
-              <InputField label="Account Number *" value={form.accountNumber} onChange={(v) => setForm((p) => ({ ...p, accountNumber: v }))} placeholder="e.g. 1502200001234" />
-              <InputField label="Branch *" value={form.branch} onChange={(v) => setForm((p) => ({ ...p, branch: v }))} placeholder="e.g. Gulshan Branch, Dhaka" />
-              <InputField label="Reference ID" value={form.referenceId} onChange={(v) => setForm((p) => ({ ...p, referenceId: v }))} placeholder="Optional" />
-              <div className="flex gap-3 pt-2">
-                <button type="button" onClick={() => { setShowAddModal(false); resetForm(); }} className="flex-1 rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-50">Cancel</button>
-                <button type="submit" disabled={saving} className="flex-1 rounded-xl px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-opacity disabled:opacity-50 hover:opacity-90" style={{ backgroundColor: activeColor }}>{saving ? "Saving..." : "Save Account"}</button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+
     </div>
   );
 }
 
-function Step1SelectMethod({ bankAccounts, loadingAccounts, selectedAccount, onSelect, onContinue, onAdd, onDelete, activeColor }) {
+function Step1SelectMethod({ bankAccounts, loadingAccounts, selectedAccount, onSelect, onContinue, activeColor }) {
   return (
     <>
-      <div className="mb-6 flex items-center justify-between">
-        <div>
-          <h2 className="text-xl font-bold text-slate-900">Select Payment Method</h2>
-          <p className="mt-1 text-sm text-slate-600">Choose a payment method to top up your balance</p>
-        </div>
-        <button onClick={onAdd} className="flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-opacity hover:opacity-90" style={{ backgroundColor: activeColor }}>
-          <Plus className="h-4 w-4" /> Add Account
-        </button>
+      <div className="mb-6">
+        <h2 className="text-xl font-bold text-slate-900">Select Payment Method</h2>
+        <p className="mt-1 text-sm text-slate-600">Choose a payment method to top up your balance</p>
       </div>
 
       {loadingAccounts ? (
@@ -355,11 +269,8 @@ function Step1SelectMethod({ bankAccounts, loadingAccounts, selectedAccount, onS
       ) : bankAccounts.length === 0 ? (
         <div className="rounded-2xl border border-slate-200 bg-white p-12 shadow-sm text-center">
           <DollarSign className="mx-auto mb-3 h-10 w-10 text-slate-300" />
-          <p className="text-lg font-semibold text-slate-700">No bank accounts yet</p>
-          <p className="mt-1 text-sm text-slate-500">Add a bank account to start making payments</p>
-          <button onClick={onAdd} className="mt-5 inline-flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-opacity hover:opacity-90" style={{ backgroundColor: activeColor }}>
-            <Plus className="h-4 w-4" /> Add Your First Account
-          </button>
+          <p className="text-lg font-semibold text-slate-700">No payment methods available</p>
+          <p className="mt-1 text-sm text-slate-500">Contact admin to assign payment methods to your account</p>
         </div>
       ) : (
         <>
@@ -372,7 +283,6 @@ function Step1SelectMethod({ bankAccounts, loadingAccounts, selectedAccount, onS
                   bank={bank}
                   isSelected={isSelected}
                   onSelect={() => onSelect(bank)}
-                  onDelete={() => onDelete(bank._id)}
                   activeColor={activeColor}
                 />
               );
@@ -462,7 +372,7 @@ function Step2PaymentDetails({ bank, amountBDT, setAmountBDT, creditedUSD, trans
   );
 }
 
-function Step3ReviewSubmit({ bank, amountBDT, creditedUSD, transactionRef, screenshotPreview, onBack, onSubmit, submitting, activeColor }) {
+function Step3ReviewSubmit({ bank, amountBDT, creditedUSD, transactionRef, screenshotPreview, onBack, onSubmit, submitting, activeColor, dollarRate }) {
   return (
     <div>
       <div className="mb-6 flex items-center gap-4">
@@ -499,7 +409,7 @@ function Step3ReviewSubmit({ bank, amountBDT, creditedUSD, transactionRef, scree
             </div>
             <div className="flex items-center justify-between text-sm">
               <span className="text-slate-500">Conversion Rate</span>
-              <span className="text-slate-700">{USD_TO_BDT} BDT = 1 USD</span>
+              <span className="text-slate-700">{dollarRate} BDT = 1 USD</span>
             </div>
             <div className="border-t border-slate-200 pt-3 flex items-center justify-between text-sm">
               <span className="text-slate-500">Transaction Ref</span>
@@ -529,12 +439,9 @@ function Step3ReviewSubmit({ bank, amountBDT, creditedUSD, transactionRef, scree
   );
 }
 
-function BankCard({ bank, isSelected, onSelect, onDelete, activeColor }) {
+function BankCard({ bank, isSelected, onSelect, activeColor }) {
   return (
     <div className={`group relative rounded-2xl border bg-white p-6 shadow-sm transition-all ${isSelected ? "border-emerald-400 ring-1 ring-emerald-400/50" : "border-slate-200 hover:border-slate-300"}`}>
-      <button onClick={onDelete} className="absolute right-3 top-3 flex h-7 w-7 items-center justify-center rounded-full bg-slate-100 text-slate-400 opacity-0 transition-opacity hover:bg-red-50 hover:text-red-500 group-hover:opacity-100" title="Remove account">
-        <Trash2 className="h-3.5 w-3.5" />
-      </button>
       <div className="mb-4 flex items-center gap-3">
         <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl text-sm font-bold text-white" style={{ backgroundColor: bank.color || "#135B9A" }}>
           {(bank.shortCode || bank.bankName).slice(0, 3).toUpperCase()}
@@ -567,12 +474,4 @@ function Row({ label, value, highlight = false }) {
   );
 }
 
-function InputField({ label, value, onChange, placeholder }) {
-  return (
-    <div>
-      <label className="mb-1.5 block text-sm font-medium text-slate-700">{label}</label>
-      <input type="text" required={label.includes("*")} value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder}
-        className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm text-slate-900 placeholder-slate-400 outline-none focus:ring-2 focus:ring-secondary/30 focus:border-secondary" />
-    </div>
-  );
-}
+

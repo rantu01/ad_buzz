@@ -91,7 +91,7 @@ export async function PATCH(request) {
       }
     }
 
-    return NextResponse.json({ success: true, deposit: result.value });
+    return NextResponse.json({ success: true, deposit: result });
   } catch (error) {
     return NextResponse.json(
       { success: false, message: error.message || "Failed to update deposit" },

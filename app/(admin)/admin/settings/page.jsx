@@ -7,6 +7,7 @@ export default function AdminSettingsPage() {
   const [siteName, setSiteName] = useState("Ad Buzz");
   const [primaryColor, setPrimaryColor] = useState("#135B9A");
   const [secondaryColor, setSecondaryColor] = useState("#F48E2B");
+  const [dollarRate, setDollarRate] = useState(129);
   const [logoPreview, setLogoPreview] = useState(null);
   const [logoFile, setLogoFile] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -21,6 +22,7 @@ export default function AdminSettingsPage() {
           setSiteName(data.settings.siteName || "Ad Buzz");
           setPrimaryColor(data.settings.primaryColor || "#135B9A");
           setSecondaryColor(data.settings.secondaryColor || "#F48E2B");
+          setDollarRate(data.settings.dollarRate || 129);
           if (data.settings.logo) setLogoPreview(data.settings.logo);
         }
       })
@@ -49,7 +51,7 @@ export default function AdminSettingsPage() {
       const res = await fetch("/api/admin/settings", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ siteName, primaryColor, secondaryColor, logo }),
+        body: JSON.stringify({ siteName, primaryColor, secondaryColor, logo, dollarRate }),
       });
       const data = await res.json();
       if (!res.ok || !data.success) throw new Error(data.message || "Failed to save settings.");
@@ -113,6 +115,12 @@ export default function AdminSettingsPage() {
                   className="flex-1 rounded-xl border border-slate-200 px-4 py-3 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary" />
               </div>
             </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Dollar Rate (BDT per 1 USD)</label>
+            <input type="number" step="0.01" min="0" value={dollarRate} onChange={(e) => setDollarRate(e.target.value)}
+              className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary" />
           </div>
 
           <div>

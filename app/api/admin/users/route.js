@@ -1,5 +1,9 @@
 import { NextResponse } from "next/server";
 import clientPromise from "@/lib/mongodb";
+import { getUserByUid } from "@/lib/userModel";
+import { ROLES } from "@/lib/permissions";
+
+const ALLOWED_ROLES = [ROLES.ADMIN, ROLES.KEY_MANAGER, ROLES.ACCOUNTS_MANAGER];
 
 export async function GET() {
   try {
@@ -28,9 +32,12 @@ export async function PATCH(request) {
     const body = await request.json();
     const {
       uid,
+      callerUid,
       role,
       availableBalance,
       accountStatus,
+      displayName,
+      dollarRate,
     } = body;
 
     if (!uid) {
@@ -40,10 +47,44 @@ export async function PATCH(request) {
       );
     }
 
+    if (!callerUid) {
+      return NextResponse.json(
+        { success: false, message: "callerUid is required." },
+        { status: 400 }
+      );
+    }
+
+    const caller = await getUserByUid(callerUid);
+    if (!caller) {
+      return NextResponse.json(
+        { success: false, message: "Caller not found." },
+        { status: 403 }
+      );
+    }
+
+    const callerRole = caller.role || "customer";
+    const isAdmin = callerRole === ROLES.ADMIN;
+    const isManager = ALLOWED_ROLES.includes(callerRole);
+
+    if (!isAdmin && !isManager) {
+      return NextResponse.json(
+        { success: false, message: "You do not have permission to update users." },
+        { status: 403 }
+      );
+    }
+
     const update = { updatedAt: new Date() };
+
     if (typeof role === "string" && role) {
+      if (!isAdmin) {
+        return NextResponse.json(
+          { success: false, message: "Only admins can change user roles." },
+          { status: 403 }
+        );
+      }
       update.role = role;
     }
+
     if (availableBalance !== undefined) {
       const numericBalance = Number(availableBalance);
       if (Number.isNaN(numericBalance)) {
@@ -58,6 +99,21 @@ export async function PATCH(request) {
     if (typeof accountStatus === "string" && accountStatus) {
       update.accountStatus = accountStatus;
       update.isFrozen = accountStatus === "frozen";
+    }
+
+    if (typeof displayName === "string") {
+      update.displayName = displayName;
+    }
+
+    if (dollarRate !== undefined) {
+      if (dollarRate === null || dollarRate === "") {
+        update.dollarRate = null;
+      } else {
+        const numRate = Number(dollarRate);
+        if (!Number.isNaN(numRate) && numRate > 0) {
+          update.dollarRate = numRate;
+        }
+      }
     }
 
     const client = await clientPromise;

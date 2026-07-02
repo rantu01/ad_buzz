@@ -12,6 +12,7 @@ export async function GET() {
             primaryColor: settings.primaryColor || "#135B9A",
             secondaryColor: settings.secondaryColor || "#F48E2B",
             logo: settings.logo || null,
+            dollarRate: settings.dollarRate || null,
           }
         : null,
     });

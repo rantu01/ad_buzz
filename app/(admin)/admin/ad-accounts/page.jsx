@@ -3,8 +3,15 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import Swal from "sweetalert2";
 import { Megaphone, RefreshCw, UserPlus, UserX, ExternalLink, CheckCircle, XCircle, AlertTriangle, Search, X, ChevronDown } from "lucide-react";
+import { useAdmin } from "../components/AdminProvider";
+import { hasPermission } from "@/lib/permissions";
 
 export default function AdminAdAccountsPage() {
+  const { profile } = useAdmin();
+  const role = profile?.role || "customer";
+  const canManage = hasPermission(role, "manage_ad_accounts");
+  const canAssign = hasPermission(role, "assign_ad_accounts");
+
   const [adAccounts, setAdAccounts] = useState([]);
   const [metaAccounts, setMetaAccounts] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -334,16 +341,22 @@ export default function AdminAdAccountsPage() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <button onClick={handleImportFromMeta} className="border border-slate-200 text-slate-700 rounded-lg px-3 py-2 text-sm font-medium hover:bg-slate-50 transition flex items-center gap-1.5">
-            <ExternalLink size={15} /> Import from Meta
-          </button>
-          <button onClick={handleSyncSpend} disabled={syncing} className="border border-slate-200 text-slate-700 rounded-lg px-3 py-2 text-sm font-medium hover:bg-slate-50 transition disabled:opacity-50 flex items-center gap-1.5">
-            <RefreshCw size={15} className={syncing ? "animate-spin" : ""} />
-            {syncing ? "Syncing..." : "Sync Spend"}
-          </button>
-          <button onClick={openAssignModal} className="bg-[#E05305] text-white rounded-lg px-3 py-2 text-sm font-medium hover:bg-[#c84a04] transition flex items-center gap-1.5">
-            <UserPlus size={15} /> Assign Account
-          </button>
+          {canManage && (
+            <button onClick={handleImportFromMeta} className="border border-slate-200 text-slate-700 rounded-lg px-3 py-2 text-sm font-medium hover:bg-slate-50 transition flex items-center gap-1.5">
+              <ExternalLink size={15} /> Import from Meta
+            </button>
+          )}
+          {canManage && (
+            <button onClick={handleSyncSpend} disabled={syncing} className="border border-slate-200 text-slate-700 rounded-lg px-3 py-2 text-sm font-medium hover:bg-slate-50 transition disabled:opacity-50 flex items-center gap-1.5">
+              <RefreshCw size={15} className={syncing ? "animate-spin" : ""} />
+              {syncing ? "Syncing..." : "Sync Spend"}
+            </button>
+          )}
+          {canAssign && (
+            <button onClick={openAssignModal} className="bg-[#E05305] text-white rounded-lg px-3 py-2 text-sm font-medium hover:bg-[#c84a04] transition flex items-center gap-1.5">
+              <UserPlus size={15} /> Assign Account
+            </button>
+          )}
         </div>
       </div>
 
@@ -384,7 +397,8 @@ export default function AdminAdAccountsPage() {
                     <tr key={acc._id} className="hover:bg-slate-50/40">
                       <td className="py-3 px-4 max-w-[220px]">
                         <input defaultValue={acc.name || ""} className="border border-transparent hover:border-slate-200 focus:border-blue-400 rounded px-1.5 py-0.5 text-sm font-medium w-full bg-transparent focus:bg-white transition"
-                          onBlur={(e) => { if (e.target.value !== acc.name) updateAccount(acc._id, { name: e.target.value }); }} />
+                          onBlur={(e) => { if (e.target.value !== acc.name) updateAccount(acc._id, { name: e.target.value }); }}
+                          disabled={!canManage} />
                         <p className="text-xs font-mono text-blue-600 mt-0.5">{acc.metaAccountId || acc.accountId}</p>
                       </td>
                       <td className="py-3 px-4">
@@ -398,7 +412,7 @@ export default function AdminAdAccountsPage() {
                         )}
                       </td>
                       <td className="py-3 px-4">
-                        <select defaultValue={acc.status || "active"} onChange={(e) => updateAccount(acc._id, { status: e.target.value })} className="border border-slate-200 rounded-lg px-2 py-1 text-xs bg-white">
+                        <select defaultValue={acc.status || "active"} onChange={(e) => updateAccount(acc._id, { status: e.target.value })} className="border border-slate-200 rounded-lg px-2 py-1 text-xs bg-white" disabled={!canManage}>
                           <option value="active">Active</option>
                           <option value="paused">Paused</option>
                           <option value="disabled">Disabled</option>
@@ -413,7 +427,7 @@ export default function AdminAdAccountsPage() {
                         <div className="relative">
                           <input key={acc.spendCap || 0} type="number" step="0.01" defaultValue={(Number(acc.metaSpendCap || acc.spendCap || 0) / 100)} className={`border border-slate-200 rounded-lg px-2 py-1 text-sm w-24 bg-white ${savingAccounts[acc._id] ? "opacity-50" : ""}`}
                             onBlur={(e) => { const newVal = Number(e.target.value); const oldVal = Number(acc.metaSpendCap || acc.spendCap || 0) / 100; if (newVal !== oldVal) updateAccount(acc._id, { spendCap: Math.round(newVal * 100) }); }}
-                            disabled={savingAccounts[acc._id]} />
+                            disabled={savingAccounts[acc._id] || !canManage} />
                           {savingAccounts[acc._id] && (
                             <RefreshCw size={14} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 animate-spin" />
                           )}
@@ -433,12 +447,14 @@ export default function AdminAdAccountsPage() {
                       </td>
                       <td className="py-3 px-4">
                         <div className="flex items-center gap-1">
-                          {acc.uid ? (
+                          {acc.uid && canAssign ? (
                             <button onClick={() => handleUnassign(acc._id, acc.name)} className="text-amber-600 hover:text-amber-800 hover:bg-amber-50 p-1.5 rounded-lg transition text-xs font-medium flex items-center gap-1">
                               <UserX size={13} /> Unassign
                             </button>
                           ) : null}
-                          <button onClick={() => deleteAccount(acc._id)} className="text-red-500 hover:text-red-700 hover:bg-red-50 p-1.5 rounded-lg transition text-xs font-medium">Delete</button>
+                          {canManage && (
+                            <button onClick={() => deleteAccount(acc._id)} className="text-red-500 hover:text-red-700 hover:bg-red-50 p-1.5 rounded-lg transition text-xs font-medium">Delete</button>
+                          )}
                         </div>
                       </td>
                     </tr>

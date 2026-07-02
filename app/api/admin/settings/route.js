@@ -16,9 +16,9 @@ export async function GET() {
 export async function PUT(request) {
   try {
     const body = await request.json();
-    const { siteName, primaryColor, secondaryColor, logo } = body;
+    const { siteName, primaryColor, secondaryColor, logo, dollarRate } = body;
 
-    const result = await upsertSettings({ siteName, primaryColor, secondaryColor, logo });
+    const result = await upsertSettings({ siteName, primaryColor, secondaryColor, logo, dollarRate });
 
     return NextResponse.json({ success: true, settings: result });
   } catch (error) {

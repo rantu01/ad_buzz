@@ -3,12 +3,13 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
-import { Home, ListChecks, User, CreditCard, X, AppWindowMac, DollarSign, ChevronDown } from "lucide-react";
+import { Home, ListChecks, User, CreditCard, X, AppWindowMac, DollarSign, ChevronDown, LifeBuoy } from "lucide-react";
 import { useSettings } from "@/app/Component/Settings/SettingsProvider";
 
 const navigation = [
     { label: "Dashboard", href: "/user-dashboard", icon: AppWindowMac },
     { label: "Ad Account", href: "/user-dashboard/ad-account", icon: ListChecks },
+    { label: "Support Tickets", href: "/user-dashboard/support-tickets", icon: LifeBuoy },
     { label: "Profile", href: "/user-dashboard/profile", icon: User },
 ];
 
