@@ -8,6 +8,7 @@ export default function AdminDepositsPage() {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState("pending");
   const [previewImg, setPreviewImg] = useState(null);
+  const [processingId, setProcessingId] = useState(null);
 
   const formatMoney = (val) => {
     const n = Number(val || 0);
@@ -38,17 +39,22 @@ export default function AdminDepositsPage() {
     });
     if (!confirmed.isConfirmed) return;
 
-    const res = await fetch("/api/admin/deposits", {
-      method: "PATCH", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ depositId, status: "approved", approverUid: "admin" }),
-    });
-    const result = await res.json();
-    if (!res.ok || !result.success) {
-      await Swal.fire({ icon: "error", title: "Failed", text: result.message });
-      return;
+    setProcessingId(depositId);
+    try {
+      const res = await fetch("/api/admin/deposits", {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ depositId, status: "approved", approverUid: "admin" }),
+      });
+      const result = await res.json();
+      if (!res.ok || !result.success) {
+        await Swal.fire({ icon: "error", title: "Failed", text: result.message });
+        return;
+      }
+      await Swal.fire({ icon: "success", title: "Approved", timer: 1200, showConfirmButton: false });
+      loadDeposits();
+    } finally {
+      setProcessingId(null);
     }
-    await Swal.fire({ icon: "success", title: "Approved", timer: 1200, showConfirmButton: false });
-    loadDeposits();
   };
 
   const handleReject = async (depositId) => {
@@ -57,17 +63,22 @@ export default function AdminDepositsPage() {
       inputPlaceholder: "Enter reason...", showCancelButton: true, confirmButtonText: "Reject",
     });
     if (!reason) return;
-    const res = await fetch("/api/admin/deposits", {
-      method: "PATCH", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ depositId, status: "rejected", rejectionReason: reason }),
-    });
-    const result = await res.json();
-    if (!res.ok || !result.success) {
-      await Swal.fire({ icon: "error", title: "Failed", text: result.message });
-      return;
+    setProcessingId(depositId);
+    try {
+      const res = await fetch("/api/admin/deposits", {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ depositId, status: "rejected", rejectionReason: reason }),
+      });
+      const result = await res.json();
+      if (!res.ok || !result.success) {
+        await Swal.fire({ icon: "error", title: "Failed", text: result.message });
+        return;
+      }
+      await Swal.fire({ icon: "success", title: "Rejected", timer: 1200, showConfirmButton: false });
+      loadDeposits();
+    } finally {
+      setProcessingId(null);
     }
-    await Swal.fire({ icon: "success", title: "Rejected", timer: 1200, showConfirmButton: false });
-    loadDeposits();
   };
 
   const statusBadge = (status) => {
@@ -154,11 +165,23 @@ export default function AdminDepositsPage() {
                     <td className="px-4 py-3 text-center whitespace-nowrap">
                       {dep.status === "pending" ? (
                         <div className="flex gap-1.5 justify-center">
-                          <button onClick={() => handleApprove(dep._id)} className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs text-white font-medium hover:bg-emerald-700 transition">
-                            Approve
+                          <button
+                            onClick={() => handleApprove(dep._id)}
+                            disabled={processingId === dep._id}
+                            className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs text-white font-medium transition hover:bg-emerald-700 disabled:opacity-60 disabled:cursor-not-allowed"
+                          >
+                            {processingId === dep._id ? (
+                              <><span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-white/30 border-t-white" /> Processing</>
+                            ) : "Approve"}
                           </button>
-                          <button onClick={() => handleReject(dep._id)} className="rounded-lg bg-red-600 px-3 py-1.5 text-xs text-white font-medium hover:bg-red-700 transition">
-                            Reject
+                          <button
+                            onClick={() => handleReject(dep._id)}
+                            disabled={processingId === dep._id}
+                            className="inline-flex items-center gap-1.5 rounded-lg bg-red-600 px-3 py-1.5 text-xs text-white font-medium transition hover:bg-red-700 disabled:opacity-60 disabled:cursor-not-allowed"
+                          >
+                            {processingId === dep._id ? (
+                              <><span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-white/30 border-t-white" /> Processing</>
+                            ) : "Reject"}
                           </button>
                         </div>
                       ) : (
