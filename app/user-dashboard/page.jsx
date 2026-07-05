@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/app/Component/Auth/AuthProvider";
+import { useSettings } from "@/app/Component/Settings/SettingsProvider";
 
 function SkeletonCard() {
   return (
@@ -61,8 +62,12 @@ export default function UserDashboardPage() {
   const [deposits, setDeposits] = useState([]);
   const [withdrawals, setWithdrawals] = useState([]);
   const [adAccounts, setAdAccounts] = useState([]);
+  const [userDollarRate, setUserDollarRate] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
+  const settings = useSettings();
+  const defaultDollarRate = settings?.dollarRate || 129;
+  const effectiveRate = userDollarRate || defaultDollarRate;
 
   const formatMoney = (val) => {
     const n = Number(val || 0);
@@ -87,6 +92,7 @@ export default function UserDashboardPage() {
         const accountsResult = await accountsRes.json();
         if (!dashboardRes.ok || !dashboardResult.success) throw new Error(dashboardResult.message || "Failed to load dashboard.");
         setDashboard(dashboardResult.dashboard);
+        if (dashboardResult.dashboard.dollarRate) setUserDollarRate(dashboardResult.dashboard.dollarRate);
         setDeposits(depositsResult.deposits || []);
         setWithdrawals(withdrawalsResult.withdrawals || []);
         setAdAccounts(accountsResult.adAccounts || []);
@@ -127,8 +133,11 @@ export default function UserDashboardPage() {
     );
   }
 
-  const totalBudget = adAccounts.reduce((s, a) => s + (Number(a.spendCap || 0) / 100), 0);
-  const totalSpent = adAccounts.reduce((s, a) => s + Number(a.spent || 0), 0);
+  const totalBudget = adAccounts.reduce((s, a) => s + (Number(a.metaSpendCap || a.spendCap || 0) / 100), 0);
+  const totalSpent = adAccounts.reduce((s, a) => {
+    const spent = a.metaStatus != null ? Number(a.metaAmountSpent || 0) / 100 : Number(a.spent || 0);
+    return s + spent;
+  }, 0);
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-8 min-h-screen">
@@ -142,25 +151,25 @@ export default function UserDashboardPage() {
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-10">
-        <div className="bg-white rounded-2xl border border-slate-200/80 p-6 shadow-sm flex flex-col justify-between">
+        <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between">
               <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Wallet Balance</span>
               <span className="p-2 bg-blue-50 rounded-lg text-blue-600">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" /></svg>
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" /></svg>
               </span>
             </div>
             <div className="text-3xl font-bold text-slate-900 mt-4">${formatMoney(dashboard.availableBalance)}</div>
           </div>
-          <div className="mt-4 text-xs font-medium text-blue-600 bg-blue-50/50 py-1.5 px-3 rounded-md w-max">Available USD</div>
+          <div className="mt-4 text-xs font-medium text-blue-600 bg-blue-50/50 py-1.5 px-3 rounded-md w-max">Available for top-up</div>
         </div>
 
-        <div className="bg-white rounded-2xl border border-slate-200/80 p-6 shadow-sm flex flex-col justify-between">
+        <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Ad Accounts</span>
+              <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Total Accounts</span>
               <span className="p-2 bg-purple-50 rounded-lg text-purple-600">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M4 7v10c0 2.21 3.58 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.58 4 8 4s8-1.79 8-4M4 7c0-2.21 3.58-4 8-4s8 1.79 8 4m0 5c0 2.21-3.58 4-8 4s-8-1.79-8-4" /></svg>
               </span>
             </div>
             <div className="text-3xl font-bold text-slate-900 mt-4">{adAccounts.length} <span className="text-lg text-slate-400 font-normal">Accounts</span></div>
@@ -168,31 +177,31 @@ export default function UserDashboardPage() {
           <div className="mt-4 text-xs font-medium text-purple-600 bg-purple-50/50 py-1.5 px-3 rounded-md w-max">{adAccounts.filter(a => a.status === "active").length} Active</div>
         </div>
 
-        <div className="bg-white rounded-2xl border border-slate-200/80 p-6 shadow-sm flex flex-col justify-between">
+        <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Total Budget</span>
+              <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Total Remaining Balance</span>
               <span className="p-2 bg-emerald-50 rounded-lg text-emerald-600">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
               </span>
             </div>
-            <div className="text-3xl font-bold text-slate-900 mt-4">${formatMoney(totalBudget)}</div>
+            <div className="text-3xl font-bold text-slate-900 mt-4">${formatMoney(totalBudget - totalSpent)}</div>
           </div>
-          <div className="mt-4 text-xs font-medium text-emerald-600 bg-emerald-50/50 py-1.5 px-3 rounded-md w-max">${formatMoney(totalSpent)} Spent</div>
+          <div className="mt-4 text-xs font-medium text-emerald-600 bg-emerald-50/50 py-1.5 px-3 rounded-md w-max">Balance</div>
         </div>
 
         <div className="bg-white rounded-2xl border-2 border-amber-500/30 p-6 shadow-sm flex flex-col justify-between relative overflow-hidden">
           <div className="absolute top-0 right-0 w-24 h-24 bg-amber-500/5 rounded-full -mr-5 -mt-5"></div>
           <div>
             <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-amber-600 uppercase tracking-wider">Remaining Budget</span>
+              <span className="text-xs font-semibold text-amber-600 uppercase tracking-wider">Conversion Rate</span>
               <span className="p-2 bg-amber-50 rounded-lg text-amber-600">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
               </span>
             </div>
-            <div className="text-3xl font-bold text-slate-900 mt-4">${formatMoney(totalBudget - totalSpent)}</div>
+            <div className="text-2xl font-bold text-slate-900 mt-4 whitespace-nowrap">{effectiveRate} BDT = 1 USD</div>
           </div>
-          <div className="mt-4 text-xs font-semibold text-amber-700 bg-amber-50 py-1.5 px-3 rounded-md w-max">Remaining</div>
+          <div className="mt-4 text-xs font-semibold text-amber-700 bg-amber-50 py-1.5 px-3 rounded-md w-max">Exchange Rate</div>
         </div>
       </div>
 

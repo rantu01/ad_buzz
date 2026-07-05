@@ -65,7 +65,7 @@ export async function GET(request) {
           metaBalance: meta.balance || 0,
           metaSpendCap: meta.spendCap || 0,
           metaAmountSpent: meta.amountSpent || 0,
-          spent: typeof acc.spent === "number" && acc.spent > 0 ? acc.spent : (meta.amountSpent / 100 || 0),
+          spent: typeof meta.amountSpent === "number" && meta.amountSpent > 0 ? (meta.amountSpent / 100) : (typeof acc.spent === "number" && acc.spent > 0 ? acc.spent : 0),
         };
       }
       return {

@@ -329,7 +329,7 @@ export default function AdminAdAccountsPage() {
   });
 
   const totalBudget = adAccounts.reduce((s, a) => s + (Number(a.metaSpendCap || a.spendCap || 0) / 100), 0);
-  const totalSpent = adAccounts.reduce((s, a) => s + Number(a.spent || 0), 0);
+  const totalSpent = adAccounts.reduce((s, a) => s + (Number(a.metaAmountSpent || 0) / 100), 0);
 
   return (
     <div>
@@ -383,7 +383,7 @@ export default function AdminAdAccountsPage() {
                     <th className="py-3 px-4">Local Status</th>
                     <th className="py-3 px-4">Meta Status</th>
                     <th className="py-3 px-4">Budget</th>
-                    <th className="py-3 px-4">Spent</th>
+                    <th className="py-3 px-4">Amount Spent</th>
                     <th className="py-3 px-4">Sync</th>
                     <th className="py-3 px-4">Actions</th>
                 </tr>
@@ -434,9 +434,12 @@ export default function AdminAdAccountsPage() {
                         </div>
                       </td>
                       <td className="py-3 px-4">
-                        <span className="font-medium">${formatMoney(acc.spent)}</span>
-                        <div className="w-20 bg-slate-100 h-1.5 rounded-full mt-1 overflow-hidden">
-                          <div className={`h-full rounded-full ${spendPct > 90 ? "bg-red-500" : spendPct > 70 ? "bg-amber-500" : "bg-emerald-500"}`} style={{ width: `${spendPct}%` }} />
+                        <span className="font-medium">${formatMoney(Number(acc.metaAmountSpent || 0) / 100)}</span>
+                        <div className="flex items-center gap-2 mt-1">
+                          <div className="w-16 bg-slate-100 h-1.5 rounded-full overflow-hidden">
+                            <div className={`h-full rounded-full ${spendPct > 90 ? "bg-red-500" : spendPct > 70 ? "bg-amber-500" : "bg-emerald-500"}`} style={{ width: `${spendPct}%` }} />
+                          </div>
+                          <span className="text-xs text-slate-400">${formatMoney(acc.spent)} this month</span>
                         </div>
                       </td>
                       <td className="py-3 px-4">

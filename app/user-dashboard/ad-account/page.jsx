@@ -98,7 +98,10 @@ export default function AdAccountPage() {
   };
 
   const totalBudget = adAccounts.reduce((s, a) => s + (Number(a.metaSpendCap || a.spendCap || 0) / 100), 0);
-  const totalSpent = adAccounts.reduce((s, a) => s + Number(a.spent || 0), 0);
+  const totalSpent = adAccounts.reduce((s, a) => {
+    const spent = a.metaStatus != null ? Number(a.metaAmountSpent || 0) / 100 : Number(a.spent || 0);
+    return s + spent;
+  }, 0);
 
   const openTopUp = (account) => {
     setTopUpModal(account);
@@ -243,7 +246,7 @@ export default function AdAccountPage() {
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
               </span>
             </div>
-            <div className="text-3xl font-bold text-slate-900 mt-4">${formatMoney(totalBudget)}</div>
+            <div className="text-3xl font-bold text-slate-900 mt-4">${formatMoney(totalBudget - totalSpent)}</div>
           </div>
           {/* <div className="mt-4 text-xs font-medium text-emerald-600 bg-emerald-50/50 py-1.5 px-3 rounded-md w-max">${formatMoney(totalSpent)} Spent</div> */}
           <div className="mt-4 text-xs font-medium text-emerald-600 bg-emerald-50/50 py-1.5 px-3 rounded-md w-max">Balance</div>
@@ -296,7 +299,7 @@ export default function AdAccountPage() {
             <tbody className="divide-y divide-slate-100 text-sm text-slate-700">
               {adAccounts.map((acc) => {
                 const budgetNum = Number(acc.metaSpendCap || acc.spendCap || 0) / 100;
-                const spentNum = Number(acc.spent || 0);
+                const spentNum = acc.metaStatus != null ? Number(acc.metaAmountSpent || 0) / 100 : Number(acc.spent || 0);
                 const spendPct = budgetNum > 0 ? Math.min((spentNum / budgetNum) * 100, 100) : 0;
                 const metaBalanceDollars = Number(acc.metaBalance || 0) / 100;
                 return (
@@ -307,9 +310,12 @@ export default function AdAccountPage() {
                       {getStatusBadge(acc.status, acc.metaStatusLabel)}
                     </td>
                     <td className="py-4 pr-4">
-                      <div className="text-sm font-semibold text-slate-900">{acc.currency || "USD"} ${formatMoney(budgetNum)}</div>
-                      <div className="w-20 h-1.5 bg-slate-100 rounded-full mt-1.5 overflow-hidden">
-                        <div className={`h-full rounded-full ${spendPct > 90 ? "bg-red-500" : spendPct > 70 ? "bg-amber-500" : "bg-emerald-500"}`} style={{ width: `${spendPct}%` }}></div>
+                      <div className="text-sm font-semibold text-slate-900">{acc.currency || "USD"} ${formatMoney(budgetNum - spentNum)} </div>
+                      <div className="flex items-center gap-2 mt-1.5">
+                        <div className="w-16 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                          <div className={`h-full rounded-full ${spendPct > 90 ? "bg-red-500" : spendPct > 70 ? "bg-amber-500" : "bg-emerald-500"}`} style={{ width: `${spendPct}%` }}></div>
+                        </div>
+                        {/* <span className="text-xs text-slate-500">$${formatMoney(spentNum)} spent</span> */}
                       </div>
                     </td>
                     {/* <td className="py-4 pr-4 text-sm">${formatMoney(spentNum)}</td> */}
