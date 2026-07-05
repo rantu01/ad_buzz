@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/app/Component/Auth/AuthProvider";
 import { useSettings } from "@/app/Component/Settings/SettingsProvider";
@@ -24,7 +24,6 @@ export default function AdAccountPage() {
   const [topUpError, setTopUpError] = useState("");
 
   const [openMenuId, setOpenMenuId] = useState(null);
-  const menuRef = useRef(null);
 
   const [historyModal, setHistoryModal] = useState(null);
   const [historyData, setHistoryData] = useState([]);
@@ -48,14 +47,13 @@ export default function AdAccountPage() {
   };
 
   useEffect(() => {
-    function handleClick(e) {
-      if (menuRef.current && !menuRef.current.contains(e.target)) {
-        setOpenMenuId(null);
-      }
-    }
-    document.addEventListener("mousedown", handleClick);
-    return () => document.removeEventListener("mousedown", handleClick);
-  }, []);
+    if (!openMenuId) return;
+    const handleClick = (e) => {
+      if (!e.target.closest('[data-menu]')) setOpenMenuId(null);
+    };
+    document.addEventListener("click", handleClick);
+    return () => document.removeEventListener("click", handleClick);
+  }, [openMenuId]);
 
   useEffect(() => {
     async function loadData() {
@@ -247,7 +245,8 @@ export default function AdAccountPage() {
             </div>
             <div className="text-3xl font-bold text-slate-900 mt-4">${formatMoney(totalBudget)}</div>
           </div>
-          <div className="mt-4 text-xs font-medium text-emerald-600 bg-emerald-50/50 py-1.5 px-3 rounded-md w-max">${formatMoney(totalSpent)} Spent</div>
+          {/* <div className="mt-4 text-xs font-medium text-emerald-600 bg-emerald-50/50 py-1.5 px-3 rounded-md w-max">${formatMoney(totalSpent)} Spent</div> */}
+          <div className="mt-4 text-xs font-medium text-emerald-600 bg-emerald-50/50 py-1.5 px-3 rounded-md w-max">Balance</div>
         </div>
 
         <div className="bg-white rounded-2xl border-2 border-amber-500/30 p-6 shadow-sm flex flex-col justify-between relative overflow-hidden">
@@ -324,7 +323,7 @@ export default function AdAccountPage() {
                         >
                           Top Up
                         </button>
-                        <div className="relative" ref={menuRef}>
+                        <div className="relative" data-menu>
                           <button
                             onClick={() => setOpenMenuId(openMenuId === acc._id ? null : acc._id)}
                             className="text-slate-400 hover:text-slate-600 px-1.5 py-1 text-lg font-bold leading-none rounded-lg hover:bg-slate-100 transition"
@@ -332,7 +331,7 @@ export default function AdAccountPage() {
                             ⋮
                           </button>
                           {openMenuId === acc._id && (
-                            <div className="absolute right-0 top-full mt-1 w-36 bg-white border border-slate-200 rounded-xl shadow-lg z-50 py-1 overflow-hidden">
+                            <div data-menu className="absolute right-0 top-full mt-1 w-36 bg-white border border-slate-200 rounded-xl shadow-lg z-50 py-1 overflow-hidden">
                               <button
                                 onClick={() => { setOpenMenuId(null); openHistory(acc); }}
                                 className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 transition"
@@ -394,6 +393,38 @@ export default function AdAccountPage() {
                   className="w-full rounded-xl border border-slate-200 px-4 py-3 text-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/30 focus:border-orange-500"
                 />
               </div>
+
+              {Number(topUpAmount) > 0 && (() => {
+                const amt = Number(topUpAmount);
+                const curBudget = Number(topUpModal.metaSpendCap || topUpModal.spendCap || 0) / 100;
+                const newBudget = curBudget + amt;
+                const newWallet = walletBalance - amt;
+                return (
+                  <div className="bg-blue-50 rounded-xl p-4 border border-blue-100 space-y-2">
+                    <p className="text-xs font-semibold text-blue-600 uppercase tracking-wider mb-2">Preview</p>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-slate-600">Current Budget</span>
+                      <span className="text-slate-800 font-medium">${formatMoney(curBudget)}</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-slate-600">Top-Up Amount</span>
+                      <span className="text-emerald-600 font-semibold">+${formatMoney(amt)}</span>
+                    </div>
+                    <div className="flex justify-between text-sm border-t border-blue-200 pt-2">
+                      <span className="text-slate-800 font-semibold">New Budget</span>
+                      <span className="text-slate-900 font-bold">${formatMoney(newBudget)}</span>
+                    </div>
+                    {/* <div className="flex justify-between text-sm border-t border-blue-200 pt-2">
+                      <span className="text-slate-600">Wallet Balance</span>
+                      <span className="text-slate-800 font-medium">${formatMoney(walletBalance)}</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-slate-600">After Top-Up</span>
+                      <span className={newWallet >= 0 ? "text-blue-600 font-semibold" : "text-red-600 font-semibold"}>${formatMoney(newWallet)}</span>
+                    </div> */}
+                  </div>
+                );
+              })()}
 
               {topUpError && <p className="text-red-600 text-sm bg-red-50 rounded-lg px-3 py-2 border border-red-200">{topUpError}</p>}
 
