@@ -28,6 +28,7 @@ export default function AdAccountPage() {
   const [historyModal, setHistoryModal] = useState(null);
   const [historyData, setHistoryData] = useState([]);
   const [historyLoading, setHistoryLoading] = useState(false);
+  const [lastRefreshedAt, setLastRefreshedAt] = useState(null);
 
   const formatMoney = (val) => {
     const n = Number(val || 0);
@@ -71,6 +72,7 @@ export default function AdAccountPage() {
           setWalletBalance(Number(dashData.dashboard.availableBalance || 0));
           if (dashData.dashboard.dollarRate) setUserDollarRate(dashData.dashboard.dollarRate);
         }
+        setLastRefreshedAt(new Date());
       } catch (err) {
         setError(err.message || "Failed to load data");
       } finally {
@@ -94,8 +96,15 @@ export default function AdAccountPage() {
         setWalletBalance(Number(dashData.dashboard.availableBalance || 0));
         if (dashData.dashboard.dollarRate) setUserDollarRate(dashData.dashboard.dollarRate);
       }
+      setLastRefreshedAt(new Date());
     } catch {}
   };
+
+  useEffect(() => {
+    if (!user?.uid) return;
+    const id = setInterval(refreshBalances, 30000);
+    return () => clearInterval(id);
+  }, [user?.uid]);
 
   const totalBudget = adAccounts.reduce((s, a) => s + (Number(a.metaSpendCap || a.spendCap || 0) / 100), 0);
   const totalSpent = adAccounts.reduce((s, a) => {
@@ -320,7 +329,7 @@ export default function AdAccountPage() {
                     </td>
                     {/* <td className="py-4 pr-4 text-sm">${formatMoney(spentNum)}</td> */}
                     {/* <td className="py-4 pr-4 text-sm font-medium text-slate-900">${formatMoney(metaBalanceDollars)}</td> */}
-                    <td className="py-4 pr-4 text-xs text-slate-400">{acc.lastSyncedAt ? new Date(acc.lastSyncedAt).toLocaleString() : "Not synced"}</td>
+                    <td className="py-4 pr-4 text-xs text-slate-400">{lastRefreshedAt ? lastRefreshedAt.toLocaleString() : "Refreshing..."}</td>
                     <td className="py-4 text-right whitespace-nowrap">
                       <div className="flex items-center justify-end gap-2">
                         <button
