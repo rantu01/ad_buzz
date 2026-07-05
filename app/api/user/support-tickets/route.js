@@ -16,11 +16,11 @@ export async function GET(request) {
 export async function POST(request) {
   try {
     const body = await request.json();
-    const { uid, email, subject, message } = body;
+    const { uid, email, subject, message, adAccountId, adAccountMetaId, adAccountName } = body;
     if (!uid || !email || !subject || !message) {
       return NextResponse.json({ success: false, message: "Missing required fields" }, { status: 400 });
     }
-    const ticket = await createTicket({ uid, email, subject, message });
+    const ticket = await createTicket({ uid, email, subject, message, adAccountId, adAccountMetaId, adAccountName });
     return NextResponse.json({ success: true, ticket });
   } catch (error) {
     return NextResponse.json({ success: false, message: error.message }, { status: 500 });

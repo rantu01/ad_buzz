@@ -15,6 +15,8 @@ export default function SupportTicketsPage() {
   const [replyText, setReplyText] = useState({});
   const [replyingTo, setReplyingTo] = useState(null);
   const [sendingReply, setSendingReply] = useState(false);
+  const [adAccounts, setAdAccounts] = useState([]);
+  const [selectedAccount, setSelectedAccount] = useState("");
 
   const loadTickets = async () => {
     if (!user?.uid) return;
@@ -26,7 +28,17 @@ export default function SupportTicketsPage() {
     finally { setLoading(false); }
   };
 
-  useEffect(() => { if (user?.uid) loadTickets(); else if (!authLoading) setLoading(false); }, [user?.uid, authLoading]);
+  useEffect(() => {
+    if (user?.uid) {
+      loadTickets();
+      fetch(`/api/user/ad-accounts?uid=${encodeURIComponent(user.uid)}`)
+        .then((r) => r.json())
+        .then((d) => { if (d.success) setAdAccounts(d.adAccounts || []); })
+        .catch(() => {});
+    } else if (!authLoading) {
+      setLoading(false);
+    }
+  }, [user?.uid, authLoading]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -34,12 +46,25 @@ export default function SupportTicketsPage() {
       Swal.fire("Required", "Please fill in all fields.", "warning");
       return;
     }
+    if (adAccounts.length > 0 && !selectedAccount) {
+      Swal.fire("Required", "Please select the affected ad account.", "warning");
+      return;
+    }
     setSubmitting(true);
     try {
+      const account = selectedAccount ? adAccounts.find((a) => a._id === selectedAccount) : null;
       const res = await fetch("/api/user/support-tickets", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ uid: user.uid, email: user.email, subject: subject.trim(), message: message.trim() }),
+        body: JSON.stringify({
+          uid: user.uid,
+          email: user.email,
+          subject: subject.trim(),
+          message: message.trim(),
+          adAccountId: account?._id || null,
+          adAccountMetaId: account?.metaAccountId || account?.accountId || null,
+          adAccountName: account?.metaAccountName || account?.name || null,
+        }),
       });
       const data = await res.json();
       if (!res.ok || !data.success) throw new Error(data.message || "Failed to create ticket.");
@@ -47,6 +72,7 @@ export default function SupportTicketsPage() {
       setShowForm(false);
       setSubject("");
       setMessage("");
+      setSelectedAccount("");
       Swal.fire({ icon: "success", title: "Ticket Created", text: "Support will get back to you soon.", timer: 1500, showConfirmButton: false });
     } catch (err) {
       Swal.fire("Error", err.message, "error");
@@ -112,6 +138,20 @@ export default function SupportTicketsPage() {
               <input type="text" required value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="Brief title of your issue"
                 className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm text-slate-900 placeholder-slate-400 outline-none focus:ring-2 focus:ring-secondary/30 focus:border-secondary" />
             </div>
+            {adAccounts.length > 0 && (
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1.5">Affected Ad Account *</label>
+                <select value={selectedAccount} onChange={(e) => setSelectedAccount(e.target.value)}
+                  className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-secondary/30 focus:border-secondary">
+                  <option value="">-- Select an account --</option>
+                  {adAccounts.map((a) => (
+                    <option key={a._id} value={a._id}>
+                      {a.metaAccountName || a.name} ({a.metaAccountId || a.accountId})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1.5">Message *</label>
               <textarea required value={message} onChange={(e) => setMessage(e.target.value)} rows={5} placeholder="Describe your issue in detail..."
@@ -150,6 +190,9 @@ export default function SupportTicketsPage() {
                 <h3 className="text-base font-semibold text-slate-900">{t.subject}</h3>
                 <StatusBadge status={t.status} />
               </div>
+              {t.adAccountName && (
+                <p className="text-xs text-amber-600 font-medium mb-2">Ad Account: {t.adAccountName}</p>
+              )}
               <div className="rounded-xl bg-slate-50 p-4 mb-3">
                 <p className="text-xs text-slate-400 mb-1">You</p>
                 <p className="text-sm text-slate-700">{t.message}</p>

@@ -95,16 +95,19 @@ export default function SupportTicketsPage() {
           ) : (
             <div className="space-y-3">
               {tickets.map((t) => (
-                <div key={t._id} onClick={() => openTicket(t)}
-                  className={`bg-white rounded-xl border p-4 cursor-pointer transition-all ${selected?._id === t._id ? "border-amber-400 ring-1 ring-amber-400/50" : "border-slate-200 hover:border-slate-300"}`}>
-                  <div className="flex items-center justify-between mb-1.5">
-                    <span className={`inline-block px-2 py-0.5 rounded-full text-[11px] font-medium capitalize ${STATUS_COLORS[t.status] || "bg-slate-50 text-slate-600"}`}>{t.status?.replace(/_/g, " ")}</span>
-                    <span className="text-[11px] text-slate-400">{new Date(t.createdAt).toLocaleDateString("en-BD", { day: "2-digit", month: "short" })}</span>
+                  <div key={t._id} onClick={() => openTicket(t)}
+                    className={`bg-white rounded-xl border p-4 cursor-pointer transition-all ${selected?._id === t._id ? "border-amber-400 ring-1 ring-amber-400/50" : "border-slate-200 hover:border-slate-300"}`}>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className={`inline-block px-2 py-0.5 rounded-full text-[11px] font-medium capitalize ${STATUS_COLORS[t.status] || "bg-slate-50 text-slate-600"}`}>{t.status?.replace(/_/g, " ")}</span>
+                      <span className="text-[11px] text-slate-400">{new Date(t.createdAt).toLocaleDateString("en-BD", { day: "2-digit", month: "short" })}</span>
+                    </div>
+                    <p className="text-sm font-semibold text-slate-900 truncate">{t.subject}</p>
+                    <p className="text-xs text-slate-500 truncate mt-0.5">{t.email}</p>
+                    {t.adAccountName && (
+                      <p className="text-xs text-amber-600 truncate mt-0.5">Ad Account: {t.adAccountName}{t.adAccountMetaId ? ` (${t.adAccountMetaId})` : ""}</p>
+                    )}
+                    <p className="text-xs text-slate-400 mt-1 line-clamp-2">{t.message}</p>
                   </div>
-                  <p className="text-sm font-semibold text-slate-900 truncate">{t.subject}</p>
-                  <p className="text-xs text-slate-500 truncate mt-0.5">{t.email}</p>
-                  <p className="text-xs text-slate-400 mt-1 line-clamp-2">{t.message}</p>
-                </div>
               ))}
             </div>
           )}
@@ -125,8 +128,13 @@ export default function SupportTicketsPage() {
                   </span>
                 </div>
                 <p className="text-xs text-slate-500">
-                  From: {selected.email} &middot; {new Date(selected.createdAt).toLocaleString("en-BD")}
-                </p>
+                    From: {selected.email} &middot; {new Date(selected.createdAt).toLocaleString("en-BD")}
+                  </p>
+                  {selected.adAccountName && (
+                    <p className="text-xs text-amber-600 mt-1.5 font-medium">
+                      Ad Account: {selected.adAccountName}{selected.adAccountMetaId ? ` (Meta ID: ${selected.adAccountMetaId})` : ""}
+                    </p>
+                  )}
                 <p className="mt-3 text-sm text-slate-700 bg-slate-50 rounded-xl p-4">{selected.message}</p>
               </div>
 
