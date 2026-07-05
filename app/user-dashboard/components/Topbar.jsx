@@ -45,19 +45,20 @@ export default function UserTopbar({ onToggle }) {
           </div>
         </div>
         <div className="flex items-center gap-3 sm:gap-4">
-          <div className="flex items-center gap-3 rounded-2xl border border-[#F1E7DF] bg-white px-3 py-2 shadow-sm">
-            <div className="flex h-9 w-9 items-center justify-center rounded-full overflow-hidden text-sm font-bold text-white"
-              style={{ background: `linear-gradient(135deg, ${settings?.primaryColor || "#135B9A"}, ${settings?.secondaryColor || "#F48E2B"})` }}>
-              <span className="h-full w-full flex items-center justify-center">AB</span>
-            </div>
-            <div className="hidden sm:block">
-              <p className="text-sm font-semibold text-slate-900">{profile?.displayName || user?.email || 'Member'}</p>
-              <div className="flex items-center gap-2">
-                <p className="text-xs text-slate-500">Account</p>
-                <button onClick={handleLogout} className="text-xs text-red-600 underline ml-2">Logout</button>
+            <div className="flex items-center gap-3 rounded-2xl border border-[#F1E7DF] bg-white px-3 py-2 shadow-sm">
+              <div className="flex h-9 w-9 items-center justify-center rounded-full overflow-hidden text-sm font-bold text-white"
+                style={{ background: `linear-gradient(135deg, ${settings?.primaryColor || "#135B9A"}, ${settings?.secondaryColor || "#F48E2B"})` }}>
+                <span className="h-full w-full flex items-center justify-center">AB</span>
               </div>
+              <div className="hidden sm:block">
+                <p className="text-sm font-semibold text-slate-900">{profile?.displayName || user?.email || 'Member'}</p>
+                <div className="flex items-center gap-2">
+                  <p className="text-xs text-slate-500">Account</p>
+                  <button onClick={handleLogout} className="text-xs text-red-600 underline">Logout</button>
+                </div>
+              </div>
+              <button onClick={handleLogout} className="sm:hidden text-xs text-red-600 underline font-medium">Logout</button>
             </div>
-          </div>
         </div>
       </div>
     </header>
