@@ -133,9 +133,9 @@ export default function UserDashboardPage() {
     );
   }
 
-  const totalBudget = adAccounts.reduce((s, a) => s + (Number(a.metaSpendCap || a.spendCap || 0) / 100), 0);
+  const totalBudget = adAccounts.reduce((s, a) => s + Number(a.metaSpendCap || a.spendCap || 0), 0);
   const totalSpent = adAccounts.reduce((s, a) => {
-    const spent = a.metaStatus != null ? Number(a.metaAmountSpent || 0) / 100 : Number(a.spent || 0);
+    const spent = a.metaStatus != null ? Number(a.metaAmountSpent || 0) : Number(a.spent || 0);
     return s + spent;
   }, 0);
 

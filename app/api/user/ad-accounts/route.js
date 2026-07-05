@@ -65,7 +65,7 @@ export async function GET(request) {
           metaBalance: meta.balance || 0,
           metaSpendCap: meta.spendCap || 0,
           metaAmountSpent: meta.amountSpent || 0,
-          spent: typeof meta.amountSpent === "number" && meta.amountSpent > 0 ? (meta.amountSpent / 100) : (typeof acc.spent === "number" && acc.spent > 0 ? acc.spent : 0),
+          spent: typeof meta.amountSpent === "number" && meta.amountSpent > 0 ? meta.amountSpent : (typeof acc.spent === "number" && acc.spent > 0 ? acc.spent : 0),
         };
       }
       return {
@@ -78,7 +78,7 @@ export async function GET(request) {
       };
     });
 
-    const totalBudget = enriched.reduce((s, a) => s + (Number(a.spendCap || 0) / 100), 0);
+    const totalBudget = enriched.reduce((s, a) => s + Number(a.spendCap || 0), 0);
     const totalSpent = enriched.reduce((s, a) => s + Number(a.spent || 0), 0);
     const activeCount = enriched.filter((a) => a.status === "active").length;
 

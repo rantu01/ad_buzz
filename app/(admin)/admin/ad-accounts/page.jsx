@@ -224,7 +224,7 @@ export default function AdminAdAccountsPage() {
             metaAccountName: ma.name,
             currency: ma.currency,
             spendCap: ma.spendCap,
-            budget: ma.spendCap ? ma.spendCap / 100 : 0,
+            budget: ma.spendCap ? ma.spendCap : 0,
             accountId: ma.metaAccountId,
             status: ma.accountStatus === 1 ? "active" : "paused",
             uid: "",
@@ -328,8 +328,8 @@ export default function AdminAdAccountsPage() {
     return a.name?.toLowerCase().includes(q) || a.accountId?.toLowerCase().includes(q) || a.email?.toLowerCase().includes(q) || a.uid?.toLowerCase().includes(q);
   });
 
-  const totalBudget = adAccounts.reduce((s, a) => s + (Number(a.metaSpendCap || a.spendCap || 0) / 100), 0);
-  const totalSpent = adAccounts.reduce((s, a) => s + (Number(a.metaAmountSpent || 0) / 100), 0);
+  const totalBudget = adAccounts.reduce((s, a) => s + Number(a.metaSpendCap || a.spendCap || 0), 0);
+  const totalSpent = adAccounts.reduce((s, a) => s + Number(a.metaAmountSpent || 0), 0);
 
   return (
     <div>
@@ -390,7 +390,7 @@ export default function AdminAdAccountsPage() {
               </thead>
               <tbody className="divide-y divide-slate-100 text-sm">
                 {filtered.map((acc) => {
-                  const budgetDollars = Number(acc.metaSpendCap || acc.spendCap || 0) / 100;
+                  const budgetDollars = Number(acc.metaSpendCap || acc.spendCap || 0);
                   const spendPct = budgetDollars > 0 ? Math.min((acc.spent / budgetDollars) * 100, 100) : 0;
                   const meta = acc._meta;
                   return (
@@ -425,8 +425,8 @@ export default function AdminAdAccountsPage() {
                       </td>
                       <td className="py-3 px-4">
                         <div className="relative">
-                          <input key={acc.spendCap || 0} type="number" step="0.01" defaultValue={(Number(acc.metaSpendCap || acc.spendCap || 0) / 100)} className={`border border-slate-200 rounded-lg px-2 py-1 text-sm w-24 bg-white ${savingAccounts[acc._id] ? "opacity-50" : ""}`}
-                            onBlur={(e) => { const newVal = Number(e.target.value); const oldVal = Number(acc.metaSpendCap || acc.spendCap || 0) / 100; if (newVal !== oldVal) updateAccount(acc._id, { spendCap: Math.round(newVal * 100) }); }}
+                          <input key={acc.spendCap || 0} type="number" step="0.01" defaultValue={Number(acc.metaSpendCap || acc.spendCap || 0)} className={`border border-slate-200 rounded-lg px-2 py-1 text-sm w-24 bg-white ${savingAccounts[acc._id] ? "opacity-50" : ""}`}
+                            onBlur={(e) => { const newVal = Number(e.target.value); const oldVal = Number(acc.metaSpendCap || acc.spendCap || 0); if (newVal !== oldVal) updateAccount(acc._id, { spendCap: newVal }); }}
                             disabled={savingAccounts[acc._id] || !canManage} />
                           {savingAccounts[acc._id] && (
                             <RefreshCw size={14} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 animate-spin" />
@@ -434,7 +434,7 @@ export default function AdminAdAccountsPage() {
                         </div>
                       </td>
                       <td className="py-3 px-4">
-                        <span className="font-medium">${formatMoney(Number(acc.metaAmountSpent || 0) / 100)}</span>
+                        <span className="font-medium">${formatMoney(Number(acc.metaAmountSpent || 0))}</span>
                         <div className="flex items-center gap-2 mt-1">
                           <div className="w-16 bg-slate-100 h-1.5 rounded-full overflow-hidden">
                             <div className={`h-full rounded-full ${spendPct > 90 ? "bg-red-500" : spendPct > 70 ? "bg-amber-500" : "bg-emerald-500"}`} style={{ width: `${spendPct}%` }} />
@@ -562,7 +562,7 @@ export default function AdminAdAccountsPage() {
                               <p className="text-xs text-slate-400 font-mono truncate">{acc.metaAccountId || acc.accountId}</p>
                             </div>
                             <div className="text-right shrink-0">
-                              <p className="text-sm font-semibold text-slate-900">${formatMoney(Number(acc.metaSpendCap || acc.spendCap || 0) / 100)}</p>
+                              <p className="text-sm font-semibold text-slate-900">${formatMoney(Number(acc.metaSpendCap || acc.spendCap || 0))}</p>
                               <p className="text-xs text-slate-400">{acc.currency || "USD"}</p>
                             </div>
                           </label>

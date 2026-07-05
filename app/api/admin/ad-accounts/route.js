@@ -79,7 +79,7 @@ export async function PATCH(request) {
     }
 
     if (updates.budget !== undefined) {
-      updates.spendCap = Math.round(Number(updates.budget) * 100);
+      updates.spendCap = Number(updates.budget);
       delete updates.budget;
     }
 
@@ -88,9 +88,8 @@ export async function PATCH(request) {
       const db = client.db(DB_NAME);
       const account = await db.collection("adAccounts").findOne({ _id: new ObjectId(_id) });
       if (account?.metaAccountId) {
-        const newCapDollars = Number(updates.spendCap) / 100;
         try {
-          await updateSpendCap(account.metaAccountId, newCapDollars);
+          await updateSpendCap(account.metaAccountId, Number(updates.spendCap));
         } catch (metaErr) {
           return NextResponse.json({ success: false, message: `Meta update failed: ${metaErr.message}` }, { status: 500 });
         }

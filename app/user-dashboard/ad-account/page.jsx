@@ -106,9 +106,9 @@ export default function AdAccountPage() {
     return () => clearInterval(id);
   }, [user?.uid]);
 
-  const totalBudget = adAccounts.reduce((s, a) => s + (Number(a.metaSpendCap || a.spendCap || 0) / 100), 0);
+  const totalBudget = adAccounts.reduce((s, a) => s + Number(a.metaSpendCap || a.spendCap || 0), 0);
   const totalSpent = adAccounts.reduce((s, a) => {
-    const spent = a.metaStatus != null ? Number(a.metaAmountSpent || 0) / 100 : Number(a.spent || 0);
+    const spent = a.metaStatus != null ? Number(a.metaAmountSpent || 0) : Number(a.spent || 0);
     return s + spent;
   }, 0);
 
@@ -307,10 +307,10 @@ export default function AdAccountPage() {
             </thead>
             <tbody className="divide-y divide-slate-100 text-sm text-slate-700">
               {adAccounts.map((acc) => {
-                const budgetNum = Number(acc.metaSpendCap || acc.spendCap || 0) / 100;
-                const spentNum = acc.metaStatus != null ? Number(acc.metaAmountSpent || 0) / 100 : Number(acc.spent || 0);
+                const budgetNum = Number(acc.metaSpendCap || acc.spendCap || 0);
+                const spentNum = acc.metaStatus != null ? Number(acc.metaAmountSpent || 0) : Number(acc.spent || 0);
                 const spendPct = budgetNum > 0 ? Math.min((spentNum / budgetNum) * 100, 100) : 0;
-                const metaBalanceDollars = Number(acc.metaBalance || 0) / 100;
+                const metaBalanceDollars = Number(acc.metaBalance || 0);
                 return (
                   <tr key={acc._id} className="hover:bg-slate-50/60 transition-colors">
                     <td className="py-4 pr-4 font-medium text-slate-900 max-w-[220px] truncate">{acc.metaAccountName || acc.name}</td>
@@ -388,7 +388,7 @@ export default function AdAccountPage() {
                 </div>
                 <div className="flex justify-between text-sm mb-2">
                   <span className="text-slate-500">Current Budget</span>
-                  <span className="text-slate-900 font-medium">${formatMoney(Number(topUpModal.metaSpendCap || topUpModal.spendCap || 0) / 100)}</span>
+                  <span className="text-slate-900 font-medium">${formatMoney(Number(topUpModal.metaSpendCap || topUpModal.spendCap || 0))}</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-slate-500">Wallet Balance</span>
@@ -411,7 +411,7 @@ export default function AdAccountPage() {
 
               {Number(topUpAmount) > 0 && (() => {
                 const amt = Number(topUpAmount);
-                const curBudget = Number(topUpModal.metaSpendCap || topUpModal.spendCap || 0) / 100;
+                const curBudget = Number(topUpModal.metaSpendCap || topUpModal.spendCap || 0);
                 const newBudget = curBudget + amt;
                 const newWallet = walletBalance - amt;
                 return (

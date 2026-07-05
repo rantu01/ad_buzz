@@ -233,7 +233,7 @@ export default function ReportsPage() {
                 <thead><tr className="bg-slate-50 text-slate-400 text-xs font-bold uppercase tracking-wider border-b border-slate-200"><th className="py-3 px-4">Account</th><th className="py-3 px-4">Status</th><th className="py-3 px-4">Budget</th><th className="py-3 px-4">Spent</th><th className="py-3 px-4">Utilization</th><th className="py-3 px-4">User</th><th className="py-3 px-4">Last Sync</th></tr></thead>
                 <tbody className="divide-y divide-slate-100 text-sm">
                   {adSpend.rows.length > 0 ? adSpend.rows.map((a, i) => {
-                    const budgetDollars = Number(a.spendCap || 0) / 100;
+                    const budgetDollars = Number(a.spendCap || 0);
                     const util = budgetDollars > 0 ? (a.spent / budgetDollars) * 100 : 0;
                     return (<tr key={a._id || i} className="hover:bg-slate-50/40">
                       <td className="py-3 px-4 max-w-[200px]"><p className="font-medium text-slate-900 truncate">{a.name}</p><p className="text-xs font-mono text-blue-600 truncate">{a.metaAccountId || a.accountId}</p></td>

@@ -56,9 +56,9 @@ export async function GET(request) {
           { label: "Name", key: "name" },
           { label: "Account ID", key: "metaAccountId" },
           { label: "Status", key: "status" },
-          { label: "Budget", accessor: (r) => `$${(Number(r.spendCap || 0) / 100).toFixed(2)}` },
+          { label: "Budget", accessor: (r) => `$${Number(r.spendCap || 0).toFixed(2)}` },
           { label: "Spent", accessor: (r) => `$${Number(r.spent).toFixed(2)}` },
-          { label: "Utilization", accessor: (r) => { const b = Number(r.spendCap || 0) / 100; return `${b > 0 ? ((r.spent / b) * 100).toFixed(1) : 0}%`; } },
+          { label: "Utilization", accessor: (r) => { const b = Number(r.spendCap || 0); return `${b > 0 ? ((r.spent / b) * 100).toFixed(1) : 0}%`; } },
           { label: "User", key: "email" },
           { label: "Last Synced", accessor: (r) => r.lastSyncedAt ? new Date(r.lastSyncedAt).toLocaleDateString() : "-" },
         ];

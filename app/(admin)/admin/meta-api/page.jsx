@@ -46,6 +46,11 @@ export default function MetaApiSettingsPage() {
     loadSyncLogs();
   }, [loadSettings, loadMetaAccounts, loadSyncLogs]);
 
+  useEffect(() => {
+    const id = setInterval(loadMetaAccounts, 30000);
+    return () => clearInterval(id);
+  }, [loadMetaAccounts]);
+
   const handleSave = async (e) => {
     e.preventDefault();
     setSaving(true);
@@ -257,9 +262,9 @@ export default function MetaApiSettingsPage() {
                           </span>
                         </td>
                         <td className="py-3 px-4">{acc.currency}</td>
-                        <td className="py-3 px-4">${(acc.balance / 100).toLocaleString()}</td>
-                        <td className="py-3 px-4">${(acc.spendCap / 100).toLocaleString()}</td>
-                        <td className="py-3 px-4">${(acc.amountSpent / 100).toLocaleString()}</td>
+                        <td className="py-3 px-4">${Number(acc.balance).toLocaleString()}</td>
+                        <td className="py-3 px-4">${Number(acc.spendCap).toLocaleString()}</td>
+                        <td className="py-3 px-4">${Number(acc.amountSpent).toLocaleString()}</td>
                       </tr>
                     ))}
                   </tbody>

@@ -32,10 +32,13 @@ export async function POST(request) {
       return NextResponse.json({ success: false, message: "Ad account not found" }, { status: 404 });
     }
 
-    const previousBudgetCents = Number(account.spendCap || 0);
-    const previousBudgetDollars = previousBudgetCents / 100;
+    const localBudgetDollars = Number(account.spendCap || 0);
+    const metaAccount = account.metaAccountId
+      ? await db.collection("metaAdAccounts").findOne({ metaAccountId: account.metaAccountId })
+      : null;
+    const metaBudgetDollars = Number(metaAccount?.spendCap || 0);
+    const previousBudgetDollars = metaBudgetDollars > 0 ? metaBudgetDollars : localBudgetDollars;
     const newBudgetDollars = previousBudgetDollars + topUpAmount;
-    const newBudgetCents = Math.round(newBudgetDollars * 100);
 
     if (account.metaAccountId) {
       try {
@@ -66,7 +69,7 @@ export async function POST(request) {
     const adResult = await db.collection("adAccounts").findOneAndUpdate(
       { _id: new ObjectId(accountId) },
       {
-        $set: { spendCap: newBudgetCents, updatedAt: new Date() },
+        $set: { spendCap: newBudgetDollars, updatedAt: new Date() },
       },
       { returnDocument: "after" }
     );
@@ -83,7 +86,7 @@ export async function POST(request) {
     if (account.metaAccountId) {
       await db.collection("metaAdAccounts").findOneAndUpdate(
         { metaAccountId: account.metaAccountId },
-        { $set: { spendCap: newBudgetCents, updatedAt: new Date() } }
+        { $set: { spendCap: newBudgetDollars, updatedAt: new Date() } }
       ).catch(() => {});
     }
 
