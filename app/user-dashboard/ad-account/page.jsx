@@ -3,6 +3,7 @@
 import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/app/Component/Auth/AuthProvider";
+import { useSettings } from "@/app/Component/Settings/SettingsProvider";
 
 export default function AdAccountPage() {
   const router = useRouter();
@@ -10,8 +11,12 @@ export default function AdAccountPage() {
 
   const [adAccounts, setAdAccounts] = useState([]);
   const [walletBalance, setWalletBalance] = useState(0);
+  const [userDollarRate, setUserDollarRate] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
+  const settings = useSettings();
+  const defaultDollarRate = settings?.dollarRate || 129;
+  const effectiveRate = userDollarRate || defaultDollarRate;
 
   const [topUpModal, setTopUpModal] = useState(null);
   const [topUpAmount, setTopUpAmount] = useState("");
@@ -64,7 +69,10 @@ export default function AdAccountPage() {
         const accountsData = await accountsRes.json();
         const dashData = await dashRes.json();
         if (accountsData.success) setAdAccounts(accountsData.adAccounts || []);
-        if (dashData.success) setWalletBalance(Number(dashData.dashboard.availableBalance || 0));
+        if (dashData.success) {
+          setWalletBalance(Number(dashData.dashboard.availableBalance || 0));
+          if (dashData.dashboard.dollarRate) setUserDollarRate(dashData.dashboard.dollarRate);
+        }
       } catch (err) {
         setError(err.message || "Failed to load data");
       } finally {
@@ -84,7 +92,10 @@ export default function AdAccountPage() {
       const accountsData = await accountsRes.json();
       const dashData = await dashRes.json();
       if (accountsData.success) setAdAccounts(accountsData.adAccounts || []);
-      if (dashData.success) setWalletBalance(Number(dashData.dashboard.availableBalance || 0));
+      if (dashData.success) {
+        setWalletBalance(Number(dashData.dashboard.availableBalance || 0));
+        if (dashData.dashboard.dollarRate) setUserDollarRate(dashData.dashboard.dollarRate);
+      }
     } catch {}
   };
 
@@ -229,7 +240,7 @@ export default function AdAccountPage() {
         <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Total Budget</span>
+              <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Total Remaining Balance</span>
               <span className="p-2 bg-emerald-50 rounded-lg text-emerald-600">
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
               </span>
@@ -243,14 +254,14 @@ export default function AdAccountPage() {
           <div className="absolute top-0 right-0 w-24 h-24 bg-amber-500/5 rounded-full -mr-5 -mt-5"></div>
           <div>
             <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-amber-600 uppercase tracking-wider">Remaining Budget</span>
+              <span className="text-xs font-semibold text-amber-600 uppercase tracking-wider">Conversion Rate</span>
               <span className="p-2 bg-amber-50 rounded-lg text-amber-600">
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
               </span>
             </div>
-            <div className="text-3xl font-bold text-slate-900 mt-4">${formatMoney(totalBudget - totalSpent)}</div>
+            <div className="text-2xl font-bold text-slate-900 mt-4 whitespace-nowrap">{effectiveRate} BDT = 1 USD</div>
           </div>
-          <div className="mt-4 text-xs font-semibold text-amber-700 bg-amber-50 py-1.5 px-3 rounded-md w-max">Remaining</div>
+          <div className="mt-4 text-xs font-semibold text-amber-700 bg-amber-50 py-1.5 px-3 rounded-md w-max">Exchange Rate</div>
         </div>
       </div>
 
@@ -276,9 +287,9 @@ export default function AdAccountPage() {
                     <th className="pb-3 pr-4">Name</th>
                     <th className="pb-3 pr-4">Meta Account ID</th>
                     <th className="pb-3 pr-4">Meta Status</th>
-                    <th className="pb-3 pr-4">Budget</th>
-                    <th className="pb-3 pr-4">Spent</th>
-                    <th className="pb-3 pr-4">Meta Balance</th>
+                    <th className="pb-3 pr-4">Remaining balance</th>
+                    {/* <th className="pb-3 pr-4">Spent</th> */}
+                    {/* <th className="pb-3 pr-4">Meta Balance</th> */}
                     <th className="pb-3 pr-4">Last Refreshed</th>
                     <th className="pb-3"></th>
               </tr>
@@ -302,8 +313,8 @@ export default function AdAccountPage() {
                         <div className={`h-full rounded-full ${spendPct > 90 ? "bg-red-500" : spendPct > 70 ? "bg-amber-500" : "bg-emerald-500"}`} style={{ width: `${spendPct}%` }}></div>
                       </div>
                     </td>
-                    <td className="py-4 pr-4 text-sm">${formatMoney(spentNum)}</td>
-                    <td className="py-4 pr-4 text-sm font-medium text-slate-900">${formatMoney(metaBalanceDollars)}</td>
+                    {/* <td className="py-4 pr-4 text-sm">${formatMoney(spentNum)}</td> */}
+                    {/* <td className="py-4 pr-4 text-sm font-medium text-slate-900">${formatMoney(metaBalanceDollars)}</td> */}
                     <td className="py-4 pr-4 text-xs text-slate-400">{acc.lastSyncedAt ? new Date(acc.lastSyncedAt).toLocaleString() : "Not synced"}</td>
                     <td className="py-4 text-right whitespace-nowrap">
                       <div className="flex items-center justify-end gap-2">

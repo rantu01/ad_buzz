@@ -160,27 +160,7 @@ export default function BalancePage() {
           )}
         </div>
 
-        <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-bold text-slate-900">Approved Withdrawals</h3>
-            <span onClick={() => router.push("/user-dashboard/withdrawals")} className="text-xs text-blue-600 font-medium cursor-pointer hover:underline">View All</span>
-          </div>
-          {withdrawals.filter(w => w.status === "approved").length === 0 ? (
-            <p className="text-slate-500 text-sm py-2">No approved withdrawals yet.</p>
-          ) : (
-            <div className="space-y-2 max-h-[350px] overflow-y-auto">
-              {withdrawals.filter(w => w.status === "approved").slice(0, 5).map((w) => (
-                <div key={w._id} className="flex items-center justify-between p-3 rounded-xl bg-slate-50 border border-slate-100">
-                  <div className="min-w-0 flex-1">
-                    <p className="font-bold text-red-700">-${formatMoney(w.amount)}</p>
-                    <p className="text-[11px] text-slate-400">{new Date(w.createdAt).toLocaleString()}</p>
-                    <p className="text-[10px] text-slate-400 truncate font-mono">{w.walletAddress}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+        
       </div>
     </div>
   );
