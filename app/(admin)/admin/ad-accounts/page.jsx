@@ -1,10 +1,22 @@
-"use client";
+                    "use client";
 
 import { useEffect, useState, useCallback, useRef } from "react";
 import Swal from "sweetalert2";
-import { Megaphone, RefreshCw, UserPlus, UserX, ExternalLink, CheckCircle, XCircle, AlertTriangle, Search, X, ChevronDown } from "lucide-react";
+import { Megaphone, RefreshCw, UserPlus, UserX, ExternalLink, CheckCircle, XCircle, AlertTriangle, Search, X, ChevronDown, Clock } from "lucide-react";
 import { useAdmin } from "../components/AdminProvider";
 import { hasPermission } from "@/lib/permissions";
+
+function timeAgo(date) {
+  if (!date) return "\u2014";
+  const diffMs = Date.now() - new Date(date).getTime();
+  const mins = Math.floor(diffMs / 60000);
+  if (mins < 1) return "Just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ${mins % 60}m ago`;
+  const days = Math.floor(hrs / 24);
+  return `${days}d ago`;
+}
 
 export default function AdminAdAccountsPage() {
   const { profile } = useAdmin();
@@ -20,6 +32,8 @@ export default function AdminAdAccountsPage() {
   const [showUnassigned, setShowUnassigned] = useState(false);
   const [savingAccounts, setSavingAccounts] = useState({});
   const [users, setUsers] = useState([]);
+  const [lastManualRefresh, setLastManualRefresh] = useState(null);
+  const [lastOverallSync, setLastOverallSync] = useState(null);
 
   const [assignModal, setAssignModal] = useState(false);
   const [selectedAccounts, setSelectedAccounts] = useState([]);
@@ -33,7 +47,15 @@ export default function AdminAdAccountsPage() {
     try {
       const res = await fetch("/api/admin/ad-accounts?includeUnassigned=true");
       const data = await res.json();
-      if (data.success) setAdAccounts(data.adAccounts || []);
+      if (data.success) {
+        setAdAccounts(data.adAccounts || []);
+        const syncedTimes = (data.adAccounts || [])
+          .map(a => a.lastSyncedAt ? new Date(a.lastSyncedAt).getTime() : 0)
+          .filter(t => t > 0);
+        if (syncedTimes.length > 0) {
+          setLastOverallSync(new Date(Math.max(...syncedTimes)));
+        }
+      }
     } finally {
       setLoading(false);
     }
@@ -248,6 +270,13 @@ export default function AdminAdAccountsPage() {
   };
 
   const handleSyncSpend = async () => {
+    if (syncing) return;
+    const now = Date.now();
+    if (lastManualRefresh && now - lastManualRefresh < 300000) {
+      const waitSec = Math.ceil((300000 - (now - lastManualRefresh)) / 1000);
+      await Swal.fire({ icon: "info", title: `Wait ${waitSec}s before next sync`, timer: 1500, showConfirmButton: false });
+      return;
+    }
     setSyncing(true);
     try {
       const res = await fetch("/api/admin/meta-api/sync", {
@@ -257,15 +286,10 @@ export default function AdminAdAccountsPage() {
       });
       const data = await res.json();
       if (data.success) {
-        await Swal.fire({
-          icon: data.errors > 0 ? "warning" : "success",
-          title: `Synced: ${data.synced} ok, ${data.errors} errors`,
-          timer: 2000,
-          showConfirmButton: false,
-        });
+        setLastManualRefresh(Date.now());
         loadData();
       } else {
-        await Swal.fire({ icon: "error", title: "Sync failed", text: data.message });
+        await Swal.fire({ icon: "error", title: "Sync failed", text: data.message || "Unknown error" });
       }
     } catch (err) {
       await Swal.fire({ icon: "error", title: "Error", text: err.message });
@@ -339,6 +363,11 @@ export default function AdminAdAccountsPage() {
           <p className="text-sm text-slate-500 mt-0.5">
             {adAccounts.length} total accounts &middot; ${formatMoney(totalBudget)} total budget &middot; ${formatMoney(totalSpent)} total spent
           </p>
+          {lastOverallSync && (
+            <p className="text-xs text-slate-400 flex items-center gap-1 mt-1">
+              <Clock size={12} /> Last sync: {timeAgo(lastOverallSync)}
+            </p>
+          )}
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {canManage && (
@@ -445,7 +474,9 @@ export default function AdminAdAccountsPage() {
                       <td className="py-3 px-4">
                         <div className="flex items-center gap-1.5">
                           {acc.syncStatus === "synced" ? <CheckCircle size={14} className="text-emerald-500" /> : acc.syncStatus === "error" ? <XCircle size={14} className="text-red-500" /> : <AlertTriangle size={14} className="text-amber-400" />}
-                          <span className="text-xs text-slate-400">{acc.lastSyncedAt ? new Date(acc.lastSyncedAt).toLocaleDateString() : "\u2014"}</span>
+                          <span className="text-xs text-slate-500" title={acc.lastSyncedAt ? new Date(acc.lastSyncedAt).toLocaleString() : ""}>
+                            {acc.lastSyncedAt ? timeAgo(acc.lastSyncedAt) : "\u2014"}
+                          </span>
                         </div>
                       </td>
                       <td className="py-3 px-4">
@@ -475,8 +506,8 @@ export default function AdminAdAccountsPage() {
       )}
 
       {assignModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full mx-4 max-h-[85vh] flex flex-col">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm ">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full mx-4 max-h-[100vh] flex flex-col">
             <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200">
               <div>
                 <h2 className="text-lg font-bold text-slate-900">Assign Ad Accounts</h2>
@@ -485,7 +516,7 @@ export default function AdminAdAccountsPage() {
               <button onClick={() => setAssignModal(false)} className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-100 transition"><X size={20} /></button>
             </div>
 
-            <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
+            <div className="flex-1 flex flex-col lg:flex-row ">
               <div className="lg:w-2/5 border-b lg:border-b-0 lg:border-r border-slate-200 flex flex-col">
                 <div className="p-4 border-b border-slate-100">
                   <h3 className="text-sm font-semibold text-slate-700 mb-3">Select User</h3>

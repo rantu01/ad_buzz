@@ -5,6 +5,18 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/app/Component/Auth/AuthProvider";
 import { useSettings } from "@/app/Component/Settings/SettingsProvider";
 
+function timeAgo(date) {
+  if (!date) return "\u2014";
+  const diffMs = Date.now() - new Date(date).getTime();
+  const mins = Math.floor(diffMs / 60000);
+  if (mins < 1) return "Just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ${mins % 60}m ago`;
+  const days = Math.floor(hrs / 24);
+  return `${days}d ago`;
+}
+
 export default function AdAccountPage() {
   const router = useRouter();
   const { user, loading: authLoading } = useAuth();
@@ -329,7 +341,11 @@ export default function AdAccountPage() {
                     </td>
                     {/* <td className="py-4 pr-4 text-sm">${formatMoney(spentNum)}</td> */}
                     {/* <td className="py-4 pr-4 text-sm font-medium text-slate-900">${formatMoney(metaBalanceDollars)}</td> */}
-                    <td className="py-4 pr-4 text-xs text-slate-400">{lastRefreshedAt ? lastRefreshedAt.toLocaleString() : "Refreshing..."}</td>
+                    <td className="py-4 pr-4 text-xs text-slate-400" title={acc.lastSyncedAt ? new Date(acc.lastSyncedAt).toLocaleString() : ""}>
+                      <span className="flex items-center gap-1">
+                        {acc.lastSyncedAt ? timeAgo(acc.lastSyncedAt) : (lastRefreshedAt ? "Cached" : "Loading...")}
+                      </span>
+                    </td>
                     <td className="py-4 text-right whitespace-nowrap">
                       <div className="flex items-center justify-end gap-2">
                         <button

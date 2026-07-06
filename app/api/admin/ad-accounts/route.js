@@ -98,6 +98,8 @@ export async function PATCH(request) {
           { $set: { spendCap: Number(updates.spendCap), updatedAt: new Date() } }
         ).catch(() => {});
       }
+      updates.lastSyncedAt = new Date();
+      updates.syncSource = "admin_manual";
     }
 
     const result = await updateAdAccount(_id, updates);

@@ -69,7 +69,7 @@ export async function POST(request) {
     const adResult = await db.collection("adAccounts").findOneAndUpdate(
       { _id: new ObjectId(accountId) },
       {
-        $set: { spendCap: newBudgetDollars, updatedAt: new Date() },
+        $set: { spendCap: newBudgetDollars, lastSyncedAt: new Date(), syncSource: "local_topup", updatedAt: new Date() },
       },
       { returnDocument: "after" }
     );
@@ -86,7 +86,7 @@ export async function POST(request) {
     if (account.metaAccountId) {
       await db.collection("metaAdAccounts").findOneAndUpdate(
         { metaAccountId: account.metaAccountId },
-        { $set: { spendCap: newBudgetDollars, updatedAt: new Date() } }
+        { $set: { spendCap: newBudgetDollars, lastSyncedAt: new Date(), updatedAt: new Date() } }
       ).catch(() => {});
     }
 

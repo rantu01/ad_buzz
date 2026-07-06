@@ -16,6 +16,9 @@ export async function POST(request) {
 
     if (action === "sync-spend") {
       const result = await syncAllAdAccounts();
+      if (result.locked) {
+        return NextResponse.json({ success: false, message: "Sync already running. Please wait.", locked: true }, { status: 429 });
+      }
       return NextResponse.json({ success: true, ...result });
     }
 
