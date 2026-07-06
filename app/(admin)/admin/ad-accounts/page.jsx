@@ -40,6 +40,7 @@ export default function AdminAdAccountsPage() {
   const [selectedUser, setSelectedUser] = useState(null);
   const [userSearch, setUserSearch] = useState("");
   const [userDropdownOpen, setUserDropdownOpen] = useState(false);
+  const [accountSearch, setAccountSearch] = useState("");
   const userDropdownRef = useRef(null);
 
   const loadData = useCallback(async () => {
@@ -570,8 +571,8 @@ export default function AdminAdAccountsPage() {
               </div>
 
               <div className="lg:w-3/5 flex flex-col">
-                <div className="p-4 border-b border-slate-100">
-                  <div className="flex items-center justify-between mb-3">
+                <div className="p-4 border-b border-slate-100 space-y-3">
+                  <div className="flex items-center justify-between">
                     <h3 className="text-sm font-semibold text-slate-700">Select Accounts <span className="ml-2 text-xs text-slate-400 font-normal">{unassignedAccounts.length} unassigned</span></h3>
                     <div className="flex items-center gap-2">
                       <button onClick={selectAllUnassigned} className="text-xs text-blue-600 hover:text-blue-800 font-medium">Select All</button>
@@ -579,11 +580,22 @@ export default function AdminAdAccountsPage() {
                       <button onClick={deselectAll} className="text-xs text-slate-500 hover:text-slate-700 font-medium">Clear</button>
                     </div>
                   </div>
+                  <div className="relative">
+                    <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <input type="text" placeholder="Search accounts by name or ID..." value={accountSearch} onChange={(e) => setAccountSearch(e.target.value)}
+                      className="w-full pl-8 pr-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500" />
+                  </div>
                 </div>
                 <div className="flex-1 overflow-y-auto">
                   {unassignedAccounts.length > 0 ? (
                     <div className="divide-y divide-slate-100">
-                      {unassignedAccounts.map((acc) => {
+                      {(accountSearch
+                        ? unassignedAccounts.filter((a) => {
+                            const q = accountSearch.toLowerCase();
+                            return a.name?.toLowerCase().includes(q) || a.metaAccountId?.toLowerCase().includes(q) || a.accountId?.toLowerCase().includes(q);
+                          })
+                        : unassignedAccounts
+                      ).map((acc) => {
                         const isSelected = selectedAccounts.includes(acc._id);
                         return (
                           <label key={acc._id} className={`flex items-center gap-3 px-4 py-3 cursor-pointer transition ${isSelected ? "bg-[#E05305]/5" : "hover:bg-slate-50"}`}>
