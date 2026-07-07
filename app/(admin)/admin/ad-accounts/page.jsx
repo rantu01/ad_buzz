@@ -30,12 +30,15 @@ export default function AdminAdAccountsPage() {
   const [search, setSearch] = useState("");
   const [syncing, setSyncing] = useState(false);
   const [showUnassigned, setShowUnassigned] = useState(false);
+  const [showAssigned, setShowAssigned] = useState(false);
   const [savingAccounts, setSavingAccounts] = useState({});
   const [users, setUsers] = useState([]);
   const [lastManualRefresh, setLastManualRefresh] = useState(null);
   const [lastOverallSync, setLastOverallSync] = useState(null);
 
   const [assignModal, setAssignModal] = useState(false);
+  const [importModal, setImportModal] = useState(false);
+  const [importing, setImporting] = useState(false);
   const [selectedAccounts, setSelectedAccounts] = useState([]);
   const [selectedUser, setSelectedUser] = useState(null);
   const [userSearch, setUserSearch] = useState("");
@@ -221,25 +224,25 @@ export default function AdminAdAccountsPage() {
       await Swal.fire({ icon: "info", title: "No Meta accounts", text: "Fetch accounts from Meta BM first." });
       return;
     }
+    setImportModal(true);
+  };
 
-    const { isConfirmed } = await Swal.fire({
-      title: `Replace all with ${metaAccounts.length} Meta accounts?`,
-      text: "All existing ad accounts will be deleted and replaced with the latest Meta accounts.",
-      icon: "warning",
-      showCancelButton: true,
-      confirmButtonText: "Replace All",
-    });
-    if (!isConfirmed) return;
+  const runImport = async (mode) => {
+    setImporting(true);
+    setImportModal(false);
 
-    const deleteRes = await fetch("/api/admin/ad-accounts?all=true", { method: "DELETE" });
+    const deleteParam = mode === "all" ? "all=true" : "unassigned=true";
+    const deleteRes = await fetch(`/api/admin/ad-accounts?${deleteParam}`, { method: "DELETE" });
     const deleteData = await deleteRes.json();
     if (!deleteData.success) {
       await Swal.fire({ icon: "error", title: "Failed to clear existing accounts" });
+      setImporting(false);
       return;
     }
 
     let imported = 0;
     let errors = 0;
+    const errorMessages = [];
     for (const ma of metaAccounts) {
       try {
         const res = await fetch("/api/admin/ad-accounts", {
@@ -259,19 +262,25 @@ export default function AdminAdAccountsPage() {
         });
         const data = await res.json();
         if (data.success) imported++;
-        else errors++;
+        else {
+          errors++;
+          if (data.message) errorMessages.push(data.message);
+        }
       } catch {
         errors++;
       }
     }
 
+    const uniqueErrors = [...new Set(errorMessages)];
     await Swal.fire({
       icon: errors > 0 ? "warning" : "success",
       title: `Imported ${imported} accounts${errors > 0 ? `, ${errors} failed` : ""}`,
-      timer: 2000,
+      text: uniqueErrors.length > 0 ? uniqueErrors.slice(0, 3).join("\n") : undefined,
+      timer: errors > 0 ? 4000 : 2000,
       showConfirmButton: false,
     });
     loadData();
+    setImporting(false);
   };
 
   const handleSyncSpend = async () => {
@@ -352,6 +361,7 @@ export default function AdminAdAccountsPage() {
     return { ...acc, _meta: meta };
   }).filter((a) => {
     if (showUnassigned && a.uid) return false;
+    if (showAssigned && !a.uid) return false;
     if (!search) return true;
     const q = search.toLowerCase();
     return a.name?.toLowerCase().includes(q) || a.accountId?.toLowerCase().includes(q) || a.email?.toLowerCase().includes(q) || a.uid?.toLowerCase().includes(q);
@@ -400,6 +410,10 @@ export default function AdminAdAccountsPage() {
           <label className="flex items-center gap-2 text-sm text-slate-600 cursor-pointer select-none">
             <input type="checkbox" checked={showUnassigned} onChange={() => setShowUnassigned(!showUnassigned)} className="w-4 h-4 rounded border-slate-300 text-[#E05305] focus:ring-[#E05305]" />
             Show unassigned only
+          </label>
+          <label className="flex items-center gap-2 text-sm text-slate-600 cursor-pointer select-none">
+            <input type="checkbox" checked={showAssigned} onChange={() => setShowAssigned(!showAssigned)} className="w-4 h-4 rounded border-slate-300 text-[#E05305] focus:ring-[#E05305]" />
+            Show assigned only
           </label>
         </div>
       </div>
@@ -507,6 +521,30 @@ export default function AdminAdAccountsPage() {
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-10 text-center">
           <Megaphone size={48} className="mx-auto text-slate-300 mb-3" />
           <p className="text-slate-500 font-medium">No ad accounts found</p>
+        </div>
+      )}
+
+      {importModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full mx-4">
+            <div className="px-6 py-5 border-b border-slate-200">
+              <h2 className="text-lg font-bold text-slate-900">Import from Meta</h2>
+              <p className="text-sm text-slate-500 mt-1">Choose how to replace existing ad accounts with {metaAccounts.length} accounts from Meta.</p>
+            </div>
+            <div className="px-6 py-5 space-y-4">
+              <button onClick={() => runImport("all")} disabled={importing} className="w-full text-left border border-red-200 bg-red-50/50 hover:bg-red-50 rounded-xl p-4 transition disabled:opacity-50">
+                <p className="text-sm font-semibold text-red-700">Replace All</p>
+                <p className="text-xs text-red-600 mt-1">Warning: Choosing Replace All will replace all existing ad accounts, including those that are currently assigned to users. This may cause assigned ad accounts to be removed or lose their assignments.</p>
+              </button>
+              <button onClick={() => runImport("unassigned")} disabled={importing} className="w-full text-left border border-emerald-200 bg-emerald-50/50 hover:bg-emerald-50 rounded-xl p-4 transition disabled:opacity-50">
+                <p className="text-sm font-semibold text-emerald-700">Replace but Not Assigned</p>
+                <p className="text-xs text-emerald-600 mt-1">Replaces only the ad accounts that are not assigned to any user. All currently assigned ad accounts will remain intact.</p>
+              </button>
+            </div>
+            <div className="px-6 py-4 border-t border-slate-200 flex justify-end">
+              <button onClick={() => setImportModal(false)} disabled={importing} className="border border-slate-200 text-slate-700 rounded-lg px-4 py-2 text-sm font-medium hover:bg-slate-50 transition disabled:opacity-50">Cancel</button>
+            </div>
+          </div>
         </div>
       )}
 
