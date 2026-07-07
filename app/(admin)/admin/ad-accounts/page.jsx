@@ -217,26 +217,30 @@ export default function AdminAdAccountsPage() {
   };
 
   const handleImportFromMeta = async () => {
-    const unimported = metaAccounts.filter(
-      (ma) => !adAccounts.some((aa) => aa.metaAccountId === ma.metaAccountId)
-    );
-    if (unimported.length === 0) {
-      await Swal.fire({ icon: "info", title: "No new accounts", text: "All Meta accounts are already imported." });
+    if (metaAccounts.length === 0) {
+      await Swal.fire({ icon: "info", title: "No Meta accounts", text: "Fetch accounts from Meta BM first." });
       return;
     }
 
     const { isConfirmed } = await Swal.fire({
-      title: `Import ${unimported.length} accounts?`,
-      text: "These will be added as unassigned ad accounts.",
-      icon: "question",
+      title: `Replace all with ${metaAccounts.length} Meta accounts?`,
+      text: "All existing ad accounts will be deleted and replaced with the latest Meta accounts.",
+      icon: "warning",
       showCancelButton: true,
-      confirmButtonText: "Import",
+      confirmButtonText: "Replace All",
     });
     if (!isConfirmed) return;
 
+    const deleteRes = await fetch("/api/admin/ad-accounts?all=true", { method: "DELETE" });
+    const deleteData = await deleteRes.json();
+    if (!deleteData.success) {
+      await Swal.fire({ icon: "error", title: "Failed to clear existing accounts" });
+      return;
+    }
+
     let imported = 0;
     let errors = 0;
-    for (const ma of unimported) {
+    for (const ma of metaAccounts) {
       try {
         const res = await fetch("/api/admin/ad-accounts", {
           method: "POST",

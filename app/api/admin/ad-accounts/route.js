@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getAllAdAccounts, createAdAccount, updateAdAccount, deleteAdAccount, getUnassignedAdAccounts } from "@/lib/adAccountModel";
+import { getAllAdAccounts, createAdAccount, updateAdAccount, deleteAdAccount, deleteAllAdAccounts, getUnassignedAdAccounts } from "@/lib/adAccountModel";
 import clientPromise from "@/lib/mongodb";
 import { ObjectId } from "mongodb";
 import { updateSpendCap } from "@/lib/metaApiService";
@@ -112,10 +112,15 @@ export async function PATCH(request) {
 export async function DELETE(request) {
   try {
     const { searchParams } = new URL(request.url);
-    const id = searchParams.get("id");
 
+    if (searchParams.get("all") === "true") {
+      await deleteAllAdAccounts();
+      return NextResponse.json({ success: true, message: "All ad accounts deleted" });
+    }
+
+    const id = searchParams.get("id");
     if (!id) {
-      return NextResponse.json({ success: false, message: "id required" }, { status: 400 });
+      return NextResponse.json({ success: false, message: "id or ?all=true required" }, { status: 400 });
     }
 
     await deleteAdAccount(id);
