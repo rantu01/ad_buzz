@@ -59,7 +59,6 @@ export default function MetaApiSettingsPage() {
       businessManagerId: form.bmId.value.trim(),
       appId: form.appId.value.trim(),
       accessToken: form.accessToken.value.trim(),
-      autoSpendCapUpdate: form.autoCap.checked,
       autoSyncEnabled: form.autoSync.checked,
     };
 
@@ -209,10 +208,6 @@ export default function MetaApiSettingsPage() {
             )}
             <hr className="border-slate-200" />
             <div className="space-y-3">
-              <label className="flex items-center gap-3">
-                <input type="checkbox" name="autoCap" defaultChecked={settings?.autoSpendCapUpdate || false} className="w-4 h-4 rounded border-slate-300 text-[#E05305]" />
-                <div><span className="text-sm font-medium text-slate-700">Auto Spending Limit Cap Update</span><p className="text-xs text-slate-400">Automatically increase spend cap when 95% of budget is reached</p></div>
-              </label>
               <label className="flex items-center gap-3">
                 <input type="checkbox" name="autoSync" defaultChecked={settings?.autoSyncEnabled || false} className="w-4 h-4 rounded border-slate-300 text-[#E05305]" />
                 <div><span className="text-sm font-medium text-slate-700">Auto Sync</span><p className="text-xs text-slate-400">Enable automatic periodic sync (requires cron job)</p></div>

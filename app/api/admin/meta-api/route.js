@@ -8,7 +8,6 @@ export async function GET() {
     const safe = settings ? {
       businessManagerId: settings.businessManagerId || "",
       appId: settings.appId || "",
-      autoSpendCapUpdate: settings.autoSpendCapUpdate || false,
       autoSyncEnabled: settings.autoSyncEnabled || false,
       updatedAt: settings.updatedAt || null,
       hasAccessToken: Boolean(settings.accessToken),
@@ -22,13 +21,12 @@ export async function GET() {
 export async function PUT(request) {
   try {
     const body = await request.json();
-    const { businessManagerId, appId, accessToken, autoSpendCapUpdate, autoSyncEnabled } = body;
+    const { businessManagerId, appId, accessToken, autoSyncEnabled } = body;
 
     const updates = {};
     if (businessManagerId !== undefined) updates.businessManagerId = businessManagerId;
     if (appId !== undefined) updates.appId = appId;
     if (accessToken !== undefined) updates.accessToken = accessToken;
-    if (autoSpendCapUpdate !== undefined) updates.autoSpendCapUpdate = Boolean(autoSpendCapUpdate);
     if (autoSyncEnabled !== undefined) updates.autoSyncEnabled = Boolean(autoSyncEnabled);
 
     const result = await updateMetaSettings(updates);

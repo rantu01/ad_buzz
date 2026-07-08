@@ -65,7 +65,6 @@ export async function GET(request) {
     return NextResponse.json({
       success: true,
       autoSyncEnabled: settings?.autoSyncEnabled || false,
-      autoSpendCapUpdate: settings?.autoSpendCapUpdate || false,
       lastSync: lastSyncLog[0] || null,
       lockHeld: staleLocks?.locked || false,
       lockExpiresAt: staleLocks?.expiresAt || null,

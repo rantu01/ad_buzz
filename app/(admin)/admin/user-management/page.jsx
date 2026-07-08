@@ -128,6 +128,10 @@ export default function UserManagementPage() {
         updates.groupName = editForm.groupName;
       }
 
+      if (editForm.password) {
+        updates.password = editForm.password;
+      }
+
       const success = await updateUser(uid, updates, false);
       if (success) {
         await Swal.fire({ icon: "success", title: "User updated", timer: 1200, showConfirmButton: false });

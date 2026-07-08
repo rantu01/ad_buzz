@@ -21,7 +21,7 @@ export async function GET() {
 export async function POST(request) {
   try {
     const body = await request.json();
-    const { bankName, accountName, accountNumber, branch, referenceId } = body;
+    const { bankName, accountName, accountNumber, branch, referenceId, logo } = body;
 
     if (!bankName || !accountName || !accountNumber || !branch) {
       return NextResponse.json(
@@ -30,7 +30,7 @@ export async function POST(request) {
       );
     }
 
-    const method = await createPaymentMethod({ bankName, accountName, accountNumber, branch, referenceId });
+    const method = await createPaymentMethod({ bankName, accountName, accountNumber, branch, referenceId, logo });
     return NextResponse.json({ success: true, method }, { status: 201 });
   } catch (error) {
     return NextResponse.json(
@@ -43,7 +43,7 @@ export async function POST(request) {
 export async function PUT(request) {
   try {
     const body = await request.json();
-    const { id, bankName, accountName, accountNumber, branch, referenceId } = body;
+    const { id, bankName, accountName, accountNumber, branch, referenceId, logo } = body;
 
     if (!id) {
       return NextResponse.json(
@@ -58,6 +58,7 @@ export async function PUT(request) {
     if (accountNumber !== undefined) updates.accountNumber = accountNumber;
     if (branch !== undefined) updates.branch = branch;
     if (referenceId !== undefined) updates.referenceId = referenceId;
+    if (logo !== undefined) updates.logo = logo;
 
     const method = await updatePaymentMethod(id, updates);
     return NextResponse.json({ success: true, method });

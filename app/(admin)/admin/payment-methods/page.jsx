@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import Swal from "sweetalert2";
 import { useAdmin } from "../components/AdminProvider";
 import { Plus, X, Trash2, Edit3, Users, Check } from "lucide-react";
@@ -14,6 +14,9 @@ export default function PaymentMethodsPage() {
   const [showAssignModal, setShowAssignModal] = useState(null);
   const [editing, setEditing] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [logoFile, setLogoFile] = useState(null);
+  const [logoPreview, setLogoPreview] = useState(null);
+  const fileInputRef = useRef(null);
 
   const [form, setForm] = useState({
     bankName: "",
@@ -21,6 +24,7 @@ export default function PaymentMethodsPage() {
     accountNumber: "",
     branch: "",
     referenceId: "",
+    logo: "",
   });
 
   const activeColor = "#F48E2B";
@@ -45,8 +49,19 @@ export default function PaymentMethodsPage() {
 
   useEffect(() => { loadData(); }, []);
 
+  function toBase64(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = reject;
+    });
+  }
+
   function resetForm() {
-    setForm({ bankName: "", accountName: "", accountNumber: "", branch: "", referenceId: "" });
+    setForm({ bankName: "", accountName: "", accountNumber: "", branch: "", referenceId: "", logo: "" });
+    setLogoFile(null);
+    setLogoPreview(null);
     setEditing(null);
   }
 
@@ -58,12 +73,16 @@ export default function PaymentMethodsPage() {
     }
     setSaving(true);
     try {
-      const url = editing ? "/api/admin/payment-methods" : "/api/admin/payment-methods";
+      const payload = editing ? { id: editing, ...form } : { ...form };
+      if (logoFile) {
+        payload.logo = await toBase64(logoFile);
+      }
+      const url = "/api/admin/payment-methods";
       const method = editing ? "PUT" : "POST";
       const res = await fetch(url, {
         method,
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(editing ? { id: editing, ...form } : form),
+        body: JSON.stringify(payload),
       });
       const data = await res.json();
       if (!res.ok || !data.success) throw new Error(data.message || "Failed to save.");
@@ -107,7 +126,10 @@ export default function PaymentMethodsPage() {
       accountNumber: method.accountNumber || "",
       branch: method.branch || "",
       referenceId: method.referenceId || "",
+      logo: method.logo || "",
     });
+    setLogoPreview(method.logo || null);
+    setLogoFile(null);
     setEditing(method._id);
     setShowAddModal(true);
   }
@@ -160,9 +182,14 @@ export default function PaymentMethodsPage() {
           {methods.map((method) => (
             <div key={method._id} className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
               <div className="mb-4 flex items-center gap-3">
-                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl text-sm font-bold text-white"
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl overflow-hidden"
                   style={{ backgroundColor: method.color || "#135B9A" }}>
-                  {(method.shortCode || method.bankName).slice(0, 3).toUpperCase()}
+                  {method.logo ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={method.logo} alt={method.bankName} className="h-full w-full object-cover" />
+                  ) : (
+                    <span className="text-sm font-bold text-white">{(method.shortCode || method.bankName).slice(0, 3).toUpperCase()}</span>
+                  )}
                 </div>
                 <div className="min-w-0 flex-1">
                   <h3 className="truncate text-sm font-semibold text-slate-900">{method.bankName}</h3>
@@ -218,6 +245,22 @@ export default function PaymentMethodsPage() {
               <InputField label="Account Number *" value={form.accountNumber} onChange={(v) => setForm((p) => ({ ...p, accountNumber: v }))} placeholder="e.g. 1502200001234" />
               <InputField label="Branch *" value={form.branch} onChange={(v) => setForm((p) => ({ ...p, branch: v }))} placeholder="e.g. Gulshan Branch, Dhaka" />
               <InputField label="Reference ID" value={form.referenceId} onChange={(v) => setForm((p) => ({ ...p, referenceId: v }))} placeholder="Optional" />
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-slate-700">Bank Logo</label>
+                <input ref={fileInputRef} type="file" accept="image/*" onChange={(e) => {
+                  const file = e.target.files[0];
+                  if (!file) return;
+                  setLogoFile(file);
+                  setLogoPreview(URL.createObjectURL(file));
+                }} className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm file:mr-3 file:py-1 file:px-3 file:rounded-lg file:border-0 file:bg-orange-50 file:text-orange-700 file:font-medium" />
+                {logoPreview && (
+                  <div className="mt-2 flex items-center gap-3">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={logoPreview} alt="Logo preview" className="h-10 w-auto rounded-lg border border-slate-200" />
+                    <button type="button" onClick={() => { setLogoFile(null); setLogoPreview(null); if (fileInputRef.current) fileInputRef.current.value = ""; setForm((p) => ({ ...p, logo: "" })); }} className="text-xs text-red-600 underline hover:no-underline">Remove</button>
+                  </div>
+                )}
+              </div>
               <div className="flex gap-3 pt-2">
                 <button type="button" onClick={() => { setShowAddModal(false); resetForm(); }}
                   className="flex-1 rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-50">Cancel</button>

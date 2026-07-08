@@ -11,6 +11,7 @@ const navigation = [
     { label: "Ad Account", href: "/user-dashboard/ad-account", icon: ListChecks },
     { label: "Support Tickets", href: "/user-dashboard/support-tickets", icon: LifeBuoy },
     { label: "Profile", href: "/user-dashboard/profile", icon: User },
+    { label: "Need Help?", href: "https://wa.me/message/JPEP3WIO5LALA1", icon: LifeBuoy },
 ];
 
 const paymentChildren = [

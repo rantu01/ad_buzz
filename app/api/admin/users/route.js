@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import clientPromise from "@/lib/mongodb";
 import { getUserByUid } from "@/lib/userModel";
 import { ROLES } from "@/lib/permissions";
-import { deleteFirebaseAuthUser } from "@/lib/firebaseAdmin";
+import { deleteFirebaseAuthUser, updateFirebaseUserPassword } from "@/lib/firebaseAdmin";
 import { createBalanceLog } from "@/lib/balanceLog";
 
 const ALLOWED_ROLES = [ROLES.ADMIN, ROLES.KEY_MANAGER, ROLES.ACCOUNTS_MANAGER];
@@ -41,6 +41,7 @@ export async function PATCH(request) {
       displayName,
       dollarRate,
       groupName,
+      password,
     } = body;
 
     if (!uid) {
@@ -121,6 +122,16 @@ export async function PATCH(request) {
 
     if (typeof groupName === "string") {
       update.groupName = groupName;
+    }
+
+    if (typeof password === "string" && password.length > 0) {
+      const passwordUpdated = await updateFirebaseUserPassword(uid, password);
+      if (!passwordUpdated) {
+        return NextResponse.json(
+          { success: false, message: "Failed to update password in Firebase. Make sure the service account is properly configured." },
+          { status: 500 }
+        );
+      }
     }
 
     const client = await clientPromise;
@@ -212,7 +223,13 @@ export async function DELETE(request) {
       );
     }
 
-    await deleteFirebaseAuthUser(uid);
+    const firebaseDeleted = await deleteFirebaseAuthUser(uid);
+    if (!firebaseDeleted) {
+      return NextResponse.json(
+        { success: false, message: "User removed from database but failed to delete from Firebase Auth. Check server logs for details." },
+        { status: 500 }
+      );
+    }
 
     return NextResponse.json({ success: true, message: "User deleted successfully." });
   } catch (error) {
