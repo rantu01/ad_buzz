@@ -138,12 +138,11 @@ export default function SupportTicketsPage() {
               <input type="text" required value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="Brief title of your issue"
                 className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm text-slate-900 placeholder-slate-400 outline-none focus:ring-2 focus:ring-secondary/30 focus:border-secondary" />
             </div>
-            {adAccounts.length > 0 && (
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1.5">Affected Ad Account *</label>
                 <select value={selectedAccount} onChange={(e) => setSelectedAccount(e.target.value)}
                   className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-secondary/30 focus:border-secondary">
-                  <option value="">-- Select an account --</option>
+                  <option value="">{adAccounts.length === 0 ? "-- No accounts available --" : "-- Select an account --"}</option>
                   {adAccounts.map((a) => (
                     <option key={a._id} value={a._id}>
                       {a.metaAccountName || a.name} ({a.metaAccountId || a.accountId})
@@ -151,7 +150,6 @@ export default function SupportTicketsPage() {
                   ))}
                 </select>
               </div>
-            )}
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1.5">Message *</label>
               <textarea required value={message} onChange={(e) => setMessage(e.target.value)} rows={5} placeholder="Describe your issue in detail..."
@@ -187,7 +185,7 @@ export default function SupportTicketsPage() {
           {tickets.map((t) => (
             <div key={t._id} className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
               <div className="flex items-center justify-between mb-2">
-                <h3 className="text-base font-semibold text-slate-900">{t.subject}</h3>
+                <h3 className="text-base font-semibold text-slate-900">{t.subject} <span className="text-sm font-normal text-slate-400">Ticket Id: {t.ticketId}</span></h3>
                 <StatusBadge status={t.status} />
               </div>
               {t.adAccountName && (

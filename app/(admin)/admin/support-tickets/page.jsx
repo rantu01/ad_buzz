@@ -99,7 +99,7 @@ export default function SupportTicketsPage() {
                     className={`bg-white rounded-xl border p-4 cursor-pointer transition-all ${selected?._id === t._id ? "border-amber-400 ring-1 ring-amber-400/50" : "border-slate-200 hover:border-slate-300"}`}>
                     <div className="flex items-center justify-between mb-1.5">
                       <span className={`inline-block px-2 py-0.5 rounded-full text-[11px] font-medium capitalize ${STATUS_COLORS[t.status] || "bg-slate-50 text-slate-600"}`}>{t.status?.replace(/_/g, " ")}</span>
-                      <span className="text-[11px] text-slate-400">{new Date(t.createdAt).toLocaleDateString("en-BD", { day: "2-digit", month: "short" })}</span>
+                      <span className="text-[11px] text-slate-400">Ticket Id: {t.ticketId} &middot; {new Date(t.createdAt).toLocaleDateString("en-BD", { day: "2-digit", month: "short" })}</span>
                     </div>
                     <p className="text-sm font-semibold text-slate-900 truncate">{t.subject}</p>
                     <p className="text-xs text-slate-500 truncate mt-0.5">{t.email}</p>
@@ -128,7 +128,7 @@ export default function SupportTicketsPage() {
                   </span>
                 </div>
                 <p className="text-xs text-slate-500">
-                    From: {selected.email} &middot; {new Date(selected.createdAt).toLocaleString("en-BD")}
+                    Ticket Id: {selected.ticketId} &middot; From: {selected.email} &middot; {new Date(selected.createdAt).toLocaleString("en-BD")}
                   </p>
                   {selected.adAccountName && (
                     <p className="text-xs text-amber-600 mt-1.5 font-medium">

@@ -3,6 +3,7 @@ import clientPromise from "@/lib/mongodb";
 import { getUserByUid } from "@/lib/userModel";
 import { ROLES } from "@/lib/permissions";
 import { deleteFirebaseAuthUser } from "@/lib/firebaseAdmin";
+import { createBalanceLog } from "@/lib/balanceLog";
 
 const ALLOWED_ROLES = [ROLES.ADMIN, ROLES.KEY_MANAGER, ROLES.ACCOUNTS_MANAGER];
 
@@ -125,7 +126,35 @@ export async function PATCH(request) {
     const client = await clientPromise;
     const db = client.db(process.env.MONGODB_DB_NAME || "ad_buzz");
 
+    let balanceBefore, userEmail;
+    if (update.availableBalance !== undefined) {
+      const currentUser = await db.collection("users").findOne(
+        { uid },
+        { projection: { availableBalance: 1, email: 1 } }
+      );
+      if (currentUser) {
+        balanceBefore = Number(currentUser.availableBalance || 0);
+        userEmail = currentUser.email;
+      }
+    }
+
     await db.collection("users").updateOne({ uid }, { $set: update });
+
+    if (balanceBefore !== undefined) {
+      const balanceAfter = Number(update.availableBalance);
+      await createBalanceLog({
+        uid,
+        email: userEmail || "",
+        type: "admin",
+        amount: balanceAfter - balanceBefore,
+        balanceBefore,
+        balanceAfter,
+        description: `Admin adjusted balance from $${balanceBefore.toFixed(2)} to $${balanceAfter.toFixed(2)}`,
+        referenceId: null,
+        referenceType: null,
+        metadata: { adjustedBy: callerUid },
+      });
+    }
 
     return NextResponse.json({ success: true, message: "User updated successfully." });
   } catch (error) {
