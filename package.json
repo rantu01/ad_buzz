@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "firebase": "^12.13.0",
+    "firebase-admin": "^14.1.0",
     "framer-motion": "^12.38.0",
     "lucide-react": "^1.16.0",
     "mongodb": "^7.2.0",

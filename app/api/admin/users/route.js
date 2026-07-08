@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import clientPromise from "@/lib/mongodb";
 import { getUserByUid } from "@/lib/userModel";
 import { ROLES } from "@/lib/permissions";
+import { deleteFirebaseAuthUser } from "@/lib/firebaseAdmin";
 
 const ALLOWED_ROLES = [ROLES.ADMIN, ROLES.KEY_MANAGER, ROLES.ACCOUNTS_MANAGER];
 
@@ -38,6 +39,7 @@ export async function PATCH(request) {
       accountStatus,
       displayName,
       dollarRate,
+      groupName,
     } = body;
 
     if (!uid) {
@@ -116,6 +118,10 @@ export async function PATCH(request) {
       }
     }
 
+    if (typeof groupName === "string") {
+      update.groupName = groupName;
+    }
+
     const client = await clientPromise;
     const db = client.db(process.env.MONGODB_DB_NAME || "ad_buzz");
 
@@ -125,6 +131,64 @@ export async function PATCH(request) {
   } catch (error) {
     return NextResponse.json(
       { success: false, message: error.message || "User update failed." },
+      { status: 500 }
+    );
+  }
+}
+
+export async function DELETE(request) {
+  try {
+    const body = await request.json();
+    const { uid, callerUid } = body;
+
+    if (!uid) {
+      return NextResponse.json(
+        { success: false, message: "uid is required." },
+        { status: 400 }
+      );
+    }
+
+    if (!callerUid) {
+      return NextResponse.json(
+        { success: false, message: "callerUid is required." },
+        { status: 400 }
+      );
+    }
+
+    const caller = await getUserByUid(callerUid);
+    if (!caller) {
+      return NextResponse.json(
+        { success: false, message: "Caller not found." },
+        { status: 403 }
+      );
+    }
+
+    const callerRole = caller.role || "customer";
+    if (callerRole !== ROLES.ADMIN) {
+      return NextResponse.json(
+        { success: false, message: "Only admins can delete users." },
+        { status: 403 }
+      );
+    }
+
+    const client = await clientPromise;
+    const db = client.db(process.env.MONGODB_DB_NAME || "ad_buzz");
+
+    const deleted = await db.collection("users").deleteOne({ uid });
+
+    if (deleted.deletedCount === 0) {
+      return NextResponse.json(
+        { success: false, message: "User not found." },
+        { status: 404 }
+      );
+    }
+
+    await deleteFirebaseAuthUser(uid);
+
+    return NextResponse.json({ success: true, message: "User deleted successfully." });
+  } catch (error) {
+    return NextResponse.json(
+      { success: false, message: error.message || "User deletion failed." },
       { status: 500 }
     );
   }

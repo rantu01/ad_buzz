@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Swal from "sweetalert2";
 import { useAdmin } from "../components/AdminProvider";
 import { ROLES, ROLE_LABELS, hasPermission } from "@/lib/permissions";
-import { Plus, X, Edit3, Save, User as UserIcon } from "lucide-react";
+import { Plus, X, Edit3, Save, Trash2, User as UserIcon } from "lucide-react";
 
 export default function UserManagementPage() {
   const { profile } = useAdmin();
@@ -89,6 +89,7 @@ export default function UserManagementPage() {
   function openEditModal(user) {
     setEditForm({
       uid: user.uid,
+      numericId: user.numericId || "",
       displayName: user.displayName || "",
       email: user.email || "",
       role: user.role || "customer",
@@ -96,6 +97,7 @@ export default function UserManagementPage() {
       accountStatus: user.accountStatus || "active",
       password: "",
       dollarRate: user.dollarRate || "",
+      groupName: user.groupName || "",
     });
     setEditingUser(user);
   }
@@ -122,12 +124,49 @@ export default function UserManagementPage() {
         updates.dollarRate = editForm.dollarRate ? Number(editForm.dollarRate) : null;
       }
 
+      if (editForm.groupName !== (editingUser.groupName || "")) {
+        updates.groupName = editForm.groupName;
+      }
+
       const success = await updateUser(uid, updates, false);
       if (success) {
         await Swal.fire({ icon: "success", title: "User updated", timer: 1200, showConfirmButton: false });
         setEditingUser(null);
         loadData();
       }
+    } catch (err) {
+      Swal.fire("Error", err.message, "error");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleDeleteUser() {
+    const result = await Swal.fire({
+      icon: "warning",
+      title: "Delete User?",
+      text: `This will permanently delete ${editingUser.displayName || editingUser.email}. This action cannot be undone.`,
+      showCancelButton: true,
+      confirmButtonColor: "#dc2626",
+      confirmButtonText: "Yes, delete permanently",
+      cancelButtonText: "Cancel",
+    });
+
+    if (!result.isConfirmed) return;
+
+    setSaving(true);
+    try {
+      const res = await fetch("/api/admin/users", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ uid: editingUser.uid, callerUid: profile?.uid }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.message || "Failed to delete user.");
+
+      await Swal.fire({ icon: "success", title: "User Deleted", timer: 1200, showConfirmButton: false });
+      setEditingUser(null);
+      loadData();
     } catch (err) {
       Swal.fire("Error", err.message, "error");
     } finally {
@@ -193,7 +232,7 @@ export default function UserManagementPage() {
                     </span>
                   </div>
                   <p className="text-xs text-slate-500 mt-0.5">{user.email}</p>
-                  <p className="text-xs text-slate-400 font-mono mt-0.5">UID: {user.uid?.slice(0, 24)}...</p>
+                  <p className="text-xs text-slate-400 font-mono mt-0.5">ID: {user.numericId || "—"} | UID: {user.uid?.slice(0, 24)}...</p>
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2">
@@ -259,7 +298,10 @@ export default function UserManagementPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
           <div className="w-full max-w-xl rounded-2xl bg-white p-6 shadow-xl border border-slate-200 max-h-[90vh] overflow-y-auto">
             <div className="mb-5 flex items-center justify-between">
-              <h3 className="text-lg font-bold text-slate-900">Edit User: {editingUser.displayName || editingUser.email}</h3>
+              <h3 className="text-lg font-bold text-slate-900">
+                Edit User: {editingUser.displayName || editingUser.email}
+                <span className="ml-2 text-sm font-normal text-slate-400">#{editForm.numericId}</span>
+              </h3>
               <button onClick={() => setEditingUser(null)}
                 className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700">
                 <X className="h-5 w-5" />
@@ -268,8 +310,9 @@ export default function UserManagementPage() {
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <InputField label="Display Name" value={editForm.displayName} onChange={(v) => setEditForm((p) => ({ ...p, displayName: v }))} />
-                <InputField label="Email" value={editForm.email} onChange={(v) => setEditForm((p) => ({ ...p, email: v }))} disabled />
+                <InputField label="Group Name" value={editForm.groupName} onChange={(v) => setEditForm((p) => ({ ...p, groupName: v }))} placeholder="e.g. Marketing Team" />
               </div>
+              <InputField label="Email" value={editForm.email} onChange={(v) => setEditForm((p) => ({ ...p, email: v }))} disabled />
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
@@ -300,13 +343,19 @@ export default function UserManagementPage() {
               </div>
 
               <div className="flex gap-3 pt-4 border-t border-slate-200">
-                <button onClick={() => setEditingUser(null)}
-                  className="flex-1 rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-50">Cancel</button>
-                <button onClick={handleSaveEdit} disabled={saving}
-                  className="flex-1 rounded-xl px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-opacity disabled:opacity-50 hover:opacity-90 flex items-center justify-center gap-2"
-                  style={{ backgroundColor: "#F48E2B" }}>
-                  <Save className="h-4 w-4" /> {saving ? "Saving..." : "Save Changes"}
+                <button onClick={handleDeleteUser} disabled={saving}
+                  className="flex items-center gap-2 rounded-xl border border-red-200 px-4 py-2.5 text-sm font-medium text-red-600 hover:bg-red-50 disabled:opacity-50">
+                  <Trash2 className="h-4 w-4" /> Delete
                 </button>
+                <div className="flex-1 flex gap-3">
+                  <button onClick={() => setEditingUser(null)}
+                    className="flex-1 rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-50">Cancel</button>
+                  <button onClick={handleSaveEdit} disabled={saving}
+                    className="flex-1 rounded-xl px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-opacity disabled:opacity-50 hover:opacity-90 flex items-center justify-center gap-2"
+                    style={{ backgroundColor: "#F48E2B" }}>
+                    <Save className="h-4 w-4" /> {saving ? "Saving..." : "Save Changes"}
+                  </button>
+                </div>
               </div>
             </div>
           </div>

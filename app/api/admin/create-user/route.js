@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import clientPromise from "@/lib/mongodb";
+import { getNextNumericId } from "@/lib/userModel";
 
 const DB_NAME = process.env.MONGODB_DB_NAME || "ad_buzz";
 const FIREBASE_API_KEY = process.env.NEXT_PUBLIC_FIREBASE_API_KEY;
@@ -57,12 +58,14 @@ export async function POST(request) {
     const uid = signUpData.localId;
 
     // Create user document in MongoDB
+    const numericId = await getNextNumericId();
     const client = await clientPromise;
     const db = client.db(DB_NAME);
     const now = new Date();
 
     const userDoc = {
       uid,
+      numericId,
       email: email.trim().toLowerCase(),
       displayName: displayName || "",
       phoneNumber: "",
@@ -71,6 +74,7 @@ export async function POST(request) {
       totalEarned: 0,
       accountStatus: "active",
       isFrozen: false,
+      groupName: "",
       createdAt: now,
       updatedAt: now,
       lastLoginAt: now,
