@@ -5,7 +5,7 @@ import Swal from "sweetalert2";
 import { useAdmin } from "../components/AdminProvider";
 import { Plus, X, Trash2, Edit3, Users, Check, Building2, Smartphone } from "lucide-react";
 
-const WALLET_OPTIONS = ["Nagad", "bKash", "Rocket", "Upay"];
+const WALLET_OPTIONS = ["Nagad", "BKash", "Rocket", "Upay", "Cellfin"];
 const ACCOUNT_TYPE_OPTIONS = ["Personal", "Merchant"];
 
 export default function PaymentMethodsPage() {
