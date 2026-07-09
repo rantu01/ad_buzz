@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import Swal from "sweetalert2";
 import { RefreshCw, CheckCircle, XCircle, Clock, Database, AlertTriangle, Settings } from "lucide-react";
 
@@ -13,6 +13,10 @@ export default function MetaApiSettingsPage() {
   const [syncLogs, setSyncLogs] = useState([]);
   const [syncing, setSyncing] = useState(false);
   const [activeTab, setActiveTab] = useState("settings");
+
+  const handleFetchAccountsRef = useRef(null);
+  const syncingRef = useRef(syncing);
+  syncingRef.current = syncing;
 
   const loadSettings = useCallback(async () => {
     try {
@@ -51,6 +55,24 @@ export default function MetaApiSettingsPage() {
     return () => clearInterval(id);
   }, [loadMetaAccounts]);
 
+  useEffect(() => {
+    let timerId;
+
+    const scheduleNext = () => {
+      const delay = 30000 + Math.random() * 20000;
+      timerId = setTimeout(async () => {
+        if (!syncingRef.current) {
+          handleFetchAccountsRef.current(true);
+        }
+        scheduleNext();
+      }, delay);
+    };
+
+    scheduleNext();
+
+    return () => clearTimeout(timerId);
+  }, []);
+
   const handleSave = async (e) => {
     e.preventDefault();
     setSaving(true);
@@ -84,7 +106,7 @@ export default function MetaApiSettingsPage() {
     }
   };
 
-  const handleFetchAccounts = async () => {
+  const handleFetchAccounts = async (silent = false) => {
     setSyncing(true);
     try {
       const res = await fetch("/api/admin/meta-api/sync", {
@@ -94,18 +116,26 @@ export default function MetaApiSettingsPage() {
       });
       const data = await res.json();
       if (data.success) {
-        await Swal.fire({ icon: "success", title: `Fetched ${data.count} accounts`, timer: 1500, showConfirmButton: false });
+        if (!silent) {
+          await Swal.fire({ icon: "success", title: `Fetched ${data.count} accounts`, timer: 1500, showConfirmButton: false });
+        }
         loadMetaAccounts();
         loadSyncLogs();
       } else {
-        await Swal.fire({ icon: "error", title: "Failed", text: data.message });
+        if (!silent) {
+          await Swal.fire({ icon: "error", title: "Failed", text: data.message });
+        }
       }
     } catch (err) {
-      await Swal.fire({ icon: "error", title: "Error", text: err.message });
+      if (!silent) {
+        await Swal.fire({ icon: "error", title: "Error", text: err.message });
+      }
     } finally {
       setSyncing(false);
     }
   };
+
+  handleFetchAccountsRef.current = handleFetchAccounts;
 
   const handleSyncSpend = async () => {
     setSyncing(true);
