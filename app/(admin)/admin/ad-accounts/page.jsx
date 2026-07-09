@@ -1,6 +1,6 @@
                     "use client";
 
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback } from "react";
 import Swal from "sweetalert2";
 import { Megaphone, RefreshCw, UserPlus, UserX, ExternalLink, CheckCircle, XCircle, AlertTriangle, Search, X, ChevronDown, Clock } from "lucide-react";
 import { useAdmin } from "../components/AdminProvider";
@@ -42,9 +42,7 @@ export default function AdminAdAccountsPage() {
   const [selectedAccounts, setSelectedAccounts] = useState([]);
   const [selectedUser, setSelectedUser] = useState(null);
   const [userSearch, setUserSearch] = useState("");
-  const [userDropdownOpen, setUserDropdownOpen] = useState(false);
   const [accountSearch, setAccountSearch] = useState("");
-  const userDropdownRef = useRef(null);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -86,16 +84,6 @@ export default function AdminAdAccountsPage() {
     loadMetaAccounts();
     loadUsers();
   }, [loadData, loadMetaAccounts, loadUsers]);
-
-  useEffect(() => {
-    function handleClick(e) {
-      if (userDropdownRef.current && !userDropdownRef.current.contains(e.target)) {
-        setUserDropdownOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", handleClick);
-    return () => document.removeEventListener("mousedown", handleClick);
-  }, []);
 
   const updateAccount = async (_id, updates) => {
     setSavingAccounts((prev) => ({ ...prev, [_id]: true }));
@@ -550,8 +538,8 @@ export default function AdminAdAccountsPage() {
 
       {assignModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm ">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full mx-4 max-h-[100vh] flex flex-col">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full mx-4 max-h-[85vh] flex flex-col">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 shrink-0">
               <div>
                 <h2 className="text-lg font-bold text-slate-900">Assign Ad Accounts</h2>
                 <p className="text-sm text-slate-500 mt-0.5">Select accounts and choose a user to assign them to</p>
@@ -559,61 +547,38 @@ export default function AdminAdAccountsPage() {
               <button onClick={() => setAssignModal(false)} className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-100 transition"><X size={20} /></button>
             </div>
 
-            <div className="flex-1 flex flex-col lg:flex-row ">
-              <div className="lg:w-2/5 border-b lg:border-b-0 lg:border-r border-slate-200 flex flex-col">
-                <div className="p-4 border-b border-slate-100">
+            <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
+              <div className="lg:w-2/5 border-b lg:border-b-0 lg:border-r border-slate-200 flex flex-col overflow-hidden">
+                <div className="p-4 border-b border-slate-100 shrink-0">
                   <h3 className="text-sm font-semibold text-slate-700 mb-3">Select User</h3>
-                  <div className="relative" ref={userDropdownRef}>
-                    <div className={`w-full border rounded-lg px-3 py-2.5 text-sm bg-white flex items-center justify-between cursor-pointer ${selectedUser ? "border-blue-300" : "border-slate-200"}`}
-                      onClick={() => setUserDropdownOpen(!userDropdownOpen)}>
-                      {selectedUser ? (
-                        <div className="flex items-center gap-2">
-                          <div className="w-7 h-7 rounded-full bg-[#E05305]/10 flex items-center justify-center text-xs font-bold text-[#E05305]">
-                            {(selectedUser.displayName || selectedUser.email || "U").charAt(0).toUpperCase()}
-                          </div>
-                          <div className="text-left">
-                            <p className="text-sm font-medium text-slate-900 truncate max-w-[180px]">{selectedUser.displayName || "Unnamed"}</p>
-                            <p className="text-xs text-slate-400 truncate max-w-[180px]">{selectedUser.email}</p>
-                          </div>
-                        </div>
-                      ) : <span className="text-slate-400">Search and select a user...</span>}
-                      <ChevronDown size={16} className={`text-slate-400 transition ${userDropdownOpen ? "rotate-180" : ""}`} />
-                    </div>
-                    {userDropdownOpen && (
-                      <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-lg z-10 max-h-[300px] flex flex-col">
-                        <div className="p-2 border-b border-slate-100">
-                          <div className="relative">
-                            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                            <input type="text" placeholder="Search by name, email, or UID..." value={userSearch} onChange={(e) => setUserSearch(e.target.value)}
-                              className="w-full pl-8 pr-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500" autoFocus />
-                          </div>
-                        </div>
-                        <div className="flex-1 overflow-y-auto">
-                          {filteredUsers.length > 0 ? filteredUsers.map((u) => {
-                            const isSelected = selectedUser?.uid === u.uid;
-                            return (
-                              <button key={u.uid} onClick={() => { setSelectedUser(u); setUserDropdownOpen(false); }}
-                                className={`w-full flex items-center gap-3 px-4 py-3 text-left text-sm hover:bg-slate-50 transition ${isSelected ? "bg-[#E05305]/5 border-l-2 border-[#E05305]" : ""}`}>
-                                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${isSelected ? "bg-[#E05305] text-white" : "bg-slate-100 text-slate-600"}`}>
-                                  {(u.displayName || u.email || "U").charAt(0).toUpperCase()}
-                                </div>
-                                <div className="min-w-0 flex-1">
-                                  <p className="text-sm font-medium text-slate-900 truncate">{u.displayName || "Unnamed User"}</p>
-                                  <p className="text-xs text-slate-400 truncate">{u.email}</p>
-                                </div>
-                                {isSelected && <CheckCircle size={16} className="text-[#E05305] shrink-0" />}
-                              </button>
-                            );
-                          }) : <p className="p-4 text-sm text-slate-400 text-center">No users found</p>}
-                        </div>
-                      </div>
-                    )}
+                  <div className="relative">
+                    <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <input type="text" placeholder="Search by name, email, or UID..." value={userSearch} onChange={(e) => setUserSearch(e.target.value)}
+                      className="w-full pl-8 pr-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500" />
                   </div>
+                </div>
+                <div className="flex-1 overflow-y-auto">
+                  {filteredUsers.length > 0 ? filteredUsers.map((u) => {
+                    const isSelected = selectedUser?.uid === u.uid;
+                    return (
+                      <button key={u.uid} onClick={() => { setSelectedUser(u); }}
+                        className={`w-full flex items-center gap-3 px-4 py-3 text-left text-sm hover:bg-slate-50 transition ${isSelected ? "bg-[#E05305]/5 border-l-2 border-[#E05305]" : ""}`}>
+                        <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${isSelected ? "bg-[#E05305] text-white" : "bg-slate-100 text-slate-600"}`}>
+                          {(u.displayName || u.email || "U").charAt(0).toUpperCase()}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-medium text-slate-900 truncate">{u.displayName || "Unnamed User"}</p>
+                          <p className="text-xs text-slate-400 truncate">{u.email}</p>
+                        </div>
+                        {isSelected && <CheckCircle size={16} className="text-[#E05305] shrink-0" />}
+                      </button>
+                    );
+                  }) : <p className="p-4 text-sm text-slate-400 text-center">No users found</p>}
                 </div>
               </div>
 
-              <div className="lg:w-3/5 flex flex-col">
-                <div className="p-4 border-b border-slate-100 space-y-3">
+              <div className="lg:w-3/5 flex flex-col overflow-hidden">
+                <div className="p-4 border-b border-slate-100 space-y-3 shrink-0">
                   <div className="flex items-center justify-between">
                     <h3 className="text-sm font-semibold text-slate-700">Select Accounts <span className="ml-2 text-xs text-slate-400 font-normal">{unassignedAccounts.length} unassigned</span></h3>
                     <div className="flex items-center gap-2">
@@ -659,7 +624,7 @@ export default function AdminAdAccountsPage() {
               </div>
             </div>
 
-            <div className="px-6 py-4 border-t border-slate-200 flex items-center justify-between">
+            <div className="px-6 py-4 border-t border-slate-200 flex items-center justify-between shrink-0">
               <div className="text-sm text-slate-500">
                 {selectedAccounts.length > 0 ? <span><span className="font-semibold text-slate-700">{selectedAccounts.length}</span> account(s) selected {selectedUser && <span>&rarr; <span className="font-semibold text-slate-700">{selectedUser.displayName || selectedUser.email}</span></span>}</span> : <span>Select accounts and a user to assign</span>}
               </div>
