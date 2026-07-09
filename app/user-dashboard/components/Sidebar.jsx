@@ -11,7 +11,7 @@ const navigation = [
     { label: "Ad Account", href: "/user-dashboard/ad-account", icon: ListChecks },
     { label: "Support Tickets", href: "/user-dashboard/support-tickets", icon: LifeBuoy },
     { label: "Profile", href: "/user-dashboard/profile", icon: User },
-    { label: "Need Help?", href: "https://wa.me/message/JPEP3WIO5LALA1", icon: LifeBuoy },
+    // { label: "Need Help?", href: "https://wa.me/message/JPEP3WIO5LALA1", icon: LifeBuoy },
 ];
 
 const paymentChildren = [
@@ -135,7 +135,7 @@ export default function UserSidebar({ open, onClose }) {
                 </nav>
 
                 <div className="border-t border-slate-200 px-6 py-5">
-                    <div className="rounded-lg bg-white p-3"><p className="text-sm text-slate-700">Need help?</p><p className="mt-1 text-xs text-slate-500">Contact support for account help.</p></div>
+                    <div className="rounded-lg bg-white p-3"><Link href="https://wa.me/message/JPEP3WIO5LALA1" target="_blank" rel="noopener noreferrer"><p className="text-sm text-slate-700">Need help?</p><p className="mt-1 text-xs text-slate-500">Contact support for account help.</p></Link></div>
                 </div>
             </aside>
         </>
