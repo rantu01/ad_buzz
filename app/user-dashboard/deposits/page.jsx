@@ -106,10 +106,10 @@ export default function DepositsPage() {
           email: user.email,
           amount: creditedUSD,
           amountBDT: parseFloat(amountBDT),
-          account: selectedAccount.accountNumber,
+          account: selectedAccount.type === "mobile-banking" ? selectedAccount.walletNo : selectedAccount.accountNumber,
           transactionRef: transactionRef.trim(),
           creditedUSD,
-          paymentMethod: selectedAccount.bankName,
+          paymentMethod: selectedAccount.type === "mobile-banking" ? selectedAccount.walletName : selectedAccount.bankName,
           screenshot: screenshotBase64,
         }),
       });
@@ -300,6 +300,10 @@ function Step1SelectMethod({ bankAccounts, loadingAccounts, selectedAccount, onS
 }
 
 function Step2PaymentDetails({ bank, amountBDT, setAmountBDT, creditedUSD, transactionRef, setTransactionRef, screenshot, screenshotPreview, setScreenshot, setScreenshotPreview, onBack, onContinue, activeColor }) {
+  const isMobile = bank.type === "mobile-banking";
+  const logo = isMobile ? bank.walletLogo : bank.logo;
+  const name = isMobile ? bank.walletName : bank.bankName;
+  const detail = isMobile ? `${bank.walletNo} — ${bank.accountType}` : `${bank.accountNumber} — ${bank.branch}`;
   return (
     <div>
       <div className="mb-6 flex items-center gap-4">
@@ -312,12 +316,19 @@ function Step2PaymentDetails({ bank, amountBDT, setAmountBDT, creditedUSD, trans
       <div className="mb-6 rounded-2xl border border-slate-200 bg-slate-50 p-4">
         <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">Selected Account</p>
         <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-xs font-bold text-white" style={{ backgroundColor: bank.color || "#135B9A" }}>
-            {(bank.shortCode || bank.bankName).slice(0, 3).toUpperCase()}
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-xs font-bold text-white overflow-hidden" style={{ backgroundColor: bank.color || "#135B9A" }}>
+            {logo ? (
+              <img src={logo} alt={name} className="h-full w-full object-cover" />
+            ) : (
+              <span>{(bank.shortCode || name || "").slice(0, 3).toUpperCase()}</span>
+            )}
           </div>
           <div className="min-w-0">
-            <p className="text-sm font-semibold text-slate-900">{bank.bankName}</p>
-            <p className="text-xs text-slate-500">{bank.accountNumber} — {bank.branch}</p>
+            <p className="text-sm font-semibold text-slate-900">{name}</p>
+            <p className="text-xs text-slate-500">{detail}</p>
+            {isMobile && bank.paymentInstructions && (
+              <p className="text-xs text-slate-500 mt-1">{bank.paymentInstructions}</p>
+            )}
           </div>
         </div>
       </div>
@@ -373,6 +384,10 @@ function Step2PaymentDetails({ bank, amountBDT, setAmountBDT, creditedUSD, trans
 }
 
 function Step3ReviewSubmit({ bank, amountBDT, creditedUSD, transactionRef, screenshotPreview, onBack, onSubmit, submitting, activeColor, dollarRate }) {
+  const isMobile = bank.type === "mobile-banking";
+  const logo = isMobile ? bank.walletLogo : bank.logo;
+  const name = isMobile ? bank.walletName : bank.bankName;
+  const detail = isMobile ? `${bank.walletNo} — ${bank.accountType}` : `${bank.accountNumber} — ${bank.branch}`;
   return (
     <div>
       <div className="mb-6 flex items-center gap-4">
@@ -386,12 +401,19 @@ function Step3ReviewSubmit({ bank, amountBDT, creditedUSD, transactionRef, scree
         <div className="mb-6">
           <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-500">Bank Account</h3>
           <div className="flex items-center gap-3 rounded-xl bg-slate-50 p-4">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-xs font-bold text-white" style={{ backgroundColor: bank.color || "#135B9A" }}>
-              {(bank.shortCode || bank.bankName).slice(0, 3).toUpperCase()}
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-xs font-bold text-white overflow-hidden" style={{ backgroundColor: bank.color || "#135B9A" }}>
+              {logo ? (
+                <img src={logo} alt={name} className="h-full w-full object-cover" />
+              ) : (
+                <span>{(bank.shortCode || name || "").slice(0, 3).toUpperCase()}</span>
+              )}
             </div>
             <div className="min-w-0">
-              <p className="text-sm font-semibold text-slate-900">{bank.bankName}</p>
-              <p className="text-xs text-slate-500">{bank.accountNumber} — {bank.branch}</p>
+              <p className="text-sm font-semibold text-slate-900">{name}</p>
+              <p className="text-xs text-slate-500">{detail}</p>
+              {isMobile && bank.paymentInstructions && (
+                <p className="text-xs text-slate-500 mt-1">{bank.paymentInstructions}</p>
+              )}
             </div>
           </div>
         </div>
@@ -440,21 +462,38 @@ function Step3ReviewSubmit({ bank, amountBDT, creditedUSD, transactionRef, scree
 }
 
 function BankCard({ bank, isSelected, onSelect, activeColor }) {
+  const isMobile = bank.type === "mobile-banking";
+  const logo = isMobile ? bank.walletLogo : bank.logo;
+  const name = isMobile ? bank.walletName : bank.bankName;
   return (
     <div className={`group relative rounded-2xl border bg-white p-6 shadow-sm transition-all ${isSelected ? "border-emerald-400 ring-1 ring-emerald-400/50" : "border-slate-200 hover:border-slate-300"}`}>
       <div className="mb-4 flex items-center gap-3">
-        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl text-sm font-bold text-white" style={{ backgroundColor: bank.color || "#135B9A" }}>
-          {(bank.shortCode || bank.bankName).slice(0, 3).toUpperCase()}
+        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl text-sm font-bold text-white overflow-hidden" style={{ backgroundColor: bank.color || "#135B9A" }}>
+          {logo ? (
+            <img src={logo} alt={name} className="h-full w-full object-cover" />
+          ) : (
+            <span>{(bank.shortCode || name || "").slice(0, 3).toUpperCase()}</span>
+          )}
         </div>
         <div className="min-w-0">
-          <h3 className="truncate text-sm font-semibold text-slate-900">{bank.bankName}</h3>
+          <h3 className="truncate text-sm font-semibold text-slate-900">{name}</h3>
           {bank.shortCode && <p className="text-xs text-slate-500">{bank.shortCode}</p>}
         </div>
       </div>
       <div className="mb-5 space-y-2.5 border-t border-slate-100 pt-4">
-        <Row label="Account Name" value={bank.accountName} />
-        <Row label="Account Number" value={bank.accountNumber} />
-        <Row label="Branch" value={bank.branch} />
+        {isMobile ? (
+          <>
+            <Row label="Wallet No" value={bank.walletNo} />
+            <Row label="Account Type" value={bank.accountType} />
+            {bank.paymentInstructions && <Row label="Instructions" value={bank.paymentInstructions} />}
+          </>
+        ) : (
+          <>
+            <Row label="Account Name" value={bank.accountName} />
+            <Row label="Account Number" value={bank.accountNumber} />
+            <Row label="Branch" value={bank.branch} />
+          </>
+        )}
         {bank.referenceId && <Row label="Reference ID" value={bank.referenceId} highlight />}
       </div>
       <button onClick={onSelect} className={`flex w-full items-center justify-center gap-2 rounded-xl py-3 text-sm font-semibold text-white shadow-sm transition-all ${isSelected ? "bg-emerald-600 hover:bg-emerald-700" : "hover:opacity-90"}`} style={!isSelected ? { backgroundColor: activeColor } : {}}>

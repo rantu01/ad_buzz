@@ -21,16 +21,25 @@ export async function GET() {
 export async function POST(request) {
   try {
     const body = await request.json();
-    const { bankName, accountName, accountNumber, branch, referenceId, logo } = body;
+    const { type } = body;
 
-    if (!bankName || !accountName || !accountNumber || !branch) {
-      return NextResponse.json(
-        { success: false, message: "Bank Name, Account Name, Account Number, and Branch are required." },
-        { status: 400 }
-      );
+    if (type === "mobile-banking") {
+      if (!body.walletName || !body.walletNo || !body.accountType) {
+        return NextResponse.json(
+          { success: false, message: "Wallet Name, Wallet No, and Account Type are required." },
+          { status: 400 }
+        );
+      }
+    } else {
+      if (!body.bankName || !body.accountName || !body.accountNumber || !body.branch) {
+        return NextResponse.json(
+          { success: false, message: "Bank Name, Account Name, Account Number, and Branch are required." },
+          { status: 400 }
+        );
+      }
     }
 
-    const method = await createPaymentMethod({ bankName, accountName, accountNumber, branch, referenceId, logo });
+    const method = await createPaymentMethod(body);
     return NextResponse.json({ success: true, method }, { status: 201 });
   } catch (error) {
     return NextResponse.json(
@@ -43,7 +52,7 @@ export async function POST(request) {
 export async function PUT(request) {
   try {
     const body = await request.json();
-    const { id, bankName, accountName, accountNumber, branch, referenceId, logo } = body;
+    const { id, ...updates } = body;
 
     if (!id) {
       return NextResponse.json(
@@ -52,13 +61,16 @@ export async function PUT(request) {
       );
     }
 
-    const updates = {};
-    if (bankName !== undefined) updates.bankName = bankName;
-    if (accountName !== undefined) updates.accountName = accountName;
-    if (accountNumber !== undefined) updates.accountNumber = accountNumber;
-    if (branch !== undefined) updates.branch = branch;
-    if (referenceId !== undefined) updates.referenceId = referenceId;
-    if (logo !== undefined) updates.logo = logo;
+    // Remove undefined fields so they don't overwrite with null
+    Object.keys(updates).forEach((key) => {
+      if (updates[key] === undefined) delete updates[key];
+    });
+    if (Object.keys(updates).length === 0) {
+      return NextResponse.json(
+        { success: false, message: "No fields to update." },
+        { status: 400 }
+      );
+    }
 
     const method = await updatePaymentMethod(id, updates);
     return NextResponse.json({ success: true, method });

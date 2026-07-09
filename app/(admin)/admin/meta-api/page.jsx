@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback } from "react";
 import Swal from "sweetalert2";
 import { RefreshCw, CheckCircle, XCircle, Clock, Database, AlertTriangle, Settings } from "lucide-react";
 
@@ -13,10 +13,6 @@ export default function MetaApiSettingsPage() {
   const [syncLogs, setSyncLogs] = useState([]);
   const [syncing, setSyncing] = useState(false);
   const [activeTab, setActiveTab] = useState("settings");
-
-  const handleFetchAccountsRef = useRef(null);
-  const syncingRef = useRef(syncing);
-  syncingRef.current = syncing;
 
   const loadSettings = useCallback(async () => {
     try {
@@ -54,24 +50,6 @@ export default function MetaApiSettingsPage() {
     const id = setInterval(loadMetaAccounts, 30000);
     return () => clearInterval(id);
   }, [loadMetaAccounts]);
-
-  useEffect(() => {
-    let timerId;
-
-    const scheduleNext = () => {
-      const delay = 30000 + Math.random() * 20000;
-      timerId = setTimeout(async () => {
-        if (!syncingRef.current) {
-          handleFetchAccountsRef.current(true);
-        }
-        scheduleNext();
-      }, delay);
-    };
-
-    scheduleNext();
-
-    return () => clearTimeout(timerId);
-  }, []);
 
   const handleSave = async (e) => {
     e.preventDefault();
@@ -134,8 +112,6 @@ export default function MetaApiSettingsPage() {
       setSyncing(false);
     }
   };
-
-  handleFetchAccountsRef.current = handleFetchAccounts;
 
   const handleSyncSpend = async () => {
     setSyncing(true);
@@ -236,13 +212,13 @@ export default function MetaApiSettingsPage() {
                 <p className="text-xs opacity-80">{connectionTest.message}</p>
               </div>
             )}
-            <hr className="border-slate-200" />
+            {/* <hr className="border-slate-200" />
             <div className="space-y-3">
               <label className="flex items-center gap-3">
                 <input type="checkbox" name="autoSync" defaultChecked={settings?.autoSyncEnabled || false} className="w-4 h-4 rounded border-slate-300 text-[#E05305]" />
                 <div><span className="text-sm font-medium text-slate-700">Auto Sync</span><p className="text-xs text-slate-400">Enable automatic periodic sync (requires cron job)</p></div>
               </label>
-            </div>
+            </div> */}
             <button type="submit" disabled={saving} className="bg-[#E05305] text-white rounded-lg px-6 py-2.5 text-sm font-medium hover:bg-[#c84a04] transition disabled:opacity-50">
               {saving ? "Saving..." : "Save Settings"}
             </button>

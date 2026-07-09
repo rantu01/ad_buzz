@@ -19,8 +19,19 @@ export default function SyncPoller() {
       }
     }
 
+    async function metaFetch() {
+      try {
+        await fetch("/api/cron/meta-fetch", { method: "POST" });
+      } catch {
+      }
+    }
+
     sync();
-    intervalRef.current = setInterval(sync, INTERVAL);
+    metaFetch();
+    intervalRef.current = setInterval(() => {
+      sync();
+      metaFetch();
+    }, INTERVAL);
 
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
