@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata = {
-  title: "Ad Buzz",
+  title: "Ads Buzz",
   description: "Ad Buzz - Ad Account Management Platform",
 };
 

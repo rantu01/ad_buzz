@@ -5,7 +5,8 @@ export async function GET(request) {
   try {
     const { searchParams } = new URL(request.url);
     const status = searchParams.get("status");
-    const tickets = await getAllTickets(status || null);
+    const ticketId = searchParams.get("ticketId");
+    const tickets = await getAllTickets(status || null, ticketId || null);
     return NextResponse.json({ success: true, tickets });
   } catch (error) {
     return NextResponse.json({ success: false, message: error.message }, { status: 500 });

@@ -17,7 +17,7 @@ export default function UserManagementPage() {
   const [search, setSearch] = useState("");
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editingUser, setEditingUser] = useState(null);
-  const [createForm, setCreateForm] = useState({ email: "", password: "", displayName: "", confirmPassword: "" });
+  const [createForm, setCreateForm] = useState({ email: "", password: "", displayName: "", confirmPassword: "", groupName: "" });
   const [editForm, setEditForm] = useState({});
   const [saving, setSaving] = useState(false);
 
@@ -62,6 +62,10 @@ export default function UserManagementPage() {
       Swal.fire("Error", "Passwords do not match.", "warning");
       return;
     }
+    if (!createForm.groupName.trim()) {
+      Swal.fire("Required", "Group name is required.", "warning");
+      return;
+    }
     setSaving(true);
     try {
       const res = await fetch("/api/admin/create-user", {
@@ -71,13 +75,14 @@ export default function UserManagementPage() {
           email: createForm.email.trim(),
           password: createForm.password,
           displayName: createForm.displayName.trim(),
+          groupName: createForm.groupName.trim(),
         }),
       });
       const data = await res.json();
       if (!res.ok || !data.success) throw new Error(data.message || "Failed to create user.");
       Swal.fire({ icon: "success", title: "User Created", text: `Account created for ${data.user.email}`, timer: 2000, showConfirmButton: false });
       setShowCreateModal(false);
-      setCreateForm({ email: "", password: "", displayName: "", confirmPassword: "" });
+setCreateForm({ email: "", password: "", displayName: "", confirmPassword: "", groupName: "" });
       loadData();
     } catch (err) {
       Swal.fire("Error", err.message, "error");
@@ -90,6 +95,7 @@ export default function UserManagementPage() {
     setEditForm({
       uid: user.uid,
       numericId: user.numericId || "",
+      customId: user.customId || "",
       displayName: user.displayName || "",
       email: user.email || "",
       role: user.role || "customer",
@@ -236,7 +242,7 @@ export default function UserManagementPage() {
                     </span>
                   </div>
                   <p className="text-xs text-slate-500 mt-0.5">{user.email}</p>
-                  <p className="text-xs text-slate-400 font-mono mt-0.5">ID: {user.numericId || "—"} | UID: {user.uid?.slice(0, 24)}...</p>
+                  <p className="text-xs text-slate-400 font-mono mt-0.5">ID: {user.customId || user.numericId || "—"} | Group: {user.groupName || "—"}</p>
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2">
@@ -283,6 +289,7 @@ export default function UserManagementPage() {
             </div>
             <form onSubmit={handleCreateUser} className="space-y-4">
               <InputField label="Full Name" value={createForm.displayName} onChange={(v) => setCreateForm((p) => ({ ...p, displayName: v }))} placeholder="e.g. John Doe" required={false} />
+              <InputField label="Group Name *" value={createForm.groupName} onChange={(v) => setCreateForm((p) => ({ ...p, groupName: v }))} placeholder="e.g. Marketing Team" />
               <InputField label="Email *" value={createForm.email} onChange={(v) => setCreateForm((p) => ({ ...p, email: v }))} placeholder="user@example.com" type="email" />
               <InputField label="Password *" value={createForm.password} onChange={(v) => setCreateForm((p) => ({ ...p, password: v }))} placeholder="At least 6 characters" type="password" />
               <InputField label="Confirm Password *" value={createForm.confirmPassword} onChange={(v) => setCreateForm((p) => ({ ...p, confirmPassword: v }))} placeholder="Confirm password" type="password" />
@@ -304,7 +311,7 @@ export default function UserManagementPage() {
             <div className="mb-5 flex items-center justify-between">
               <h3 className="text-lg font-bold text-slate-900">
                 Edit User: {editingUser.displayName || editingUser.email}
-                <span className="ml-2 text-sm font-normal text-slate-400">#{editForm.numericId}</span>
+                <span className="ml-2 text-sm font-normal text-slate-400">{editingUser?.customId || `#${editForm.numericId}`}</span>
               </h3>
               <button onClick={() => setEditingUser(null)}
                 className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700">

@@ -31,8 +31,8 @@ export default function DashboardTopbar({ onToggle }) {
                     </button>
 
                     <div className="flex items-center gap-3">
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={logo} alt="Ad Buzz" className="h-8 w-auto hidden sm:block" />
+                        
+                        {/* <img src={logo} alt="Ad Buzz" className="h-8 w-auto hidden sm:block" /> */}
                         <div>
                             <p className="text-xs font-semibold uppercase tracking-[0.3em] text-secondary">Dashboard</p>
                             <h1 className="truncate text-lg font-semibold text-slate-900 sm:text-xl">{settings?.siteName || "Ad Buzz"} Control Center</h1>

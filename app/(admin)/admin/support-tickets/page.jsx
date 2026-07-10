@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useAdmin } from "../components/AdminProvider";
 import { hasPermission } from "@/lib/permissions";
 import Swal from "sweetalert2";
+import { Search } from "lucide-react";
 
 const STATUS_COLORS = {
   open: "bg-blue-50 text-blue-700",
@@ -20,21 +21,24 @@ export default function SupportTicketsPage() {
   const [tickets, setTickets] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState("");
+  const [searchTicketId, setSearchTicketId] = useState("");
   const [selected, setSelected] = useState(null);
   const [replyText, setReplyText] = useState("");
 
   const loadTickets = async () => {
     setLoading(true);
     try {
-      const q = filter ? `?status=${filter}` : "";
-      const res = await fetch(`/api/admin/support-tickets${q}`);
+      const params = new URLSearchParams();
+      if (filter) params.set("status", filter);
+      if (searchTicketId.trim()) params.set("ticketId", searchTicketId.trim());
+      const res = await fetch(`/api/admin/support-tickets?${params}`);
       const data = await res.json();
       if (data.success) setTickets(data.tickets || []);
     } catch { /* ignore */ }
     finally { setLoading(false); }
   };
 
-  useEffect(() => { loadTickets(); }, [filter]);
+  useEffect(() => { loadTickets(); }, [filter, searchTicketId]);
 
   const openTicket = async (ticket) => {
     setSelected(ticket);
@@ -77,13 +81,21 @@ export default function SupportTicketsPage() {
       <h1 className="text-2xl font-semibold mb-1">Support Tickets</h1>
       <p className="text-sm text-slate-500 mb-6">View and manage user support tickets</p>
 
-      <div className="mb-6 flex gap-2 flex-wrap">
-        {["", "open", "in_progress", "replied", "closed"].map((s) => (
-          <button key={s} onClick={() => setFilter(s)}
-            className={`px-4 py-2 rounded-lg font-medium capitalize transition-colors text-sm ${filter === s ? "bg-[#F59E0B] text-slate-950" : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"}`}>
-            {s || "All"}
-          </button>
-        ))}
+      <div className="mb-6 space-y-3">
+        <div className="flex gap-2 flex-wrap">
+          {["", "open", "in_progress", "replied", "closed"].map((s) => (
+            <button key={s} onClick={() => setFilter(s)}
+              className={`px-4 py-2 rounded-lg font-medium capitalize transition-colors text-sm ${filter === s ? "bg-[#F59E0B] text-slate-950" : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"}`}>
+              {s || "All"}
+            </button>
+          ))}
+        </div>
+        <div className="relative max-w-xs">
+          <input type="text" value={searchTicketId} onChange={(e) => setSearchTicketId(e.target.value)}
+            placeholder="Search by Ticket ID..."
+            className="w-full rounded-lg border border-slate-200 pl-4 pr-10 py-2 text-sm outline-none focus:ring-2 focus:ring-secondary/30 focus:border-secondary" />
+          <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+        </div>
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">

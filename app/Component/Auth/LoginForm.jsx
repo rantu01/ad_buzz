@@ -46,7 +46,7 @@ export default function LoginForm({ onSuccess }) {
           <div className="flex items-center gap-3 mb-10">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={logo} alt={siteName} className="h-14 w-auto rounded-lg shadow-lg" />
-            <span className="text-3xl font-bold tracking-tight">{siteName}</span>
+            {/* <span className="text-3xl font-bold tracking-tight">{siteName}</span> */}
           </div>
 
           <h2 className="text-4xl xl:text-5xl font-bold leading-tight mb-6">
@@ -55,14 +55,16 @@ export default function LoginForm({ onSuccess }) {
           </h2>
 
           <p className="text-lg text-white/80 mb-12 max-w-md leading-relaxed">
-            Track balances, deposits, withdrawals, and Meta ad accounts — all in one powerful dashboard.
+            Track balances, deposits, analyze campaign performance, and manage meta ad accounts - all in one powerful dashboard.
           </p>
 
           <div className="space-y-5">
             {[
               { icon: BarChart3, text: "Real-time balance & spending insights" },
               { icon: Shield, text: "Secure account management" },
-              { icon: Zap, text: "Fast deposits & withdrawals" },
+              { icon: Zap, text: "Fast deposits & Secure Topup " },
+              { icon: Zap, text: "Realtime Data Showing. " },
+              { icon: Zap, text: "24h Dedicated Dedicated Support" },
             ].map(({ icon: Icon, text }) => (
               <div key={text} className="flex items-center gap-4">
                 <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-white/10 backdrop-blur">

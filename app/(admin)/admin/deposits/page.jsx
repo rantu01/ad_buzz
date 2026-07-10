@@ -136,7 +136,7 @@ export default function AdminDepositsPage() {
                   <th className="text-right px-4 py-3 font-semibold text-slate-700 whitespace-nowrap">Amount (BDT)</th>
                   <th className="text-right px-4 py-3 font-semibold text-slate-700 whitespace-nowrap">Credited (USD)</th>
                   <th className="text-left px-4 py-3 font-semibold text-slate-700 whitespace-nowrap">Trx Ref</th>
-                  <th className="text-left px-4 py-3 font-semibold text-slate-700 whitespace-nowrap">Method</th>
+                  <th className="text-left px-4 py-3 font-semibold text-slate-700 whitespace-nowrap">Reference ID</th>
                   <th className="text-center px-4 py-3 font-semibold text-slate-700 whitespace-nowrap">SS</th>
                   <th className="text-center px-4 py-3 font-semibold text-slate-700 whitespace-nowrap">Status</th>
                   <th className="text-left px-4 py-3 font-semibold text-slate-700 whitespace-nowrap">Reason</th>
@@ -154,7 +154,7 @@ export default function AdminDepositsPage() {
                     <td className="px-4 py-3 text-slate-800 text-right whitespace-nowrap text-xs">{dep.amountBDT ? `${formatMoney(dep.amountBDT)}` : "—"}</td>
                     <td className="px-4 py-3 text-slate-800 text-right whitespace-nowrap text-xs">${formatMoney(dep.creditedUSD || dep.amount)}</td>
                     <td className="px-4 py-3 text-slate-600 whitespace-nowrap font-mono text-[11px]">{dep.transactionRef || "—"}</td>
-                    <td className="px-4 py-3 text-slate-600 capitalize whitespace-nowrap text-xs">{(dep.paymentMethod || "").replace(/_/g, " ") || "—"}</td>
+                    <td className="px-4 py-3 text-slate-600 whitespace-nowrap font-mono text-[11px]">{dep.referenceId || "—"}</td>
                     <td className="px-4 py-3 text-center whitespace-nowrap">
                       {dep.screenshot ? (
                         <button onClick={() => setPreviewImg(dep.screenshot)} className="inline-block">

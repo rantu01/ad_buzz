@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import clientPromise from "@/lib/mongodb";
-import { getNextNumericId } from "@/lib/userModel";
+import { getNextNumericId, formatUserId } from "@/lib/userModel";
 
 const DB_NAME = process.env.MONGODB_DB_NAME || "ad_buzz";
 const FIREBASE_API_KEY = process.env.NEXT_PUBLIC_FIREBASE_API_KEY;
@@ -8,11 +8,18 @@ const FIREBASE_API_KEY = process.env.NEXT_PUBLIC_FIREBASE_API_KEY;
 export async function POST(request) {
   try {
     const body = await request.json();
-    const { email, password, displayName, role } = body;
+    const { email, password, displayName, role, groupName } = body;
 
     if (!email || !password) {
       return NextResponse.json(
         { success: false, message: "Email and password are required." },
+        { status: 400 }
+      );
+    }
+
+    if (!groupName || !groupName.trim()) {
+      return NextResponse.json(
+        { success: false, message: "Group name is required." },
         { status: 400 }
       );
     }
@@ -63,9 +70,12 @@ export async function POST(request) {
     const db = client.db(DB_NAME);
     const now = new Date();
 
+    const customId = formatUserId(numericId);
+
     const userDoc = {
       uid,
       numericId,
+      customId,
       email: email.trim().toLowerCase(),
       displayName: displayName || "",
       phoneNumber: "",
@@ -74,7 +84,7 @@ export async function POST(request) {
       totalEarned: 0,
       accountStatus: "active",
       isFrozen: false,
-      groupName: "",
+      groupName: groupName.trim(),
       createdAt: now,
       updatedAt: now,
       lastLoginAt: now,
@@ -85,7 +95,7 @@ export async function POST(request) {
     return NextResponse.json({
       success: true,
       message: "User created successfully.",
-      user: { uid, email, displayName: displayName || "" },
+      user: { uid, email, displayName: displayName || "", customId },
     });
   } catch (error) {
     return NextResponse.json(

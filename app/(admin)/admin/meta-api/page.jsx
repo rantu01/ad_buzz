@@ -212,13 +212,13 @@ export default function MetaApiSettingsPage() {
                 <p className="text-xs opacity-80">{connectionTest.message}</p>
               </div>
             )}
-            {/* <hr className="border-slate-200" />
+            <hr className="border-slate-200" />
             <div className="space-y-3">
               <label className="flex items-center gap-3">
                 <input type="checkbox" name="autoSync" defaultChecked={settings?.autoSyncEnabled || false} className="w-4 h-4 rounded border-slate-300 text-[#E05305]" />
                 <div><span className="text-sm font-medium text-slate-700">Auto Sync</span><p className="text-xs text-slate-400">Enable automatic periodic sync (requires cron job)</p></div>
               </label>
-            </div> */}
+            </div>
             <button type="submit" disabled={saving} className="bg-[#E05305] text-white rounded-lg px-6 py-2.5 text-sm font-medium hover:bg-[#c84a04] transition disabled:opacity-50">
               {saving ? "Saving..." : "Save Settings"}
             </button>
