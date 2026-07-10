@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutGrid, Users, X, DollarSign, History, Megaphone, RefreshCw, MessageSquare, BarChart3, Settings, LifeBuoy, TrendingUp, CreditCard } from "lucide-react";
+import { LayoutGrid, Users, X, DollarSign, History, Megaphone, RefreshCw, MessageSquare, BarChart3, Settings, LifeBuoy, TrendingUp, CreditCard, ArrowUpCircle } from "lucide-react";
 import { useSettings } from "@/app/Component/Settings/SettingsProvider";
 import { useAdmin } from "./AdminProvider";
 import { getAllowedRoutes } from "@/lib/permissions";
@@ -17,6 +17,7 @@ const ICON_MAP = {
   "support-tickets": LifeBuoy,
   "balance-logs": History,
   "top-up-insights": TrendingUp,
+  "ad-accounts-topup": ArrowUpCircle,
   reports: BarChart3,
   "meta-api": RefreshCw,
   whatsapp: MessageSquare,
@@ -28,6 +29,7 @@ const ALL_NAV = [
   { label: "Deposit Verification", href: "/admin/deposits", key: "deposits" },
   { label: "Withdrawals", href: "/admin/withdrawals", key: "withdrawals" },
   { label: "Ad Accounts", href: "/admin/ad-accounts", key: "ad-accounts" },
+  { label: "Ad Accounts TopUp", href: "/admin/ad-accounts-topup", key: "ad-accounts-topup" },
   { label: "User Management", href: "/admin/user-management", key: "user-management" },
   { label: "Payment Methods", href: "/admin/payment-methods", key: "payment-methods" },
   { label: "Support Tickets", href: "/admin/support-tickets", key: "support-tickets" },
