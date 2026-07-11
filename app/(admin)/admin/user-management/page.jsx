@@ -5,6 +5,9 @@ import Swal from "sweetalert2";
 import { useAdmin } from "../components/AdminProvider";
 import { ROLES, ROLE_LABELS, hasPermission } from "@/lib/permissions";
 import { Plus, X, Edit3, Save, Trash2, User as UserIcon } from "lucide-react";
+import Pagination from "@/app/Component/Pagination";
+
+const ITEMS_PER_PAGE = 20;
 
 export default function UserManagementPage() {
   const { profile } = useAdmin();
@@ -20,6 +23,7 @@ export default function UserManagementPage() {
   const [createForm, setCreateForm] = useState({ email: "", password: "", displayName: "", confirmPassword: "", groupName: "" });
   const [editForm, setEditForm] = useState({});
   const [saving, setSaving] = useState(false);
+  const [page, setPage] = useState(1);
 
   const loadData = async () => {
     setLoading(true);
@@ -196,6 +200,11 @@ setCreateForm({ email: "", password: "", displayName: "", confirmPassword: "", g
     return u.email?.toLowerCase().includes(q) || u.uid?.toLowerCase().includes(q) || u.displayName?.toLowerCase().includes(q);
   });
 
+  useEffect(() => { setPage(1); }, [search]);
+
+  const totalPages = Math.ceil(filteredUsers.length / ITEMS_PER_PAGE);
+  const paginatedUsers = filteredUsers.slice((page - 1) * ITEMS_PER_PAGE, page * ITEMS_PER_PAGE);
+
   return (
     <div>
       <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
@@ -228,7 +237,8 @@ setCreateForm({ email: "", password: "", displayName: "", confirmPassword: "", g
         {loading ? (
           <p className="text-slate-500">Loading...</p>
         ) : filteredUsers.length ? (
-          filteredUsers.map((user) => (
+          <>
+          {paginatedUsers.map((user) => (
             <div key={user.uid} className="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="min-w-0 flex-1">
@@ -271,7 +281,9 @@ setCreateForm({ email: "", password: "", displayName: "", confirmPassword: "", g
                 </div>
               </div>
             </div>
-          ))
+          ))}
+          <Pagination page={page} totalPages={totalPages} onPageChange={setPage} />
+          </>
         ) : (
           <p className="text-slate-500">No users found.</p>
         )}

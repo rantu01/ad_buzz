@@ -153,6 +153,7 @@ export async function PATCH(request) {
 
     if (balanceBefore !== undefined) {
       const balanceAfter = Number(update.availableBalance);
+      const callerName = caller?.displayName || caller?.email || "Admin";
       await createBalanceLog({
         uid,
         email: userEmail || "",
@@ -160,10 +161,10 @@ export async function PATCH(request) {
         amount: balanceAfter - balanceBefore,
         balanceBefore,
         balanceAfter,
-        description: `Admin adjusted balance from $${balanceBefore.toFixed(2)} to $${balanceAfter.toFixed(2)}`,
+        description: `${callerName} adjusted balance from $${balanceBefore.toFixed(2)} to $${balanceAfter.toFixed(2)}`,
         referenceId: null,
         referenceType: null,
-        metadata: { adjustedBy: callerUid },
+        metadata: { adjustedBy: callerUid, callerName },
       });
     }
 

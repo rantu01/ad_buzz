@@ -1,10 +1,13 @@
                     "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import Swal from "sweetalert2";
 import { Megaphone, RefreshCw, UserPlus, UserX, ExternalLink, CheckCircle, XCircle, AlertTriangle, Search, X, ChevronDown, Clock } from "lucide-react";
 import { useAdmin } from "../components/AdminProvider";
-import { hasPermission } from "@/lib/permissions";
+import { hasPermission, ROLES } from "@/lib/permissions";
+import Pagination from "@/app/Component/Pagination";
+
+const ITEMS_PER_PAGE = 20;
 
 function timeAgo(date) {
   if (!date) return "\u2014";
@@ -21,6 +24,7 @@ function timeAgo(date) {
 export default function AdminAdAccountsPage() {
   const { profile } = useAdmin();
   const role = profile?.role || "customer";
+  const isAdmin = role === ROLES.ADMIN;
   const canManage = hasPermission(role, "manage_ad_accounts");
   const canAssign = hasPermission(role, "assign_ad_accounts");
 
@@ -43,6 +47,7 @@ export default function AdminAdAccountsPage() {
   const [selectedUser, setSelectedUser] = useState(null);
   const [userSearch, setUserSearch] = useState("");
   const [accountSearch, setAccountSearch] = useState("");
+  const [page, setPage] = useState(1);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -355,6 +360,11 @@ export default function AdminAdAccountsPage() {
     return a.name?.toLowerCase().includes(q) || a.accountId?.toLowerCase().includes(q) || a.email?.toLowerCase().includes(q) || a.uid?.toLowerCase().includes(q);
   });
 
+  useEffect(() => { setPage(1); }, [search, showUnassigned, showAssigned]);
+
+  const totalPages = Math.ceil(filtered.length / ITEMS_PER_PAGE);
+  const paginatedAccounts = filtered.slice((page - 1) * ITEMS_PER_PAGE, page * ITEMS_PER_PAGE);
+
   const totalBudget = adAccounts.reduce((s, a) => s + Number(a.metaSpendCap || a.spendCap || 0), 0);
   const totalSpent = adAccounts.reduce((s, a) => s + Number(a.metaAmountSpent || 0), 0);
 
@@ -408,7 +418,8 @@ export default function AdminAdAccountsPage() {
 
       {loading ? (
         <p className="text-slate-500">Loading...</p>
-      ) : filtered.length ? (
+      ) : paginatedAccounts.length ? (
+        <>
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
@@ -418,14 +429,14 @@ export default function AdminAdAccountsPage() {
                     <th className="py-3 px-4">User</th>
                     <th className="py-3 px-4">Local Status</th>
                     <th className="py-3 px-4">Meta Status</th>
-                    <th className="py-3 px-4">Budget</th>
+                    {isAdmin && <th className="py-3 px-4">Budget</th>}
                     <th className="py-3 px-4">Amount Spent</th>
                     <th className="py-3 px-4">Sync</th>
                     <th className="py-3 px-4">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-sm">
-                {filtered.map((acc) => {
+                {paginatedAccounts.map((acc) => {
                   const budgetDollars = Number(acc.metaSpendCap || acc.spendCap || 0);
                   const spendPct = budgetDollars > 0 ? Math.min((acc.spent / budgetDollars) * 100, 100) : 0;
                   const meta = acc._meta;
@@ -459,16 +470,18 @@ export default function AdminAdAccountsPage() {
                           <span className="text-xs text-slate-400 italic">No Meta data</span>
                         )}
                       </td>
-                      <td className="py-3 px-4">
-                        <div className="relative">
-                          <input key={acc.spendCap || 0} type="number" step="0.01" defaultValue={Number(acc.metaSpendCap || acc.spendCap || 0)} className={`border border-slate-200 rounded-lg px-2 py-1 text-sm w-24 bg-white ${savingAccounts[acc._id] ? "opacity-50" : ""}`}
-                            onBlur={(e) => { const newVal = Number(e.target.value); const oldVal = Number(acc.metaSpendCap || acc.spendCap || 0); if (newVal !== oldVal) updateAccount(acc._id, { spendCap: newVal }); }}
-                            disabled={savingAccounts[acc._id] || !canManage} />
-                          {savingAccounts[acc._id] && (
-                            <RefreshCw size={14} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 animate-spin" />
-                          )}
-                        </div>
-                      </td>
+                      {isAdmin && (
+                        <td className="py-3 px-4">
+                          <div className="relative">
+                            <input key={acc.spendCap || 0} type="number" step="0.01" defaultValue={Number(acc.metaSpendCap || acc.spendCap || 0)} className={`border border-slate-200 rounded-lg px-2 py-1 text-sm w-24 bg-white ${savingAccounts[acc._id] ? "opacity-50" : ""}`}
+                              onBlur={(e) => { const newVal = Number(e.target.value); const oldVal = Number(acc.metaSpendCap || acc.spendCap || 0); if (newVal !== oldVal) updateAccount(acc._id, { spendCap: newVal }); }}
+                              disabled={savingAccounts[acc._id] || !canManage} />
+                            {savingAccounts[acc._id] && (
+                              <RefreshCw size={14} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 animate-spin" />
+                            )}
+                          </div>
+                        </td>
+                      )}
                       <td className="py-3 px-4">
                         <span className="font-medium">${formatMoney(Number(acc.metaAmountSpent || 0))}</span>
                         <div className="flex items-center gap-2 mt-1">
@@ -505,6 +518,8 @@ export default function AdminAdAccountsPage() {
             </table>
           </div>
         </div>
+        <Pagination page={page} totalPages={totalPages} onPageChange={setPage} />
+        </>
       ) : (
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-10 text-center">
           <Megaphone size={48} className="mx-auto text-slate-300 mb-3" />

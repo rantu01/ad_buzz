@@ -4,6 +4,9 @@ import { useEffect, useState } from "react";
 import { useAdmin } from "../components/AdminProvider";
 import { hasPermission } from "@/lib/permissions";
 import Swal from "sweetalert2";
+import Pagination from "@/app/Component/Pagination";
+
+const ITEMS_PER_PAGE = 20;
 
 export default function AdminDepositsPage() {
   const { profile } = useAdmin();
@@ -16,6 +19,7 @@ export default function AdminDepositsPage() {
   const [filter, setFilter] = useState("pending");
   const [previewImg, setPreviewImg] = useState(null);
   const [processingId, setProcessingId] = useState(null);
+  const [page, setPage] = useState(1);
 
   const formatMoney = (val) => {
     const n = Number(val || 0);
@@ -37,7 +41,10 @@ export default function AdminDepositsPage() {
     }
   };
 
-  useEffect(() => { loadDeposits(); }, [filter]);
+  useEffect(() => { setPage(1); loadDeposits(); }, [filter]);
+
+  const totalPages = Math.ceil(deposits.length / ITEMS_PER_PAGE);
+  const paginatedDeposits = deposits.slice((page - 1) * ITEMS_PER_PAGE, page * ITEMS_PER_PAGE);
 
   const handleApprove = async (depositId) => {
     const confirmed = await Swal.fire({
@@ -125,6 +132,7 @@ export default function AdminDepositsPage() {
       {loading ? (
         <p className="text-slate-500">Loading...</p>
       ) : deposits.length ? (
+        <>
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -144,7 +152,7 @@ export default function AdminDepositsPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {deposits.map((dep) => (
+                {paginatedDeposits.map((dep) => (
                   <tr key={dep._id} className="hover:bg-slate-50/50 transition-colors">
                     <td className="px-4 py-3 text-slate-600 whitespace-nowrap text-xs">
                       {new Date(dep.createdAt).toLocaleDateString("en-BD", { day: "2-digit", month: "short", year: "numeric" })}
@@ -208,6 +216,8 @@ export default function AdminDepositsPage() {
             </table>
           </div>
         </div>
+        <Pagination page={page} totalPages={totalPages} onPageChange={setPage} />
+        </>
       ) : (
         <div className="bg-white rounded-xl border border-slate-200 p-8 text-center text-slate-500">
           No {filter} deposits found.

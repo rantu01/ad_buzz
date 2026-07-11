@@ -3,6 +3,9 @@
 import { useEffect, useState } from "react";
 import { useAdmin } from "../components/AdminProvider";
 import { useSettings } from "@/app/Component/Settings/SettingsProvider";
+import Pagination from "@/app/Component/Pagination";
+
+const ITEMS_PER_PAGE = 20;
 
 function timeAgo(date) {
   if (!date) return "\u2014";
@@ -31,12 +34,26 @@ export default function AdminAdAccountsTopUpPage() {
   const [topUpLoading, setTopUpLoading] = useState(false);
   const [topUpError, setTopUpError] = useState("");
 
-  const [openMenuId, setOpenMenuId] = useState(null);
-
   const [historyModal, setHistoryModal] = useState(null);
   const [historyData, setHistoryData] = useState([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [lastRefreshedAt, setLastRefreshedAt] = useState(null);
+  const [page, setPage] = useState(1);
+  const [search, setSearch] = useState("");
+
+  useEffect(() => { setPage(1); }, [search]);
+
+  const filteredAccounts = search
+    ? adAccounts.filter((a) => {
+        const q = search.toLowerCase();
+        return (a.metaAccountName || a.name || "")?.toLowerCase().includes(q)
+            || (a.metaAccountId || a.accountId || "")?.toLowerCase().includes(q)
+            || (a.email || "")?.toLowerCase().includes(q);
+      })
+    : adAccounts;
+
+  const totalPages = Math.ceil(filteredAccounts.length / ITEMS_PER_PAGE);
+  const paginatedAccounts = filteredAccounts.slice((page - 1) * ITEMS_PER_PAGE, page * ITEMS_PER_PAGE);
 
   const formatMoney = (val) => {
     const n = Number(val || 0);
@@ -54,15 +71,6 @@ export default function AdminAdAccountsTopUpPage() {
       </span>
     );
   };
-
-  useEffect(() => {
-    if (!openMenuId) return;
-    const handleClick = (e) => {
-      if (!e.target.closest('[data-menu]')) setOpenMenuId(null);
-    };
-    document.addEventListener("click", handleClick);
-    return () => document.removeEventListener("click", handleClick);
-  }, [openMenuId]);
 
   useEffect(() => {
     async function loadData() {
@@ -270,7 +278,9 @@ export default function AdminAdAccountsTopUpPage() {
             </span>
             <input
               type="text"
-              placeholder="Search accounts..."
+              placeholder="Search by name, account ID, or email..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
               className="w-full pl-9 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-orange-500/30 focus:border-orange-500"
             />
           </div>
@@ -289,7 +299,7 @@ export default function AdminAdAccountsTopUpPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-sm text-slate-700">
-              {adAccounts.map((acc) => {
+              {paginatedAccounts.map((acc) => {
                 const budgetNum = Number(acc.metaSpendCap || acc.spendCap || 0);
                 const spentNum = acc.metaStatus != null ? Number(acc.metaAmountSpent || 0) : Number(acc.spent || 0);
                 const spendPct = budgetNum > 0 ? Math.min((spentNum / budgetNum) * 100, 100) : 0;
@@ -316,43 +326,32 @@ export default function AdminAdAccountsTopUpPage() {
                     <td className="py-4 text-right whitespace-nowrap">
                       <div className="flex items-center justify-end gap-2">
                         <button
+                          onClick={() => openHistory(acc)}
+                          className="px-3 py-1.5 border border-slate-300 text-slate-600 text-xs font-semibold rounded-lg hover:bg-slate-50 transition"
+                        >
+                          Topup History
+                        </button>
+                        <button
                           onClick={() => openTopUp(acc)}
                           className="px-3 py-1.5 bg-gradient-to-r from-orange-600 to-rose-600 text-white text-xs font-semibold rounded-lg hover:from-orange-700 hover:to-rose-700 transition shadow-sm"
                         >
                           Top Up
                         </button>
-                        {/* <div className="relative" data-menu>
-                          <button
-                            onClick={() => setOpenMenuId(openMenuId === acc._id ? null : acc._id)}
-                            className="text-slate-400 hover:text-slate-600 px-1.5 py-1 text-lg font-bold leading-none rounded-lg hover:bg-slate-100 transition"
-                          >
-                            ⋮
-                          </button>
-                          {openMenuId === acc._id && (
-                            <div data-menu className="absolute right-0 top-full mt-1 w-36 bg-white border border-slate-200 rounded-xl shadow-lg z-50 py-1 overflow-hidden">
-                              <button
-                                onClick={() => { setOpenMenuId(null); openHistory(acc); }}
-                                className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 transition"
-                              >
-                                History
-                              </button>
-                            </div>
-                          )}
-                        </div> */}
                       </div>
                     </td>
                   </tr>
                 );
               })}
-              {adAccounts.length === 0 && (
+              {filteredAccounts.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="py-10 text-center text-slate-400 text-sm">No ad accounts found</td>
+                  <td colSpan={8} className="py-10 text-center text-slate-400 text-sm">{search ? "No accounts match your search" : "No ad accounts found"}</td>
                 </tr>
               )}
             </tbody>
           </table>
         </div>
       </div>
+      <Pagination page={page} totalPages={totalPages} onPageChange={setPage} />
 
       {topUpModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">

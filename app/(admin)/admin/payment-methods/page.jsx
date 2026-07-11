@@ -4,6 +4,9 @@ import { useEffect, useState, useRef } from "react";
 import Swal from "sweetalert2";
 import { useAdmin } from "../components/AdminProvider";
 import { Plus, X, Trash2, Edit3, Users, Check, Building2, Smartphone } from "lucide-react";
+import Pagination from "@/app/Component/Pagination";
+
+const ITEMS_PER_PAGE = 20;
 
 const WALLET_OPTIONS = ["Nagad", "BKash", "Rocket", "Upay", "Cellfin"];
 const ACCOUNT_TYPE_OPTIONS = ["Personal", "Merchant"];
@@ -17,6 +20,7 @@ export default function PaymentMethodsPage() {
   const [showAssignModal, setShowAssignModal] = useState(null);
   const [editing, setEditing] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [page, setPage] = useState(1);
   const [methodType, setMethodType] = useState("bank");
   const [logoFile, setLogoFile] = useState(null);
   const [logoPreview, setLogoPreview] = useState(null);
@@ -208,6 +212,10 @@ export default function PaymentMethodsPage() {
 
   const bankMethods = methods.filter((m) => m.type !== "mobile-banking");
   const mobileMethods = methods.filter((m) => m.type === "mobile-banking");
+  const totalPages = Math.ceil(methods.length / ITEMS_PER_PAGE);
+  const paginatedMethods = methods.slice((page - 1) * ITEMS_PER_PAGE, page * ITEMS_PER_PAGE);
+  const paginatedBankMethods = paginatedMethods.filter((m) => m.type !== "mobile-banking");
+  const paginatedMobileMethods = paginatedMethods.filter((m) => m.type === "mobile-banking");
 
   return (
     <div>
@@ -227,27 +235,28 @@ export default function PaymentMethodsPage() {
         <p className="text-slate-500">Loading...</p>
       ) : methods.length ? (
         <div>
-          {bankMethods.length > 0 && (
+          {paginatedBankMethods.length > 0 && (
             <div className="mb-8">
               <h2 className="text-lg font-semibold text-slate-800 mb-4 flex items-center gap-2">
                 <Building2 size={20} /> Bank Accounts
               </h2>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {bankMethods.map((method) => renderCard(method, openEdit, openAssign, handleDelete))}
+                {paginatedBankMethods.map((method) => renderCard(method, openEdit, openAssign, handleDelete))}
               </div>
             </div>
           )}
 
-          {mobileMethods.length > 0 && (
+          {paginatedMobileMethods.length > 0 && (
             <div className="mb-8">
               <h2 className="text-lg font-semibold text-slate-800 mb-4 flex items-center gap-2">
                 <Smartphone size={20} /> Mobile Banking
               </h2>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {mobileMethods.map((method) => renderCard(method, openEdit, openAssign, handleDelete))}
+                {paginatedMobileMethods.map((method) => renderCard(method, openEdit, openAssign, handleDelete))}
               </div>
             </div>
           )}
+          <Pagination page={page} totalPages={totalPages} onPageChange={setPage} />
         </div>
       ) : (
         <div className="rounded-2xl border border-slate-200 bg-white p-12 shadow-sm text-center">

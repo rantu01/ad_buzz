@@ -5,6 +5,9 @@ import { useAdmin } from "../components/AdminProvider";
 import { hasPermission } from "@/lib/permissions";
 import Swal from "sweetalert2";
 import { Search } from "lucide-react";
+import Pagination from "@/app/Component/Pagination";
+
+const ITEMS_PER_PAGE = 20;
 
 const STATUS_COLORS = {
   open: "bg-blue-50 text-blue-700",
@@ -24,6 +27,7 @@ export default function SupportTicketsPage() {
   const [searchTicketId, setSearchTicketId] = useState("");
   const [selected, setSelected] = useState(null);
   const [replyText, setReplyText] = useState("");
+  const [page, setPage] = useState(1);
 
   const loadTickets = async () => {
     setLoading(true);
@@ -38,7 +42,11 @@ export default function SupportTicketsPage() {
     finally { setLoading(false); }
   };
 
+  useEffect(() => { setPage(1); }, [filter, searchTicketId]);
   useEffect(() => { loadTickets(); }, [filter, searchTicketId]);
+
+  const totalPages = Math.ceil(tickets.length / ITEMS_PER_PAGE);
+  const paginatedTickets = tickets.slice((page - 1) * ITEMS_PER_PAGE, page * ITEMS_PER_PAGE);
 
   const openTicket = async (ticket) => {
     setSelected(ticket);
@@ -106,7 +114,7 @@ export default function SupportTicketsPage() {
             <div className="bg-white rounded-xl border border-slate-200 p-8 text-center text-slate-500">No tickets found.</div>
           ) : (
             <div className="space-y-3">
-              {tickets.map((t) => (
+              {paginatedTickets.map((t) => (
                   <div key={t._id} onClick={() => openTicket(t)}
                     className={`bg-white rounded-xl border p-4 cursor-pointer transition-all ${selected?._id === t._id ? "border-amber-400 ring-1 ring-amber-400/50" : "border-slate-200 hover:border-slate-300"}`}>
                     <div className="flex items-center justify-between mb-1.5">
@@ -123,6 +131,7 @@ export default function SupportTicketsPage() {
               ))}
             </div>
           )}
+          <Pagination page={page} totalPages={totalPages} onPageChange={setPage} />
         </div>
 
         <div className="xl:col-span-2">

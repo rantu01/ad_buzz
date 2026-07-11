@@ -27,8 +27,7 @@ const ICON_MAP = {
 const ALL_NAV = [
   { label: "Overview", href: "/admin", key: "overview" },
   { label: "Deposit Verification", href: "/admin/deposits", key: "deposits" },
-  { label: "Withdrawals", href: "/admin/withdrawals", key: "withdrawals" },
-  { label: "Ad Accounts", href: "/admin/ad-accounts", key: "ad-accounts" },
+  { label: "Ad Accounts Insights", href: "/admin/ad-accounts", key: "ad-accounts" },
   { label: "Ad Accounts TopUp", href: "/admin/ad-accounts-topup", key: "ad-accounts-topup" },
   { label: "User Management", href: "/admin/user-management", key: "user-management" },
   { label: "Payment Methods", href: "/admin/payment-methods", key: "payment-methods" },
@@ -51,7 +50,7 @@ export default function DashboardSidebar({ open, onClose }) {
 
   const allowed = getAllowedRoutes(role);
   const navItems = ALL_NAV.filter((item) =>
-    item.key === "overview" || item.key === "settings" ? true : allowed.includes(item.key)
+    item.key === "overview" ? true : allowed.includes(item.key)
   );
   const roleLabel = role.replace(/_/g, " ").replace(/\b\w/g, (l) => l.toUpperCase());
 

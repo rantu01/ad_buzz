@@ -78,14 +78,14 @@ export default function LoginForm({ onSuccess }) {
       </div>
 
       {/* Auth panel */}
-      <div className="flex flex-1 items-center justify-center bg-gradient-to-br from-primary-100 via-white to-secondary-100 px-4 py-12 sm:px-8">
+      <div className="flex flex-1 items-center justify-center bg-[#0F497D] md:bg-gradient-to-br md:from-primary-100 md:via-white md:to-secondary-100 px-4 py-12 sm:px-8">
         <div className="w-full max-w-md">
           {/* Mobile logo */}
           <div className="lg:hidden text-center mb-8">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={logo} alt={siteName} className="h-12 w-auto mx-auto mb-3 rounded-lg" />
-            <h1 className="text-2xl font-bold text-slate-900">{siteName}</h1>
-            <p className="text-sm text-slate-500 mt-1">Ad Account Management Platform</p>
+            {/* <h1 className="text-2xl font-bold text-white md:text-slate-900">{siteName}</h1> */}
+            <p className="text-sm text-white md:text-slate-900 mt-1">Ad Account Management Platform</p>
           </div>
 
           <div className="bg-white rounded-2xl shadow-xl border border-slate-100 p-8 sm:p-10">

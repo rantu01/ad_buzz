@@ -3,6 +3,9 @@
 import { useEffect, useState, useCallback } from "react";
 import Swal from "sweetalert2";
 import { BarChart3, TrendingUp, DollarSign, Users, Download, Calendar, FileText, RefreshCw, Target, Wallet } from "lucide-react";
+import Pagination from "@/app/Component/Pagination";
+
+const ITEMS_PER_PAGE = 20;
 
 export default function ReportsPage() {
   const [activeTab, setActiveTab] = useState("overview");
@@ -14,6 +17,9 @@ export default function ReportsPage() {
   const [financialPeriod, setFinancialPeriod] = useState("daily");
   const [dateRange, setDateRange] = useState({ start: "", end: "" });
   const [exporting, setExporting] = useState(false);
+  const [page, setPage] = useState(1);
+
+  useEffect(() => { setPage(1); }, [activeTab]);
 
   const getDefaultRange = () => {
     const end = new Date();
@@ -88,6 +94,13 @@ export default function ReportsPage() {
   ];
 
   const range = dateRange.start && dateRange.end ? dateRange : getDefaultRange();
+
+  const financialTotalPages = Math.ceil(financial.rows.length / ITEMS_PER_PAGE);
+  const paginatedFinancial = financial.rows.slice((page - 1) * ITEMS_PER_PAGE, page * ITEMS_PER_PAGE);
+  const userTotalPages = Math.ceil(userActivity.rows.length / ITEMS_PER_PAGE);
+  const paginatedUsers = userActivity.rows.slice((page - 1) * ITEMS_PER_PAGE, page * ITEMS_PER_PAGE);
+  const adSpendTotalPages = Math.ceil(adSpend.rows.length / ITEMS_PER_PAGE);
+  const paginatedAdSpend = adSpend.rows.slice((page - 1) * ITEMS_PER_PAGE, page * ITEMS_PER_PAGE);
 
   const StatCard = ({ label, value, sub, icon: Icon, color }) => (
     <div className="bg-white rounded-xl border border-slate-200/90 p-5 shadow-sm">
@@ -169,7 +182,7 @@ export default function ReportsPage() {
               <table className="w-full text-left border-collapse">
                 <thead><tr className="bg-slate-50 text-slate-400 text-xs font-bold uppercase tracking-wider border-b border-slate-200"><th className="py-3 px-4">Date</th><th className="py-3 px-4">Deposits</th><th className="py-3 px-4">Deposit Count</th><th className="py-3 px-4">Withdrawals</th><th className="py-3 px-4">Withdrawal Count</th><th className="py-3 px-4">Net</th></tr></thead>
                 <tbody className="divide-y divide-slate-100 text-sm">
-                  {financial.rows.length > 0 ? financial.rows.map((r, i) => (
+                  {financial.rows.length > 0 ? paginatedFinancial.map((r, i) => (
                     <tr key={r.date || i} className="hover:bg-slate-50/40">
                       <td className="py-3 px-4 font-medium">{r.date}</td>
                       <td className="py-3 px-4 text-emerald-600 font-medium">${formatMoney(r.deposits)}</td>
@@ -183,6 +196,7 @@ export default function ReportsPage() {
               </table>
             </div>
           </div>
+          <Pagination page={page} totalPages={financialTotalPages} onPageChange={setPage} />
         </div>
       )}
 
@@ -200,7 +214,7 @@ export default function ReportsPage() {
               <table className="w-full text-left border-collapse">
                 <thead><tr className="bg-slate-50 text-slate-400 text-xs font-bold uppercase tracking-wider border-b border-slate-200"><th className="py-3 px-4">User</th><th className="py-3 px-4">Balance</th><th className="py-3 px-4">Total Earned</th><th className="py-3 px-4">Deposits</th><th className="py-3 px-4">Withdrawals</th></tr></thead>
                 <tbody className="divide-y divide-slate-100 text-sm">
-                  {userActivity.rows.length > 0 ? userActivity.rows.map((u, i) => (
+                  {userActivity.rows.length > 0 ? paginatedUsers.map((u, i) => (
                     <tr key={u.uid || i} className="hover:bg-slate-50/40">
                       <td className="py-3 px-4 max-w-[200px]"><p className="font-medium text-slate-900 truncate">{u.displayName || u.email || u.uid?.slice(0, 16)}</p><p className="text-xs text-slate-400 truncate">{u.email}</p></td>
                       <td className="py-3 px-4 font-medium">${formatMoney(u.balance)}</td>
@@ -213,6 +227,7 @@ export default function ReportsPage() {
               </table>
             </div>
           </div>
+          <Pagination page={page} totalPages={userTotalPages} onPageChange={setPage} />
         </div>
       )}
 
@@ -232,7 +247,7 @@ export default function ReportsPage() {
               <table className="w-full text-left border-collapse">
                 <thead><tr className="bg-slate-50 text-slate-400 text-xs font-bold uppercase tracking-wider border-b border-slate-200"><th className="py-3 px-4">Account</th><th className="py-3 px-4">Status</th><th className="py-3 px-4">Budget</th><th className="py-3 px-4">Spent</th><th className="py-3 px-4">Utilization</th><th className="py-3 px-4">User</th><th className="py-3 px-4">Last Sync</th></tr></thead>
                 <tbody className="divide-y divide-slate-100 text-sm">
-                  {adSpend.rows.length > 0 ? adSpend.rows.map((a, i) => {
+                  {adSpend.rows.length > 0 ? paginatedAdSpend.map((a, i) => {
                     const budgetDollars = Number(a.spendCap || 0);
                     const util = budgetDollars > 0 ? (a.spent / budgetDollars) * 100 : 0;
                     return (<tr key={a._id || i} className="hover:bg-slate-50/40">
@@ -249,6 +264,7 @@ export default function ReportsPage() {
               </table>
             </div>
           </div>
+          <Pagination page={page} totalPages={adSpendTotalPages} onPageChange={setPage} />
         </div>
       )}
     </div>

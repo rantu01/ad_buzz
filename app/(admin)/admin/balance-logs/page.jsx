@@ -2,6 +2,36 @@
 
 import { useEffect, useState } from "react";
 
+const TYPE_LABELS = {
+  ad_account_topup: "Ad Account Topup",
+  admin: "Manual Balance Push",
+  deposit: "Deposit",
+};
+
+const TYPE_FILTERS = [
+  { value: "all", label: "All" },
+  { value: "ad_account_topup", label: "Ad Account Topup" },
+  { value: "admin", label: "Manual Balance Push" },
+  // { value: "deposit", label: "Deposit" },
+];
+
+function getTypeLabel(type) {
+  return TYPE_LABELS[type] || type;
+}
+
+function getTypeStyle(type) {
+  if (type === "ad_account_topup") return "bg-blue-50 text-blue-700";
+  if (type === "admin") return "bg-amber-50 text-amber-700";
+  if (type === "deposit") return "bg-emerald-50 text-emerald-700";
+  return "bg-slate-50 text-slate-700";
+}
+
+function getUsername(email) {
+  if (!email) return "";
+  if (email.includes("@")) return email.split("@")[0];
+  return email;
+}
+
 export default function AdminBalanceLogsPage() {
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -36,18 +66,18 @@ export default function AdminBalanceLogsPage() {
       <h1 className="text-2xl font-semibold mb-1">Balance Logs</h1>
       <p className="text-sm text-slate-500 mb-6">Transaction history across all users</p>
 
-      <div className="mb-6 flex gap-2">
-        {["all", "deposit", "withdrawal"].map((t) => (
+      <div className="mb-6 flex flex-wrap gap-2">
+        {TYPE_FILTERS.map((t) => (
           <button
-            key={t}
-            onClick={() => { setFilter(t); setPage(1); }}
+            key={t.value}
+            onClick={() => { setFilter(t.value); setPage(1); }}
             className={`px-4 py-2 rounded-lg font-medium capitalize transition-colors text-sm ${
-              filter === t
+              filter === t.value
                 ? "bg-[#F59E0B] text-slate-950"
                 : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"
             }`}
           >
-            {t}
+            {t.label}
           </button>
         ))}
       </div>
@@ -71,17 +101,20 @@ export default function AdminBalanceLogsPage() {
                 <tr><td colSpan={7} className="py-8 text-center text-slate-400">Loading...</td></tr>
               ) : logs.length > 0 ? logs.map((log, i) => (
                 <tr key={log._id || i} className="hover:bg-slate-50/40">
-                  <td className="py-3 px-4 text-xs text-slate-400">{new Date(log.createdAt).toLocaleString()}</td>
-                  <td className="py-3 px-4 max-w-[120px] truncate text-xs">{log.email || log.uid?.slice(0, 16)}</td>
-                  <td className="py-3 px-4">
-                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                      log.type === "deposit" ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-700"
-                    }`}>{log.type}</span>
+                  <td className="py-3 px-4 text-xs text-slate-400 align-top whitespace-nowrap">
+                    <div>{new Date(log.createdAt).toLocaleDateString()}</div>
+                    <div className="text-slate-300">{new Date(log.createdAt).toLocaleTimeString()}</div>
                   </td>
-                  <td className="py-3 px-4 font-medium">${formatMoney(Math.abs(log.amount))}</td>
-                  <td className="py-3 px-4">${formatMoney(log.balanceBefore)}</td>
-                  <td className="py-3 px-4">${formatMoney(log.balanceAfter)}</td>
-                  <td className="py-3 px-4 text-xs text-slate-500 max-w-[200px] truncate">{log.description}</td>
+                  <td className="py-3 px-4 text-xs text-slate-700 align-top whitespace-nowrap">{getUsername(log.email)}</td>
+                  <td className="py-3 px-4 align-top">
+                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${getTypeStyle(log.type)}`}>
+                      {getTypeLabel(log.type)}
+                    </span>
+                  </td>
+                  <td className="py-3 px-4 font-medium align-top whitespace-nowrap">${formatMoney(Math.abs(log.amount))}</td>
+                  <td className="py-3 px-4 align-top whitespace-nowrap">${formatMoney(log.balanceBefore)}</td>
+                  <td className="py-3 px-4 align-top whitespace-nowrap">${formatMoney(log.balanceAfter)}</td>
+                  <td className="py-3 px-4 text-xs text-slate-500 align-top min-w-[200px] max-w-[300px] whitespace-normal break-words">{log.description}</td>
                 </tr>
               )) : (
                 <tr><td colSpan={7} className="py-8 text-center text-slate-400">No balance logs found.</td></tr>

@@ -2,6 +2,9 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "@/app/Component/Auth/AuthProvider";
+import Pagination from "@/app/Component/Pagination";
+
+const ITEMS_PER_PAGE = 20;
 
 function SkeletonRow() {
   return (
@@ -23,6 +26,7 @@ export default function PaymentHistoryPage() {
   const [deposits, setDeposits] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [page, setPage] = useState(1);
 
   const loadDeposits = useCallback(async () => {
     if (!user?.uid) return;
@@ -40,6 +44,9 @@ export default function PaymentHistoryPage() {
   }, [user?.uid]);
 
   useEffect(() => { loadDeposits(); }, [loadDeposits]);
+
+  const totalPages = Math.ceil(deposits.length / ITEMS_PER_PAGE);
+  const paginatedDeposits = deposits.slice((page - 1) * ITEMS_PER_PAGE, page * ITEMS_PER_PAGE);
 
   const formatMoney = (val) => {
     const n = Number(val || 0);
@@ -123,7 +130,7 @@ export default function PaymentHistoryPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {deposits.map((dep) => (
+                {paginatedDeposits.map((dep) => (
                   <tr key={dep._id} className="hover:bg-slate-50/50 transition-colors">
                     <td className="px-4 py-3 text-slate-600 whitespace-nowrap">{new Date(dep.createdAt).toLocaleDateString("en-BD", { day: "2-digit", month: "short", year: "numeric" })}</td>
                     <td className="px-4 py-3 text-slate-800 font-medium whitespace-nowrap">{dep.account || "—"}</td>
@@ -140,6 +147,7 @@ export default function PaymentHistoryPage() {
           </div>
         </div>
       )}
+      <Pagination page={page} totalPages={totalPages} onPageChange={setPage} />
     </div>
   );
 }

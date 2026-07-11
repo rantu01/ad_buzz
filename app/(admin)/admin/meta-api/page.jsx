@@ -3,6 +3,9 @@
 import { useEffect, useState, useCallback } from "react";
 import Swal from "sweetalert2";
 import { RefreshCw, CheckCircle, XCircle, Clock, Database, AlertTriangle, Settings } from "lucide-react";
+import Pagination from "@/app/Component/Pagination";
+
+const ITEMS_PER_PAGE = 20;
 
 export default function MetaApiSettingsPage() {
   const [settings, setSettings] = useState(null);
@@ -13,6 +16,14 @@ export default function MetaApiSettingsPage() {
   const [syncLogs, setSyncLogs] = useState([]);
   const [syncing, setSyncing] = useState(false);
   const [activeTab, setActiveTab] = useState("settings");
+  const [page, setPage] = useState(1);
+
+  useEffect(() => { setPage(1); }, [activeTab]);
+
+  const accountsTotalPages = Math.ceil(metaAccounts.length / ITEMS_PER_PAGE);
+  const paginatedMetaAccounts = metaAccounts.slice((page - 1) * ITEMS_PER_PAGE, page * ITEMS_PER_PAGE);
+  const logsTotalPages = Math.ceil(syncLogs.length / ITEMS_PER_PAGE);
+  const paginatedSyncLogs = syncLogs.slice((page - 1) * ITEMS_PER_PAGE, page * ITEMS_PER_PAGE);
 
   const loadSettings = useCallback(async () => {
     try {
@@ -238,6 +249,7 @@ export default function MetaApiSettingsPage() {
             <span className="text-xs text-slate-400">{metaAccounts.length} accounts from Meta</span>
           </div>
           {metaAccounts.length > 0 ? (
+            <>
             <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
               <div className="overflow-x-auto">
                 <table className="w-full text-left border-collapse">
@@ -253,7 +265,7 @@ export default function MetaApiSettingsPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 text-sm">
-                    {metaAccounts.map((acc, i) => (
+                    {paginatedMetaAccounts.map((acc, i) => (
                       <tr key={acc.metaAccountId || i} className="hover:bg-slate-50/40">
                         <td className="py-3 px-4 font-medium max-w-[200px] truncate">{acc.name}</td>
                         <td className="py-3 px-4 font-mono text-xs text-blue-600">{acc.metaAccountId}</td>
@@ -269,23 +281,26 @@ export default function MetaApiSettingsPage() {
                       </tr>
                     ))}
                   </tbody>
-                </table>
-              </div>
+              </table>
             </div>
-          ) : (
-            <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-10 text-center">
-              <Database size={40} className="mx-auto text-slate-300 mb-3" />
-              <p className="text-slate-500">No Meta accounts fetched yet</p>
-            </div>
-          )}
-        </div>
+          </div>
+          <Pagination page={page} totalPages={accountsTotalPages} onPageChange={setPage} />
+          </>
+        ) : (
+          <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-10 text-center">
+            <Database size={40} className="mx-auto text-slate-300 mb-3" />
+            <p className="text-slate-500">No Meta accounts fetched yet</p>
+          </div>
+        )}
+      </div>
       )}
 
       {activeTab === "logs" && (
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
           {syncLogs.length > 0 ? (
+            <>
             <div className="divide-y divide-slate-100">
-              {syncLogs.map((log, i) => (
+              {paginatedSyncLogs.map((log, i) => (
                 <div key={log._id || i} className="p-4 hover:bg-slate-50/40">
                   <div className="flex items-center gap-2 mb-1">
                     {log.type === "success" ? <CheckCircle size={14} className="text-emerald-500" /> : log.type === "warning" ? <AlertTriangle size={14} className="text-amber-500" /> : log.type === "error" ? <XCircle size={14} className="text-red-500" /> : <Clock size={14} className="text-blue-500" />}
@@ -295,6 +310,8 @@ export default function MetaApiSettingsPage() {
                 </div>
               ))}
             </div>
+            <Pagination page={page} totalPages={logsTotalPages} onPageChange={setPage} />
+            </>
           ) : (
             <div className="p-10 text-center"><Clock size={40} className="mx-auto text-slate-300 mb-3" /><p className="text-slate-500">No sync logs yet</p></div>
           )}

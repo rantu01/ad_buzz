@@ -1,9 +1,16 @@
 "use client";
 
 import { useEffect, useState, useRef } from "react";
+import { useRouter } from "next/navigation";
 import Swal from "sweetalert2";
+import { useAuth } from "@/app/Component/Auth/AuthProvider";
+import { useAdmin } from "../components/AdminProvider";
+import { ROLES } from "@/lib/permissions";
 
 export default function AdminSettingsPage() {
+  const router = useRouter();
+  const { user } = useAuth();
+  const { profile, loading: profileLoading } = useAdmin();
   const [siteName, setSiteName] = useState("Ad Buzz");
   const [primaryColor, setPrimaryColor] = useState("#135B9A");
   const [secondaryColor, setSecondaryColor] = useState("#F48E2B");
@@ -14,8 +21,17 @@ export default function AdminSettingsPage() {
   const [saving, setSaving] = useState(false);
   const fileInputRef = useRef(null);
 
+  const isAdmin = profile?.role === ROLES.ADMIN;
+
   useEffect(() => {
-    fetch("/api/admin/settings")
+    if (profileLoading) return;
+    if (!isAdmin) {
+      router.replace("/admin");
+      return;
+    }
+    fetch("/api/admin/settings", {
+      headers: { "x-user-id": user?.uid || "" },
+    })
       .then((r) => r.json())
       .then((data) => {
         if (data.success && data.settings) {
@@ -28,7 +44,7 @@ export default function AdminSettingsPage() {
       })
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, []);
+  }, [profileLoading, isAdmin, router, user?.uid]);
 
   function toBase64(file) {
     return new Promise((resolve, reject) => {
@@ -50,7 +66,7 @@ export default function AdminSettingsPage() {
 
       const res = await fetch("/api/admin/settings", {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "x-user-id": user?.uid || "" },
         body: JSON.stringify({ siteName, primaryColor, secondaryColor, logo, dollarRate }),
       });
       const data = await res.json();
