@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import clientPromise from "@/lib/mongodb";
 import { ObjectId } from "mongodb";
 import { updateSpendCap } from "@/lib/metaApiService";
+import { ROLE_LABELS } from "@/lib/permissions";
 
 const DB_NAME = process.env.MONGODB_DB_NAME || "ad_buzz";
 
@@ -90,6 +91,8 @@ export async function POST(request) {
       ).catch(() => {});
     }
 
+    const performedRoleLabel = user.role ? (ROLE_LABELS[user.role] || user.role) : "Customer";
+    const actorLabel = `${performedRoleLabel} (${user.email || uid})`;
     const logDoc = {
       uid,
       email: user.email || "",
@@ -97,7 +100,7 @@ export async function POST(request) {
       amount: -topUpAmount,
       balanceBefore: Number(user.availableBalance),
       balanceAfter: Number(updatedUser.availableBalance),
-      description: `Top-up $${topUpAmount.toFixed(2)} to ad account "${account.name || account.accountId}"`,
+      description: `${actorLabel} topped up $${topUpAmount.toFixed(2)} to ad account "${account.name || account.accountId}"`,
       referenceId: accountId,
       referenceType: "ad_account",
       metadata: {
@@ -107,6 +110,9 @@ export async function POST(request) {
         newBudget: newBudgetDollars,
         topUpAmount,
         accountIdentifier: account.metaAccountId || account.accountId,
+        performedBy: user.displayName || user.email,
+        performedByRole: user.role,
+        performedByEmail: user.email,
       },
       createdAt: new Date(),
     };

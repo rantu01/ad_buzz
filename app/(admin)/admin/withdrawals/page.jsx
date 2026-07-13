@@ -44,7 +44,13 @@ export default function AdminWithdrawalsPage() {
 
     const res = await fetch("/api/admin/withdrawals", {
       method: "PATCH", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ withdrawalId, status: "approved", approverUid: "admin" }),
+      body: JSON.stringify({
+        withdrawalId,
+        status: "approved",
+        approverUid: profile?.uid || "",
+        approverRole: profile?.role,
+        approverEmail: profile?.email,
+      }),
     });
     const result = await res.json();
     if (!res.ok || !result.success) {

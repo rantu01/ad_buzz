@@ -4,6 +4,7 @@ import { creditUserBalance, getUserByUid } from "@/lib/userModel";
 import { createBalanceLog } from "@/lib/balanceLog";
 import { getWhatsAppSettings } from "@/lib/whatsappSettingsModel";
 import { sendDepositApproved, sendDepositRejected } from "@/lib/whatsappService";
+import { ROLE_LABELS } from "@/lib/permissions";
 
 export async function GET(request) {
   try {
@@ -26,7 +27,7 @@ export async function GET(request) {
 export async function PATCH(request) {
   try {
     const body = await request.json();
-    const { depositId, status, approverUid, rejectionReason } = body;
+    const { depositId, status, approverUid, approverRole, approverEmail, rejectionReason } = body;
 
     if (!depositId || !status) {
       return NextResponse.json(
@@ -65,6 +66,12 @@ export async function PATCH(request) {
       await creditUserBalance(deposit.uid, deposit.amount);
       updatedUser = await getUserByUid(deposit.uid);
 
+      const approver = approverUid ? await getUserByUid(approverUid) : null;
+      const effectiveRole = approverRole || approver?.role;
+      const effectiveEmail = approverEmail || approver?.email || "";
+      const approverRoleLabel = effectiveRole ? (ROLE_LABELS[effectiveRole] || effectiveRole) : "Unknown";
+      const actorLabel = effectiveEmail ? `${approverRoleLabel} (${effectiveEmail})` : approverRoleLabel;
+
       await createBalanceLog({
         uid: deposit.uid,
         email: deposit.email || user.email,
@@ -72,10 +79,10 @@ export async function PATCH(request) {
         amount: deposit.amount,
         balanceBefore,
         balanceAfter: Number(updatedUser?.availableBalance || 0),
-        description: `Deposit approved: $${deposit.amount}`,
+        description: `${actorLabel} approved deposit: $${deposit.amount}`,
         referenceId: depositId,
         referenceType: "deposit",
-        metadata: { approverUid },
+        metadata: { approverUid, approverRole: effectiveRole, approverEmail: effectiveEmail },
       });
     }
 

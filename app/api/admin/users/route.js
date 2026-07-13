@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import clientPromise from "@/lib/mongodb";
 import { getUserByUid } from "@/lib/userModel";
-import { ROLES } from "@/lib/permissions";
+import { ROLES, ROLE_LABELS } from "@/lib/permissions";
 import { deleteFirebaseAuthUser, updateFirebaseUserPassword } from "@/lib/firebaseAdmin";
 import { createBalanceLog } from "@/lib/balanceLog";
 
@@ -154,6 +154,8 @@ export async function PATCH(request) {
     if (balanceBefore !== undefined) {
       const balanceAfter = Number(update.availableBalance);
       const callerName = caller?.displayName || caller?.email || "Admin";
+      const callerRoleLabel = ROLE_LABELS[callerRole] || callerRole || "Admin";
+      const actorLabel = `${callerRoleLabel} (${caller?.email || callerName})`;
       await createBalanceLog({
         uid,
         email: userEmail || "",
@@ -161,10 +163,10 @@ export async function PATCH(request) {
         amount: balanceAfter - balanceBefore,
         balanceBefore,
         balanceAfter,
-        description: `${callerName} adjusted balance from $${balanceBefore.toFixed(2)} to $${balanceAfter.toFixed(2)}`,
+        description: `${actorLabel} manually adjusted the balance from $${balanceBefore.toFixed(2)} to $${balanceAfter.toFixed(2)}`,
         referenceId: null,
         referenceType: null,
-        metadata: { adjustedBy: callerUid, callerName },
+        metadata: { adjustedBy: callerUid, callerName, callerRole, callerEmail: caller?.email },
       });
     }
 

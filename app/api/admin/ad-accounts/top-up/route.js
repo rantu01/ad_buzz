@@ -2,12 +2,13 @@ import { NextResponse } from "next/server";
 import clientPromise from "@/lib/mongodb";
 import { ObjectId } from "mongodb";
 import { updateSpendCap } from "@/lib/metaApiService";
+import { ROLE_LABELS } from "@/lib/permissions";
 
 const DB_NAME = process.env.MONGODB_DB_NAME || "ad_buzz";
 
 export async function POST(request) {
   try {
-    const { accountId, amount, performedBy } = await request.json();
+    const { accountId, amount, performedBy, performedByRole, performedByEmail } = await request.json();
     const topUpAmount = Number(amount);
 
     if (!accountId || !topUpAmount || topUpAmount <= 0) {
@@ -49,7 +50,7 @@ export async function POST(request) {
       { returnDocument: "after" }
     );
 
-    if (!adResult?.value) {
+    if (!adResult) {
       return NextResponse.json({ success: false, message: "Failed to update ad account budget" }, { status: 500 });
     }
 
@@ -61,14 +62,21 @@ export async function POST(request) {
     }
 
     const performedByName = performedBy || "Admin";
+    const performedByRoleLabel = performedByRole ? (ROLE_LABELS[performedByRole] || performedByRole) : "Admin";
+    const actorLabel = `${performedByRoleLabel} (${performedByEmail || performedByName})`;
+
+    const accountOwnerEmail = account.email || (account.uid
+      ? (await db.collection("users").findOne({ uid: account.uid }, { projection: { email: 1 } }))?.email
+      : "") || "";
+
     const logDoc = {
       uid: account.uid || "",
-      email: performedByName,
+      email: accountOwnerEmail,
       type: "ad_account_topup",
       amount: 0,
       balanceBefore: 0,
       balanceAfter: 0,
-      description: `Admin top-up $${topUpAmount.toFixed(2)} to ad account "${account.name || account.accountId}"`,
+      description: `${actorLabel} topped up $${topUpAmount.toFixed(2)} to ad account "${account.name || account.accountId}"`,
       referenceId: accountId,
       referenceType: "ad_account",
       metadata: {
@@ -78,6 +86,9 @@ export async function POST(request) {
         newBudget: newBudgetDollars,
         topUpAmount,
         accountIdentifier: account.metaAccountId || account.accountId,
+        performedBy: performedByName,
+        performedByRole,
+        performedByEmail,
       },
       createdAt: new Date(),
     };

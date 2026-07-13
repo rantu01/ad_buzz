@@ -129,7 +129,13 @@ export default function AdminAdAccountsTopUpPage() {
       const res = await fetch("/api/admin/ad-accounts/top-up", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ accountId: topUpModal._id, amount, performedBy: adminName }),
+        body: JSON.stringify({
+          accountId: topUpModal._id,
+          amount,
+          performedBy: adminName,
+          performedByRole: profile?.role,
+          performedByEmail: profile?.email,
+        }),
       });
       const data = await res.json();
       if (data.success) {

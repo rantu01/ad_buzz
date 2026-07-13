@@ -57,7 +57,13 @@ export default function AdminDepositsPage() {
     try {
       const res = await fetch("/api/admin/deposits", {
         method: "PATCH", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ depositId, status: "approved", approverUid: profile?.email || "admin" }),
+        body: JSON.stringify({
+          depositId,
+          status: "approved",
+          approverUid: profile?.uid || "",
+          approverRole: profile?.role,
+          approverEmail: profile?.email,
+        }),
       });
       const result = await res.json();
       if (!res.ok || !result.success) {

@@ -4,6 +4,7 @@ import { canUserWithdraw, debitUserBalance, getUserByUid } from "@/lib/userModel
 import { createBalanceLog } from "@/lib/balanceLog";
 import { getWhatsAppSettings } from "@/lib/whatsappSettingsModel";
 import { sendWithdrawalApproved, sendWithdrawalRejected } from "@/lib/whatsappService";
+import { ROLE_LABELS } from "@/lib/permissions";
 
 export async function GET(request) {
   try {
@@ -26,7 +27,7 @@ export async function GET(request) {
 export async function PATCH(request) {
   try {
     const body = await request.json();
-    const { withdrawalId, status, approverUid, rejectionReason } = body;
+    const { withdrawalId, status, approverUid, approverRole, approverEmail, rejectionReason } = body;
 
     if (!withdrawalId || !status) {
       return NextResponse.json(
@@ -79,6 +80,12 @@ export async function PATCH(request) {
       await debitUserBalance(withdrawal.uid, withdrawal.amount);
       updatedUser = await getUserByUid(withdrawal.uid);
 
+      const approver = approverUid ? await getUserByUid(approverUid) : null;
+      const effectiveRole = approverRole || approver?.role;
+      const effectiveEmail = approverEmail || approver?.email || "";
+      const approverRoleLabel = effectiveRole ? (ROLE_LABELS[effectiveRole] || effectiveRole) : "Unknown";
+      const actorLabel = effectiveEmail ? `${approverRoleLabel} (${effectiveEmail})` : approverRoleLabel;
+
       await createBalanceLog({
         uid: withdrawal.uid,
         email: withdrawal.email || user.email,
@@ -86,10 +93,10 @@ export async function PATCH(request) {
         amount: -Math.abs(withdrawal.amount),
         balanceBefore,
         balanceAfter: Number(updatedUser?.availableBalance || 0),
-        description: `Withdrawal approved: $${withdrawal.amount}`,
+        description: `${actorLabel} approved withdrawal: $${withdrawal.amount}`,
         referenceId: withdrawalId,
         referenceType: "withdrawal",
-        metadata: { approverUid, walletAddress: withdrawal.walletAddress },
+        metadata: { approverUid, approverRole: effectiveRole, approverEmail: effectiveEmail, walletAddress: withdrawal.walletAddress },
       });
     }
 
