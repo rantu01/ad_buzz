@@ -26,6 +26,18 @@ export async function GET(request) {
       metaByAccountId[ma.metaAccountId] = ma;
     }
 
+    const now = new Date();
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const topUpPipeline = [
+      { $match: { type: "ad_account_topup", createdAt: { $gte: monthStart } } },
+      { $group: { _id: "$metadata.accountId", total: { $sum: { $toDouble: "$metadata.topUpAmount" } } } }
+    ];
+    const topUpResults = await db.collection("balanceLogs").aggregate(topUpPipeline).toArray();
+    const topUpMap = {};
+    for (const r of topUpResults) {
+      if (r._id) topUpMap[r._id] = r.total;
+    }
+
     adAccounts = adAccounts.map((acc) => {
       const meta = acc.metaAccountId ? metaByAccountId[acc.metaAccountId] : null;
       return {
@@ -35,6 +47,7 @@ export async function GET(request) {
         metaAmountSpent: meta?.amountSpent || 0,
         metaStatus: meta?.accountStatus || null,
         metaStatusLabel: meta?.accountStatus === 1 ? "Active" : meta?.accountStatus === 2 ? "Disabled" : meta?.accountStatus === 3 ? "Inactive" : null,
+        currentMonthTopUp: topUpMap[acc._id.toString()] || 0,
       };
     });
 

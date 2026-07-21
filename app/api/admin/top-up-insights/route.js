@@ -51,6 +51,7 @@ export async function GET(request) {
         description: log.description || "",
         performedBy: log.email || "Unknown",
         userEmail: log.email || "",
+        performedByRole: log.metadata?.performedByRole || "",
         adAccountId: log.metadata?.accountIdentifier || acc?.metaAccountId || acc?.accountId || "",
         adAccountName: log.metadata?.accountName || acc?.metaAccountName || acc?.name || "",
         accountUid: acc?.uid || log.uid || "",

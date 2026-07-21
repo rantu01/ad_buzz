@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useAdmin } from "../components/AdminProvider";
-import { ROLES } from "@/lib/permissions";
+import { ROLES, ROLE_LABELS } from "@/lib/permissions";
 import Pagination from "@/app/Component/Pagination";
 
 const ITEMS_PER_PAGE = 20;
@@ -17,6 +17,15 @@ function formatMoney(val) {
   const n = Number(val || 0);
   return Number.isFinite(n) ? n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "0.00";
 }
+
+function parsePerformer(desc) {
+  const m = desc.match(/^(.+?)\s+\(([^)]+)\)\s+topped up/);
+  return m ? { label: m[1], email: m[2] } : null;
+}
+
+const labelToRole = Object.fromEntries(
+  Object.entries(ROLE_LABELS).map(([k, v]) => [v, k])
+);
 
 export default function TopUpInsightsPage() {
   const { profile, loading: profileLoading } = useAdmin();
@@ -59,6 +68,31 @@ export default function TopUpInsightsPage() {
   }
 
   const totalTopUp = insights.reduce((s, i) => s + i.amount, 0);
+
+  const now = new Date();
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const todayEnd = new Date(todayStart.getTime() + 86400000);
+  const todayItems = insights.filter(i => {
+    const d = new Date(i.createdAt);
+    return d >= todayStart && d < todayEnd;
+  });
+  const todayTransactions = todayItems.length;
+  const todayTopUp = todayItems.reduce((s, i) => s + i.amount, 0);
+
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+  const monthItems = insights.filter(i => {
+    const d = new Date(i.createdAt);
+    return d >= monthStart && d < monthEnd;
+  });
+  const monthByRole = {};
+  for (const item of monthItems) {
+    const parsed = parsePerformer(item.description);
+    const roleKey = parsed ? (labelToRole[parsed.label] || "unknown") : (item.performedByRole || "unknown");
+    monthByRole[roleKey] = (monthByRole[roleKey] || 0) + item.amount;
+  }
+  const relevantRoles = ["admin", "key_manager", "accounts_manager"];
+
   const totalPages = Math.ceil(insights.length / ITEMS_PER_PAGE);
   const paginatedInsights = insights.slice((page - 1) * ITEMS_PER_PAGE, page * ITEMS_PER_PAGE);
 
@@ -71,6 +105,14 @@ export default function TopUpInsightsPage() {
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8">
         <div className="bg-white rounded-xl border border-slate-200 p-5">
+          <p className="text-sm text-slate-500">Today's Transactions</p>
+          <p className="text-3xl font-bold text-slate-900 mt-1">{todayTransactions}</p>
+        </div>
+        <div className="bg-white rounded-xl border border-slate-200 p-5">
+          <p className="text-sm text-slate-500">Today's Top-Up (USD)</p>
+          <p className="text-3xl font-bold text-emerald-600 mt-1">${formatMoney(todayTopUp)}</p>
+        </div>
+        <div className="bg-white rounded-xl border border-slate-200 p-5">
           <p className="text-sm text-slate-500">Total Transactions</p>
           <p className="text-3xl font-bold text-slate-900 mt-1">{insights.length}</p>
         </div>
@@ -79,6 +121,20 @@ export default function TopUpInsightsPage() {
           <p className="text-3xl font-bold text-emerald-600 mt-1">${formatMoney(totalTopUp)}</p>
         </div>
       </div>
+
+      {monthItems.length > 0 && (
+        <div className="mb-8">
+          <h2 className="text-lg font-semibold text-slate-800 mb-3">Current Month</h2>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            {relevantRoles.map((role) => (
+              <div key={role} className="bg-white rounded-xl border border-slate-200 p-5">
+                <p className="text-sm text-slate-500">Top-Up by {ROLE_LABELS[role] || role}</p>
+                <p className="text-3xl font-bold text-emerald-600 mt-1">${formatMoney(monthByRole[role] || 0)}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {isAdmin ? (
         <>
@@ -108,7 +164,7 @@ export default function TopUpInsightsPage() {
                       <div className="text-slate-300">{new Date(item.createdAt).toLocaleTimeString()}</div>
                     </td>
                     <td className="px-4 py-3 text-right text-emerald-600 font-medium align-top whitespace-nowrap">${formatMoney(item.amount)}</td>
-                    <td className="px-4 py-3 text-xs text-slate-600 align-top whitespace-nowrap">{getUsername(item.performedBy)}</td>
+                    <td className="px-4 py-3 text-xs text-slate-600 align-top whitespace-nowrap">{(parsePerformer(item.description)?.email) || item.performedBy || "Unknown"}</td>
                     <td className="px-4 py-3 text-xs text-slate-500 align-top min-w-[180px] max-w-[280px] whitespace-normal break-words">{item.description}</td>
                   </tr>
                 ))}

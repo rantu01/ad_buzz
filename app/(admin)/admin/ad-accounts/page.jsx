@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback, useMemo } from "react";
 import Swal from "sweetalert2";
-import { Megaphone, RefreshCw, UserPlus, UserX, ExternalLink, CheckCircle, XCircle, AlertTriangle, Search, X, ChevronDown, Clock } from "lucide-react";
+import { Megaphone, RefreshCw, UserPlus, UserX, ExternalLink, CheckCircle, XCircle, AlertTriangle, Search, X, ChevronDown, Clock, DollarSign } from "lucide-react";
 import { useAdmin } from "../components/AdminProvider";
 import { hasPermission, ROLES } from "@/lib/permissions";
 import Pagination from "@/app/Component/Pagination";
@@ -32,9 +32,10 @@ export default function AdminAdAccountsPage() {
   const [metaAccounts, setMetaAccounts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+  const [balanceFilter, setBalanceFilter] = useState("");
+  const [assignFilter, setAssignFilter] = useState("");
   const [syncing, setSyncing] = useState(false);
-  const [showUnassigned, setShowUnassigned] = useState(false);
-  const [showAssigned, setShowAssigned] = useState(false);
   const [savingAccounts, setSavingAccounts] = useState({});
   const [users, setUsers] = useState([]);
   const [lastManualRefresh, setLastManualRefresh] = useState(null);
@@ -185,6 +186,42 @@ export default function AdminAdAccountsPage() {
         loadData();
       } else {
         await Swal.fire({ icon: "error", title: "Assign failed", text: data.message });
+      }
+    } catch (err) {
+      await Swal.fire({ icon: "error", title: "Error", text: err.message });
+    }
+  };
+
+  const handleTopUp = async (acc) => {
+    const { value: amount } = await Swal.fire({
+      title: `Top-Up ${acc.name || acc.metaAccountId}`,
+      input: "number",
+      inputLabel: "Amount (USD)",
+      inputPlaceholder: "Enter amount",
+      showCancelButton: true,
+      confirmButtonText: "Top Up",
+      confirmButtonColor: "#E05305",
+      inputValidator: (v) => (!v || Number(v) <= 0 ? "Enter a positive amount" : null),
+    });
+    if (!amount) return;
+    try {
+      const res = await fetch("/api/admin/ad-accounts/top-up", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          accountId: acc._id,
+          amount: Number(amount),
+          performedBy: profile?.displayName || profile?.email || "Admin",
+          performedByRole: profile?.role,
+          performedByEmail: profile?.email,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        await Swal.fire({ icon: "success", title: "Top-up successful", timer: 1500, showConfirmButton: false });
+        loadData();
+      } else {
+        await Swal.fire({ icon: "error", title: "Top-up failed", text: data.message });
       }
     } catch (err) {
       await Swal.fire({ icon: "error", title: "Error", text: err.message });
@@ -353,14 +390,23 @@ export default function AdminAdAccountsPage() {
     const meta = acc.metaAccountId ? metaByAccountId[acc.metaAccountId] : null;
     return { ...acc, _meta: meta };
   }).filter((a) => {
-    if (showUnassigned && a.uid) return false;
-    if (showAssigned && !a.uid) return false;
-    if (!search) return true;
-    const q = search.toLowerCase();
-    return a.name?.toLowerCase().includes(q) || a.accountId?.toLowerCase().includes(q) || a.email?.toLowerCase().includes(q) || a.uid?.toLowerCase().includes(q);
+    if (search) {
+      const q = search.toLowerCase();
+      if (!a.name?.toLowerCase().includes(q) && !a.accountId?.toLowerCase().includes(q) && !a.email?.toLowerCase().includes(q) && !a.uid?.toLowerCase().includes(q)) return false;
+    }
+    if (statusFilter && a.status !== statusFilter) return false;
+    if (assignFilter === "assigned" && !a.uid) return false;
+    if (assignFilter === "unassigned" && a.uid) return false;
+    if (balanceFilter) {
+      const budget = Number(a.metaSpendCap || a.spendCap || 0);
+      const spent = Number(a.metaAmountSpent || 0);
+      const remaining = budget - spent;
+      if (remaining >= Number(balanceFilter)) return false;
+    }
+    return true;
   });
 
-  useEffect(() => { setPage(1); }, [search, showUnassigned, showAssigned]);
+  useEffect(() => { setPage(1); }, [search, statusFilter, balanceFilter, assignFilter]);
 
   const totalPages = Math.ceil(filtered.length / ITEMS_PER_PAGE);
   const paginatedAccounts = filtered.slice((page - 1) * ITEMS_PER_PAGE, page * ITEMS_PER_PAGE);
@@ -405,14 +451,25 @@ export default function AdminAdAccountsPage() {
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm mb-6">
         <div className="p-4 border-b border-slate-100 flex flex-wrap items-center gap-3">
           <input type="text" placeholder="Search by name, account ID, email, or UID..." value={search} onChange={(e) => setSearch(e.target.value)} className="border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white flex-1 max-w-md" />
-          <label className="flex items-center gap-2 text-sm text-slate-600 cursor-pointer select-none">
-            <input type="checkbox" checked={showUnassigned} onChange={() => setShowUnassigned(!showUnassigned)} className="w-4 h-4 rounded border-slate-300 text-[#E05305] focus:ring-[#E05305]" />
-            Show unassigned only
-          </label>
-          <label className="flex items-center gap-2 text-sm text-slate-600 cursor-pointer select-none">
-            <input type="checkbox" checked={showAssigned} onChange={() => setShowAssigned(!showAssigned)} className="w-4 h-4 rounded border-slate-300 text-[#E05305] focus:ring-[#E05305]" />
-            Show assigned only
-          </label>
+          <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white">
+            <option value="">All Statuses</option>
+            <option value="active">Active</option>
+            <option value="paused">Paused</option>
+            <option value="disabled">Disabled</option>
+          </select>
+          <select value={balanceFilter} onChange={(e) => setBalanceFilter(e.target.value)} className="border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white">
+            <option value="">All Balances</option>
+            <option value="10">Under $10</option>
+            <option value="20">Under $20</option>
+            <option value="30">Under $30</option>
+            <option value="50">Under $50</option>
+            <option value="100">Under $100</option>
+          </select>
+          <select value={assignFilter} onChange={(e) => setAssignFilter(e.target.value)} className="border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white">
+            <option value="">All Assignments</option>
+            <option value="assigned">Assigned</option>
+            <option value="unassigned">Unassigned</option>
+          </select>
         </div>
       </div>
 
@@ -426,19 +483,19 @@ export default function AdminAdAccountsPage() {
               <thead>
                 <tr className="bg-slate-50 text-slate-400 text-xs font-bold uppercase tracking-wider border-b border-slate-200">
                     <th className="py-3 px-4">Name / Account ID</th>
-                    <th className="py-3 px-4">User</th>
-                    <th className="py-3 px-4">Local Status</th>
-                    <th className="py-3 px-4">Meta Status</th>
-                    {isAdmin && <th className="py-3 px-4">Budget</th>}
-                    <th className="py-3 px-4">Amount Spent</th>
-                    <th className="py-3 px-4">Sync</th>
+                    <th className="py-3 px-4">Account Status</th>
+                    <th className="py-3 px-4">Overview</th>
+                    <th className="py-3 px-4">Meta Balance</th>
+                    {isAdmin && <th className="py-3 px-4">User</th>}
+                    <th className="py-3 px-4">Sync Info</th>
                     <th className="py-3 px-4">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-sm">
                 {paginatedAccounts.map((acc) => {
                   const budgetDollars = Number(acc.metaSpendCap || acc.spendCap || 0);
-                  const spendPct = budgetDollars > 0 ? Math.min((acc.spent / budgetDollars) * 100, 100) : 0;
+                  const amountSpent = Number(acc.metaAmountSpent || 0);
+                  const remainingBalance = budgetDollars - amountSpent;
                   const meta = acc._meta;
                   return (
                     <tr key={acc._id} className="hover:bg-slate-50/40">
@@ -449,48 +506,37 @@ export default function AdminAdAccountsPage() {
                         <p className="text-xs font-mono text-blue-600 mt-0.5">{acc.metaAccountId || acc.accountId}</p>
                       </td>
                       <td className="py-3 px-4">
-                        {acc.uid ? (
-                          <div className="text-xs">
-                            <p className="text-slate-900 truncate max-w-[160px]">{acc.email || "\u2014"}</p>
-                            <p className="text-slate-400 font-mono">{acc.uid?.slice(0, 20)}...</p>
-                          </div>
-                        ) : (
-                          <span className="text-xs text-slate-400 italic">Unassigned</span>
-                        )}
-                      </td>
-                      <td className="py-3 px-4">
-                        <select defaultValue={acc.status || "active"} onChange={(e) => updateAccount(acc._id, { status: e.target.value })} className="border border-slate-200 rounded-lg px-2 py-1 text-xs bg-white" disabled={!canManage}>
-                          <option value="active">Active</option>
-                          <option value="paused">Paused</option>
-                          <option value="disabled">Disabled</option>
-                        </select>
-                      </td>
-                      <td className="py-3 px-4">
                         {meta ? getMetaStatusBadge(meta.accountStatus) : (
                           <span className="text-xs text-slate-400 italic">No Meta data</span>
                         )}
                       </td>
-                      {isAdmin && (
-                        <td className="py-3 px-4">
-                          <div className="relative">
-                            <input key={acc.spendCap || 0} type="number" step="0.01" defaultValue={Number(acc.metaSpendCap || acc.spendCap || 0)} className={`border border-slate-200 rounded-lg px-2 py-1 text-sm w-24 bg-white ${savingAccounts[acc._id] ? "opacity-50" : ""}`}
-                              onBlur={(e) => { const newVal = Number(e.target.value); const oldVal = Number(acc.metaSpendCap || acc.spendCap || 0); if (newVal !== oldVal) updateAccount(acc._id, { spendCap: newVal }); }}
-                              disabled={savingAccounts[acc._id] || !canManage} />
-                            {savingAccounts[acc._id] && (
-                              <RefreshCw size={14} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 animate-spin" />
-                            )}
+                      <td className="py-3 px-4 min-w-[160px]">
+                        <div className="text-xs space-y-1">
+                          <div>
+                            <span className="text-slate-500">Remaining Balance: </span>
+                            <span className="font-semibold text-slate-800">${formatMoney(Math.max(remainingBalance, 0))}</span>
                           </div>
-                        </td>
-                      )}
-                      <td className="py-3 px-4">
-                        <span className="font-medium">${formatMoney(Number(acc.metaAmountSpent || 0))}</span>
-                        <div className="flex items-center gap-2 mt-1">
-                          <div className="w-16 bg-slate-100 h-1.5 rounded-full overflow-hidden">
-                            <div className={`h-full rounded-full ${spendPct > 90 ? "bg-red-500" : spendPct > 70 ? "bg-amber-500" : "bg-emerald-500"}`} style={{ width: `${spendPct}%` }} />
+                          <div>
+                            <span className="text-slate-500">Top-Up This Month: </span>
+                            <span className="font-semibold text-emerald-600">${formatMoney(Number(acc.currentMonthTopUp || 0))}</span>
                           </div>
-                          <span className="text-xs text-slate-400">${formatMoney(acc.spent)} this month</span>
                         </div>
                       </td>
+                      <td className="py-3 px-4">
+                        <span className={`font-semibold ${Number(acc.metaBalance) > 0 ? "text-emerald-600" : "text-slate-600"}`}>${formatMoney(Number(acc.metaBalance || 0))}</span>
+                      </td>
+                      {isAdmin && (
+                        <td className="py-3 px-4">
+                          {acc.uid ? (
+                            <div className="text-xs">
+                              <p className="text-slate-900 truncate max-w-[160px]">{acc.email || "\u2014"}</p>
+                              <p className="text-slate-400 font-mono">{acc.uid?.slice(0, 20)}...</p>
+                            </div>
+                          ) : (
+                            <span className="text-xs text-slate-400 italic">Unassigned</span>
+                          )}
+                        </td>
+                      )}
                       <td className="py-3 px-4">
                         <div className="flex items-center gap-1.5">
                           {acc.syncStatus === "synced" ? <CheckCircle size={14} className="text-emerald-500" /> : acc.syncStatus === "error" ? <XCircle size={14} className="text-red-500" /> : <AlertTriangle size={14} className="text-amber-400" />}
@@ -501,13 +547,18 @@ export default function AdminAdAccountsPage() {
                       </td>
                       <td className="py-3 px-4">
                         <div className="flex items-center gap-1">
+                          {canManage && (
+                            <button onClick={() => handleTopUp(acc)} className="text-emerald-600 hover:text-emerald-800 border border-emerald-200 hover:bg-emerald-50 p-1.5 rounded-lg transition text-xs font-medium flex items-center gap-1">
+                              <DollarSign size={13} /> Top-Up
+                            </button>
+                          )}
                           {acc.uid && canAssign ? (
-                            <button onClick={() => handleUnassign(acc._id, acc.name)} className="text-amber-600 hover:text-amber-800 hover:bg-amber-50 p-1.5 rounded-lg transition text-xs font-medium flex items-center gap-1">
+                            <button onClick={() => handleUnassign(acc._id, acc.name)} className="text-amber-600 hover:text-amber-800 border border-amber-200 hover:bg-amber-50 p-1.5 rounded-lg transition text-xs font-medium flex items-center gap-1">
                               <UserX size={13} /> Unassign
                             </button>
                           ) : null}
-                          {canManage && (
-                            <button onClick={() => deleteAccount(acc._id)} className="text-red-500 hover:text-red-700 hover:bg-red-50 p-1.5 rounded-lg transition text-xs font-medium">Delete</button>
+                          {isAdmin && (
+                            <button onClick={() => deleteAccount(acc._id)} className="text-red-500 border border-red-200 hover:text-red-700 hover:bg-red-50 p-1.5 rounded-lg transition text-xs font-medium">Delete</button>
                           )}
                         </div>
                       </td>
