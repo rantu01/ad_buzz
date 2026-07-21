@@ -503,7 +503,7 @@ export default function AdminAdAccountsPage() {
                         <input defaultValue={acc.name || ""} className="border border-transparent hover:border-slate-200 focus:border-blue-400 rounded px-1.5 py-0.5 text-sm font-medium w-full bg-transparent focus:bg-white transition"
                           onBlur={(e) => { if (e.target.value !== acc.name) updateAccount(acc._id, { name: e.target.value }); }}
                           disabled={!canManage} />
-                        <p className="text-xs font-mono text-blue-600 mt-0.5">{acc.metaAccountId || acc.accountId}</p>
+                        <p className="text-xs font-mono text-blue-600 mt-0.5">ID: {(acc.metaAccountId || acc.accountId || "").replace(/^act_/, "")}</p>
                       </td>
                       <td className="py-3 px-4">
                         {meta ? getMetaStatusBadge(meta.accountStatus) : (
