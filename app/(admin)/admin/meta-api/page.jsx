@@ -268,7 +268,7 @@ export default function MetaApiSettingsPage() {
                     {paginatedMetaAccounts.map((acc, i) => (
                       <tr key={acc.metaAccountId || i} className="hover:bg-slate-50/40">
                         <td className="py-3 px-4 font-medium max-w-[200px] truncate">{acc.name}</td>
-                        <td className="py-3 px-4 font-mono text-xs text-blue-600">{acc.metaAccountId}</td>
+                        <td className="py-3 px-4 font-mono text-xs text-blue-600">ID: {(acc.metaAccountId || "").replace(/^act_/, "")}</td>
                         <td className="py-3 px-4">
                           <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${acc.accountStatus === 1 ? "bg-emerald-50 text-emerald-700" : acc.accountStatus === 2 ? "bg-amber-50 text-amber-700" : "bg-red-50 text-red-700"}`}>
                             {acc.accountStatus === 1 ? "Active" : acc.accountStatus === 2 ? "Disabled" : `Status ${acc.accountStatus}`}

@@ -34,6 +34,7 @@ export default function AdminAdAccountsPage() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [balanceFilter, setBalanceFilter] = useState("");
+  const [metaBalanceFilter, setMetaBalanceFilter] = useState("");
   const [assignFilter, setAssignFilter] = useState("");
   const [syncing, setSyncing] = useState(false);
   const [savingAccounts, setSavingAccounts] = useState({});
@@ -42,6 +43,7 @@ export default function AdminAdAccountsPage() {
   const [lastOverallSync, setLastOverallSync] = useState(null);
 
   const [assignModal, setAssignModal] = useState(false);
+  const [assignTab, setAssignTab] = useState("accounts");
   const [importModal, setImportModal] = useState(false);
   const [importing, setImporting] = useState(false);
   const [selectedAccounts, setSelectedAccounts] = useState([]);
@@ -194,7 +196,7 @@ export default function AdminAdAccountsPage() {
 
   const handleTopUp = async (acc) => {
     const { value: amount } = await Swal.fire({
-      title: `Top-Up ${acc.name || acc.metaAccountId}`,
+      title: `Top-Up ${acc.name || `ID: ${(acc.metaAccountId || acc.accountId || "").replace(/^act_/, "")}`}`,
       input: "number",
       inputLabel: "Amount (USD)",
       inputPlaceholder: "Enter amount",
@@ -401,12 +403,30 @@ export default function AdminAdAccountsPage() {
       const budget = Number(a.metaSpendCap || a.spendCap || 0);
       const spent = Number(a.metaAmountSpent || 0);
       const remaining = budget - spent;
-      if (remaining >= Number(balanceFilter)) return false;
+      if (balanceFilter === "under10" && remaining >= 10) return false;
+      if (balanceFilter === "20-30" && (remaining < 20 || remaining > 30)) return false;
+      if (balanceFilter === "50-60" && (remaining < 50 || remaining > 60)) return false;
+      if (balanceFilter === "above100" && remaining <= 100) return false;
+    }
+    if (metaBalanceFilter) {
+      const metaBal = Number(a.metaBalance || 0);
+      if (metaBalanceFilter === "50-100" && (metaBal < 50 || metaBal > 100)) return false;
+      if (metaBalanceFilter === "100-250" && (metaBal < 100 || metaBal > 250)) return false;
+      if (metaBalanceFilter === "above250" && metaBal <= 250) return false;
     }
     return true;
   });
 
-  useEffect(() => { setPage(1); }, [search, statusFilter, balanceFilter, assignFilter]);
+  useEffect(() => { setPage(1); }, [search, statusFilter, balanceFilter, metaBalanceFilter, assignFilter]);
+
+  useEffect(() => {
+    if (assignModal) {
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "";
+    }
+    return () => { document.body.style.overflow = ""; };
+  }, [assignModal]);
 
   const totalPages = Math.ceil(filtered.length / ITEMS_PER_PAGE);
   const paginatedAccounts = filtered.slice((page - 1) * ITEMS_PER_PAGE, page * ITEMS_PER_PAGE);
@@ -458,12 +478,17 @@ export default function AdminAdAccountsPage() {
             <option value="disabled">Disabled</option>
           </select>
           <select value={balanceFilter} onChange={(e) => setBalanceFilter(e.target.value)} className="border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white">
-            <option value="">All Balances</option>
-            <option value="10">Under $10</option>
-            <option value="20">Under $20</option>
-            <option value="30">Under $30</option>
-            <option value="50">Under $50</option>
-            <option value="100">Under $100</option>
+            <option value="">All Remaining Balances</option>
+            <option value="under10">Under $10</option>
+            <option value="20-30">$20 – $30</option>
+            <option value="50-60">$50 – $60</option>
+            <option value="above100">Above $100</option>
+          </select>
+          <select value={metaBalanceFilter} onChange={(e) => setMetaBalanceFilter(e.target.value)} className="border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white">
+            <option value="">All Meta Balances</option>
+            <option value="50-100">$50 – $100</option>
+            <option value="100-250">$100 – $250</option>
+            <option value="above250">Above $250</option>
           </select>
           <select value={assignFilter} onChange={(e) => setAssignFilter(e.target.value)} className="border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white">
             <option value="">All Assignments</option>
@@ -613,81 +638,91 @@ export default function AdminAdAccountsPage() {
               <button onClick={() => setAssignModal(false)} className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-100 transition"><X size={20} /></button>
             </div>
 
-            <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
-              <div className="lg:w-2/5 border-b lg:border-b-0 lg:border-r border-slate-200 flex flex-col overflow-hidden">
-                <div className="p-4 border-b border-slate-100 shrink-0">
-                  <h3 className="text-sm font-semibold text-slate-700 mb-3">Select User</h3>
-                  <div className="relative">
-                    <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                    <input type="text" placeholder="Search by name, email, or UID..." value={userSearch} onChange={(e) => setUserSearch(e.target.value)}
-                      className="w-full pl-8 pr-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500" />
-                  </div>
-                </div>
-                <div className="flex-1 overflow-y-auto">
-                  {filteredUsers.length > 0 ? filteredUsers.map((u) => {
-                    const isSelected = selectedUser?.uid === u.uid;
-                    return (
-                      <button key={u.uid} onClick={() => { setSelectedUser(u); }}
-                        className={`w-full flex items-center gap-3 px-4 py-3 text-left text-sm hover:bg-slate-50 transition ${isSelected ? "bg-[#E05305]/5 border-l-2 border-[#E05305]" : ""}`}>
-                        <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${isSelected ? "bg-[#E05305] text-white" : "bg-slate-100 text-slate-600"}`}>
-                          {(u.displayName || u.email || "U").charAt(0).toUpperCase()}
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <p className="text-sm font-medium text-slate-900 truncate">{u.displayName || "Unnamed User"}</p>
-                          <p className="text-xs text-slate-400 truncate">{u.email}</p>
-                        </div>
-                        {isSelected && <CheckCircle size={16} className="text-[#E05305] shrink-0" />}
-                      </button>
-                    );
-                  }) : <p className="p-4 text-sm text-slate-400 text-center">No users found</p>}
-                </div>
+            <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+              <div className="flex border-b border-slate-200 shrink-0">
+                <button onClick={() => setAssignTab("accounts")} className={`flex-1 px-4 py-3 text-sm font-medium text-center transition ${assignTab === "accounts" ? "text-[#E05305] border-b-2 border-[#E05305]" : "text-slate-500 hover:text-slate-700"}`}>
+                  Select Accounts
+                </button>
+                <button onClick={() => setAssignTab("user")} className={`flex-1 px-4 py-3 text-sm font-medium text-center transition ${assignTab === "user" ? "text-[#E05305] border-b-2 border-[#E05305]" : "text-slate-500 hover:text-slate-700"}`}>
+                  Select User
+                </button>
               </div>
-
-              <div className="lg:w-3/5 flex flex-col overflow-hidden">
-                <div className="p-4 border-b border-slate-100 space-y-3 shrink-0">
-                  <div className="flex items-center justify-between">
-                    <h3 className="text-sm font-semibold text-slate-700">Select Accounts <span className="ml-2 text-xs text-slate-400 font-normal">{unassignedAccounts.length} unassigned</span></h3>
-                    <div className="flex items-center gap-2">
-                      <button onClick={selectAllUnassigned} className="text-xs text-blue-600 hover:text-blue-800 font-medium">Select All</button>
-                      <span className="text-xs text-slate-300">|</span>
-                      <button onClick={deselectAll} className="text-xs text-slate-500 hover:text-slate-700 font-medium">Clear</button>
+              {assignTab === "accounts" ? (
+                <div className="flex-1 flex flex-col min-h-0">
+                  <div className="p-4 border-b border-slate-100 space-y-3 shrink-0">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-sm font-semibold text-slate-700">Select Accounts <span className="ml-2 text-xs text-slate-400 font-normal">{unassignedAccounts.length} unassigned</span></h3>
+                      <div className="flex items-center gap-2">
+                        <button onClick={selectAllUnassigned} className="text-xs text-blue-600 hover:text-blue-800 font-medium">Select All</button>
+                        <span className="text-xs text-slate-300">|</span>
+                        <button onClick={deselectAll} className="text-xs text-slate-500 hover:text-slate-700 font-medium">Clear</button>
+                      </div>
+                    </div>
+                    <div className="relative">
+                      <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                      <input type="text" placeholder="Search accounts by name or ID..." value={accountSearch} onChange={(e) => setAccountSearch(e.target.value)}
+                        className="w-full pl-8 pr-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500" />
                     </div>
                   </div>
-                  <div className="relative">
-                    <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                    <input type="text" placeholder="Search accounts by name or ID..." value={accountSearch} onChange={(e) => setAccountSearch(e.target.value)}
-                      className="w-full pl-8 pr-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500" />
+                  <div className="flex-1 overflow-y-auto min-h-0">
+                    {unassignedAccounts.length > 0 ? (
+                      <div className="divide-y divide-slate-100">
+                        {(accountSearch
+                          ? unassignedAccounts.filter((a) => {
+                              const q = accountSearch.toLowerCase();
+                              return a.name?.toLowerCase().includes(q) || a.metaAccountId?.toLowerCase().includes(q) || a.accountId?.toLowerCase().includes(q);
+                            })
+                          : unassignedAccounts
+                        ).map((acc) => {
+                          const isSelected = selectedAccounts.includes(acc._id);
+                          return (
+                            <label key={acc._id} className={`flex items-center gap-3 px-4 py-3 cursor-pointer transition ${isSelected ? "bg-[#E05305]/5" : "hover:bg-slate-50"}`}>
+                              <input type="checkbox" checked={isSelected} onChange={() => toggleAccountSelection(acc._id)} className="w-4 h-4 rounded border-slate-300 text-[#E05305] focus:ring-[#E05305] shrink-0" />
+                              <div className="min-w-0 flex-1">
+                                <p className="text-sm font-medium text-slate-900 truncate">{acc.name}</p>
+                                <p className="text-xs text-slate-400 font-mono truncate">ID: {(acc.metaAccountId || acc.accountId || "").replace(/^act_/, "")}</p>
+                              </div>
+                              <div className="text-right shrink-0">
+                                <p className="text-sm font-semibold text-slate-900">${formatMoney(Number(acc.metaSpendCap || acc.spendCap || 0))}</p>
+                                <p className="text-xs text-slate-400">{acc.currency || "USD"}</p>
+                              </div>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    ) : <div className="p-8 text-center"><Megaphone size={32} className="mx-auto text-slate-300 mb-2" /><p className="text-sm text-slate-500">No unassigned accounts</p></div>}
                   </div>
                 </div>
-                <div className="flex-1 overflow-y-auto">
-                  {unassignedAccounts.length > 0 ? (
-                    <div className="divide-y divide-slate-100">
-                      {(accountSearch
-                        ? unassignedAccounts.filter((a) => {
-                            const q = accountSearch.toLowerCase();
-                            return a.name?.toLowerCase().includes(q) || a.metaAccountId?.toLowerCase().includes(q) || a.accountId?.toLowerCase().includes(q);
-                          })
-                        : unassignedAccounts
-                      ).map((acc) => {
-                        const isSelected = selectedAccounts.includes(acc._id);
-                        return (
-                          <label key={acc._id} className={`flex items-center gap-3 px-4 py-3 cursor-pointer transition ${isSelected ? "bg-[#E05305]/5" : "hover:bg-slate-50"}`}>
-                            <input type="checkbox" checked={isSelected} onChange={() => toggleAccountSelection(acc._id)} className="w-4 h-4 rounded border-slate-300 text-[#E05305] focus:ring-[#E05305] shrink-0" />
-                            <div className="min-w-0 flex-1">
-                              <p className="text-sm font-medium text-slate-900 truncate">{acc.name}</p>
-                              <p className="text-xs text-slate-400 font-mono truncate">{acc.metaAccountId || acc.accountId}</p>
-                            </div>
-                            <div className="text-right shrink-0">
-                              <p className="text-sm font-semibold text-slate-900">${formatMoney(Number(acc.metaSpendCap || acc.spendCap || 0))}</p>
-                              <p className="text-xs text-slate-400">{acc.currency || "USD"}</p>
-                            </div>
-                          </label>
-                        );
-                      })}
+              ) : (
+                <div className="flex-1 flex flex-col min-h-0">
+                  <div className="p-4 border-b border-slate-100 shrink-0">
+                    <h3 className="text-sm font-semibold text-slate-700 mb-3">Select User</h3>
+                    <div className="relative">
+                      <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                      <input type="text" placeholder="Search by name, email, or UID..." value={userSearch} onChange={(e) => setUserSearch(e.target.value)}
+                        className="w-full pl-8 pr-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500" />
                     </div>
-                  ) : <div className="p-8 text-center"><Megaphone size={32} className="mx-auto text-slate-300 mb-2" /><p className="text-sm text-slate-500">No unassigned accounts</p></div>}
+                  </div>
+                  <div className="flex-1 overflow-y-auto min-h-0">
+                    {filteredUsers.length > 0 ? filteredUsers.map((u) => {
+                      const isSelected = selectedUser?.uid === u.uid;
+                      return (
+                        <button key={u.uid} onClick={() => { setSelectedUser(u); }}
+                          className={`w-full flex items-center gap-3 px-4 py-3 text-left text-sm hover:bg-slate-50 transition ${isSelected ? "bg-[#E05305]/5 border-l-2 border-[#E05305]" : ""}`}>
+                          <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${isSelected ? "bg-[#E05305] text-white" : "bg-slate-100 text-slate-600"}`}>
+                            {(u.displayName || u.email || "U").charAt(0).toUpperCase()}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-medium text-slate-900 truncate">{u.displayName || "Unnamed User"}</p>
+                            <p className="text-xs text-slate-400 truncate">{u.email}</p>
+                          </div>
+                          {isSelected && <CheckCircle size={16} className="text-[#E05305] shrink-0" />}
+                        </button>
+                      );
+                    }) : <p className="p-4 text-sm text-slate-400 text-center">No users found</p>}
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
 
             <div className="px-6 py-4 border-t border-slate-200 flex items-center justify-between shrink-0">

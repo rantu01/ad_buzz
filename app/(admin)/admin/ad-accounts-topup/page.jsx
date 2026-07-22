@@ -312,7 +312,7 @@ export default function AdminAdAccountsTopUpPage() {
                 return (
                   <tr key={acc._id} className="hover:bg-slate-50/60 transition-colors">
                     <td className="py-4 pr-4 font-medium text-slate-900 max-w-[220px] truncate">{acc.metaAccountName || acc.name}</td>
-                    <td className="py-4 pr-4 font-mono text-xs text-blue-600">{acc.metaAccountId || acc.accountId}</td>
+                    <td className="py-4 pr-4 font-mono text-xs text-blue-600">ID: {(acc.metaAccountId || acc.accountId || "").replace(/^act_/, "")}</td>
                     <td className="py-4 pr-4">
                       {getStatusBadge(acc.status, acc.metaStatusLabel)}
                     </td>

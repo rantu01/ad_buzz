@@ -145,7 +145,7 @@ export default function SupportTicketsPage() {
                   <option value="">{adAccounts.length === 0 ? "-- No accounts available --" : "-- Select an account --"}</option>
                   {adAccounts.map((a) => (
                     <option key={a._id} value={a._id}>
-                      {a.metaAccountName || a.name} ({a.metaAccountId || a.accountId})
+                      {a.metaAccountName || a.name} (ID: {(a.metaAccountId || a.accountId || "").replace(/^act_/, "")})
                     </option>
                   ))}
                 </select>

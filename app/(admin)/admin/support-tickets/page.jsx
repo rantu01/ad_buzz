@@ -124,7 +124,7 @@ export default function SupportTicketsPage() {
                     <p className="text-sm font-semibold text-slate-900 truncate">{t.subject}</p>
                     <p className="text-xs text-slate-500 truncate mt-0.5">{t.email}</p>
                     {t.adAccountName && (
-                      <p className="text-xs text-amber-600 truncate mt-0.5">Ad Account: {t.adAccountName}{t.adAccountMetaId ? ` (${t.adAccountMetaId})` : ""}</p>
+                      <p className="text-xs text-amber-600 truncate mt-0.5">Ad Account: {t.adAccountName}{t.adAccountMetaId ? ` (ID: ${t.adAccountMetaId.replace(/^act_/, "")})` : ""}</p>
                     )}
                     <p className="text-xs text-slate-400 mt-1 line-clamp-2">{t.message}</p>
                   </div>
@@ -153,7 +153,7 @@ export default function SupportTicketsPage() {
                   </p>
                   {selected.adAccountName && (
                     <p className="text-xs text-amber-600 mt-1.5 font-medium">
-                      Ad Account: {selected.adAccountName}{selected.adAccountMetaId ? ` (Meta ID: ${selected.adAccountMetaId})` : ""}
+                      Ad Account: {selected.adAccountName}{selected.adAccountMetaId ? ` (ID: ${selected.adAccountMetaId.replace(/^act_/, "")})` : ""}
                     </p>
                   )}
                 <p className="mt-3 text-sm text-slate-700 bg-slate-50 rounded-xl p-4">{selected.message}</p>

@@ -251,7 +251,7 @@ export default function ReportsPage() {
                     const budgetDollars = Number(a.spendCap || 0);
                     const util = budgetDollars > 0 ? (a.spent / budgetDollars) * 100 : 0;
                     return (<tr key={a._id || i} className="hover:bg-slate-50/40">
-                      <td className="py-3 px-4 max-w-[200px]"><p className="font-medium text-slate-900 truncate">{a.name}</p><p className="text-xs font-mono text-blue-600 truncate">{a.metaAccountId || a.accountId}</p></td>
+                      <td className="py-3 px-4 max-w-[200px]"><p className="font-medium text-slate-900 truncate">{a.name}</p><p className="text-xs font-mono text-blue-600 truncate">ID: {(a.metaAccountId || a.accountId || "").replace(/^act_/, "")}</p></td>
                       <td className="py-3 px-4"><span className={`text-xs px-2 py-0.5 rounded-full font-medium ${a.status === "active" ? "bg-emerald-50 text-emerald-700" : a.status === "paused" ? "bg-amber-50 text-amber-700" : "bg-slate-100 text-slate-600"}`}>{a.status}</span></td>
                       <td className="py-3 px-4 font-medium">${formatMoney(budgetDollars)}</td>
                       <td className="py-3 px-4">${formatMoney(a.spent)}</td>
