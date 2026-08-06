@@ -411,8 +411,9 @@ export default function AdminAdAccountsPage() {
     if (metaBalanceFilter) {
       const metaBal = Number(a.metaBalance || 0);
       if (metaBalanceFilter === "50-100" && (metaBal < 50 || metaBal > 100)) return false;
-      if (metaBalanceFilter === "100-250" && (metaBal < 100 || metaBal > 250)) return false;
-      if (metaBalanceFilter === "above250" && metaBal <= 250) return false;
+      if (metaBalanceFilter === "100-200" && (metaBal < 100 || metaBal > 200)) return false;
+      if (metaBalanceFilter === "200-300" && (metaBal < 200 || metaBal > 300)) return false;
+      if (metaBalanceFilter === "above300" && metaBal <= 300) return false;
     }
     return true;
   });
@@ -487,8 +488,9 @@ export default function AdminAdAccountsPage() {
           <select value={metaBalanceFilter} onChange={(e) => setMetaBalanceFilter(e.target.value)} className="border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white">
             <option value="">All Meta Balances</option>
             <option value="50-100">$50 – $100</option>
-            <option value="100-250">$100 – $250</option>
-            <option value="above250">Above $250</option>
+            <option value="100-200">$100 – $200</option>
+            <option value="200-300">$200 – $300</option>
+            <option value="above300">Above $300</option>
           </select>
           <select value={assignFilter} onChange={(e) => setAssignFilter(e.target.value)} className="border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white">
             <option value="">All Assignments</option>
@@ -524,7 +526,7 @@ export default function AdminAdAccountsPage() {
                   const meta = acc._meta;
                   return (
                     <tr key={acc._id} className="hover:bg-slate-50/40">
-                      <td className="py-3 px-4 max-w-[220px]">
+                      <td className="py-3 px-4 min-w-[330px] whitespace-nowrap">
                         <input defaultValue={acc.name || ""} className="border border-transparent hover:border-slate-200 focus:border-blue-400 rounded px-1.5 py-0.5 text-sm font-medium w-full bg-transparent focus:bg-white transition"
                           onBlur={(e) => { if (e.target.value !== acc.name) updateAccount(acc._id, { name: e.target.value }); }}
                           disabled={!canManage} />

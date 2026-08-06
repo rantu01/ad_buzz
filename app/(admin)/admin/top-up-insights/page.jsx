@@ -1,11 +1,18 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useAdmin } from "../components/AdminProvider";
 import { ROLES, ROLE_LABELS } from "@/lib/permissions";
 import Pagination from "@/app/Component/Pagination";
+import { ChevronLeft, ChevronRight, CalendarDays, CalendarRange } from "lucide-react";
 
 const ITEMS_PER_PAGE = 20;
+
+const ROLE_METRICS = [
+  { key: "admin", label: "Topup By Admin" },
+  { key: "key_manager", label: "Topup By Key Manager" },
+  { key: "accounts_manager", label: "Topup By Accounts Manager" },
+];
 
 function getUsername(email) {
   if (!email) return "";
@@ -27,30 +34,101 @@ const labelToRole = Object.fromEntries(
   Object.entries(ROLE_LABELS).map(([k, v]) => [v, k])
 );
 
+function startOfDay(d) {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+}
+
+function startOfMonth(d) {
+  return new Date(d.getFullYear(), d.getMonth(), 1);
+}
+
+function addDays(d, n) {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate() + n);
+}
+
+function addMonths(d, n) {
+  return new Date(d.getFullYear(), d.getMonth() + n, 1);
+}
+
+function fmtDay(d) {
+  return d.toLocaleDateString(undefined, { weekday: "long", year: "numeric", month: "long", day: "numeric" });
+}
+
+function fmtMonth(d) {
+  return d.toLocaleDateString(undefined, { month: "long", year: "numeric" });
+}
+
+function StatCard({ label, value, sub }) {
+  return (
+    <div className="bg-white rounded-xl border border-slate-200 p-5">
+      <p className="text-sm text-slate-500">{label}</p>
+      <p className="text-3xl font-bold text-slate-900 mt-1">{value}</p>
+      {sub ? <p className="text-xs text-slate-400 mt-1">{sub}</p> : null}
+    </div>
+  );
+}
+
 export default function TopUpInsightsPage() {
   const { profile, loading: profileLoading } = useAdmin();
-  const [insights, setInsights] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [page, setPage] = useState(1);
 
   const role = profile?.role;
   const isAdmin = role === ROLES.ADMIN;
   const isKeyManagerOrAccMgr = role === ROLES.KEY_MANAGER || role === ROLES.ACCOUNTS_MANAGER;
 
+  const today = new Date();
+
+  const [selectedDay, setSelectedDay] = useState(() => startOfDay(today));
+  const [selectedMonth, setSelectedMonth] = useState(() => startOfMonth(today));
+  const [tableView, setTableView] = useState("day");
+  const [page, setPage] = useState(1);
+
+  const [overall, setOverall] = useState({ total: 0, totalAmount: 0 });
+  const [dayItems, setDayItems] = useState([]);
+  const [monthItems, setMonthItems] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  const fetchInsights = useCallback(async (params) => {
+    try {
+      const qs = new URLSearchParams(params);
+      const res = await fetch(`/api/admin/top-up-insights?${qs}`);
+      const data = await res.json();
+      return data.success ? data : { insights: [], total: 0, totalAmount: 0 };
+    } catch {
+      return { insights: [], total: 0, totalAmount: 0 };
+    }
+  }, []);
+
   useEffect(() => {
     if (profileLoading) return;
     if (!isAdmin && !isKeyManagerOrAccMgr) return;
+    (async () => {
+      const all = await fetchInsights({ uid: "all" });
+      setOverall({ total: all.total, totalAmount: all.totalAmount });
+      setLoading(false);
+    })();
+  }, [profileLoading, isAdmin, isKeyManagerOrAccMgr, fetchInsights]);
 
-    async function load() {
-      try {
-        const res = await fetch(`/api/admin/top-up-insights?uid=all`);
-        const data = await res.json();
-        if (data.success) setInsights(data.insights || []);
-      } catch { /* ignore */ }
-      finally { setLoading(false); }
-    }
-    load();
-  }, [profileLoading, isAdmin, isKeyManagerOrAccMgr, profile?.uid]);
+  useEffect(() => {
+    if (profileLoading) return;
+    if (!isAdmin && !isKeyManagerOrAccMgr) return;
+    const from = startOfDay(selectedDay);
+    const to = addDays(from, 1);
+    (async () => {
+      const res = await fetchInsights({ uid: "all", from: from.toISOString(), to: to.toISOString() });
+      setDayItems(res.insights || []);
+    })();
+  }, [profileLoading, isAdmin, isKeyManagerOrAccMgr, fetchInsights, selectedDay]);
+
+  useEffect(() => {
+    if (profileLoading) return;
+    if (!isAdmin && !isKeyManagerOrAccMgr) return;
+    const from = startOfMonth(selectedMonth);
+    const to = addMonths(from, 1);
+    (async () => {
+      const res = await fetchInsights({ uid: "all", from: from.toISOString(), to: to.toISOString() });
+      setMonthItems(res.insights || []);
+    })();
+  }, [profileLoading, isAdmin, isKeyManagerOrAccMgr, fetchInsights, selectedMonth]);
 
   if (profileLoading || loading) {
     return <p className="text-slate-500">Loading insights...</p>;
@@ -60,44 +138,41 @@ export default function TopUpInsightsPage() {
     return <p className="text-slate-500">You do not have access to this page.</p>;
   }
 
+  function computeStats(items) {
+    const byRole = {};
+    for (const item of items) {
+      let roleKey = item.performedByRole;
+      if (!roleKey) {
+        const parsed = parsePerformer(item.description);
+        roleKey = parsed ? (labelToRole[parsed.label] || "unknown") : "unknown";
+      }
+      if (!byRole[roleKey]) byRole[roleKey] = { count: 0, amount: 0 };
+      byRole[roleKey].count += 1;
+      byRole[roleKey].amount += Number(item.amount || 0);
+    }
+    return byRole;
+  }
+
+  const dayStart = startOfDay(selectedDay);
+  const dayAmount = dayItems.reduce((s, i) => s + Number(i.amount || 0), 0);
+  const dayStats = computeStats(dayItems);
+  const canNextDay = dayStart.getTime() < startOfDay(today).getTime();
+
+  const monthStart = startOfMonth(selectedMonth);
+  const monthAmount = monthItems.reduce((s, i) => s + Number(i.amount || 0), 0);
+  const monthStats = computeStats(monthItems);
+  const canNextMonth = monthStart.getTime() < startOfMonth(today).getTime();
+
+  const tableItems = tableView === "day" ? dayItems : monthItems;
   const groupedByUser = {};
-  for (const item of insights) {
+  for (const item of tableItems) {
     const key = item.accountUid || "unknown";
     if (!groupedByUser[key]) groupedByUser[key] = [];
     groupedByUser[key].push(item);
   }
 
-  const totalTopUp = insights.reduce((s, i) => s + i.amount, 0);
-
-  const now = new Date();
-  const monthName = now.toLocaleString("default", { month: "long" });
-  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const todayEnd = new Date(todayStart.getTime() + 86400000);
-  const todayItems = insights.filter(i => {
-    const d = new Date(i.createdAt);
-    return d >= todayStart && d < todayEnd;
-  });
-  const todayTransactions = todayItems.length;
-  const todayTopUp = todayItems.reduce((s, i) => s + i.amount, 0);
-
-  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-  const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1);
-  const monthItems = insights.filter(i => {
-    const d = new Date(i.createdAt);
-    return d >= monthStart && d < monthEnd;
-  });
-  const monthByRole = {};
-  for (const item of monthItems) {
-    const parsed = parsePerformer(item.description);
-    const roleKey = parsed ? (labelToRole[parsed.label] || "unknown") : (item.performedByRole || "unknown");
-    if (!monthByRole[roleKey]) monthByRole[roleKey] = { count: 0, amount: 0 };
-    monthByRole[roleKey].count += 1;
-    monthByRole[roleKey].amount += item.amount;
-  }
-  const relevantRoles = ["admin", "key_manager", "accounts_manager"];
-
-  const totalPages = Math.ceil(insights.length / ITEMS_PER_PAGE);
-  const paginatedInsights = insights.slice((page - 1) * ITEMS_PER_PAGE, page * ITEMS_PER_PAGE);
+  const totalPages = Math.ceil(tableItems.length / ITEMS_PER_PAGE);
+  const paginatedItems = tableItems.slice((page - 1) * ITEMS_PER_PAGE, page * ITEMS_PER_PAGE);
 
   return (
     <div>
@@ -107,39 +182,85 @@ export default function TopUpInsightsPage() {
       </p>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8">
+        <StatCard label="Total Transactions" value={overall.total.toLocaleString()} />
+        <StatCard label="Total Top-Up (USD)" value={`$${formatMoney(overall.totalAmount)}`} />
+      </div>
 
-        <div className="bg-white rounded-xl border border-slate-200 p-5">
-          <p className="text-sm text-slate-500">Total Transactions</p>
-          <p className="text-3xl font-bold text-slate-900 mt-1">{insights.length}</p>
+      <div className="mb-8">
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+          <h2 className="text-lg font-semibold text-slate-800 flex items-center gap-2">
+            <CalendarDays size={18} className="text-slate-400" /> Day-wise Topup Insights
+          </h2>
+          <div className="flex items-center gap-2">
+            <button onClick={() => { setSelectedDay((d) => addDays(d, -1)); setPage(1); }} className="border border-slate-200 text-slate-600 rounded-lg p-2 hover:bg-slate-50 transition">
+              <ChevronLeft size={16} />
+            </button>
+            <span className="text-sm font-medium text-slate-700 min-w-[220px] text-center">{fmtDay(selectedDay)}</span>
+            <button onClick={() => { if (canNextDay) { setSelectedDay((d) => addDays(d, 1)); setPage(1); } }} disabled={!canNextDay} className="border border-slate-200 text-slate-600 rounded-lg p-2 hover:bg-slate-50 transition disabled:opacity-40 disabled:cursor-not-allowed">
+              <ChevronRight size={16} />
+            </button>
+          </div>
         </div>
-        <div className="bg-white rounded-xl border border-slate-200 p-5">
-          <p className="text-sm text-slate-500">Total Top-Up (USD)</p>
-          <p className="text-3xl font-bold text-emerald-600 mt-1">${formatMoney(totalTopUp)}</p>
-        </div>
-        <div className="bg-white rounded-xl border border-slate-200 p-5">
-          <p className="text-sm text-slate-500">Today's Transactions</p>
-          <p className="text-3xl font-bold text-slate-900 mt-1">{todayTransactions}</p>
-        </div>
-        <div className="bg-white rounded-xl border border-slate-200 p-5">
-          <p className="text-sm text-slate-500">Today's Top-Up (USD)</p>
-          <p className="text-3xl font-bold text-emerald-600 mt-1">${formatMoney(todayTopUp)}</p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+          <StatCard label="Total Transactions" value={dayItems.length.toLocaleString()} />
+          <StatCard label="Total Amount (USD)" value={`$${formatMoney(dayAmount)}`} />
+          {ROLE_METRICS.map((m) => (
+            <StatCard
+              key={m.key}
+              label={m.label}
+              value={`$${formatMoney(dayStats[m.key]?.amount || 0)}`}
+              sub={`${dayStats[m.key]?.count || 0} transactions`}
+            />
+          ))}
         </div>
       </div>
 
-      {monthItems.length > 0 && (
-        <div className="mb-8">
-          <h2 className="text-lg font-semibold text-slate-800 mb-3">{monthName} {now.getFullYear()}</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            {relevantRoles.map((role) => (
-              <div key={role} className="bg-white rounded-xl border border-slate-200 p-5">
-                <p className="text-sm text-slate-500">Top-Up by {ROLE_LABELS[role] || role}</p>
-                <p className="text-3xl font-bold text-emerald-600 mt-1">${formatMoney(monthByRole[role]?.amount || 0)}</p>
-                <p className="text-xs text-slate-400 mt-1">{monthByRole[role]?.count || 0} transactions</p>
-              </div>
-            ))}
+      <div className="mb-8">
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+          <h2 className="text-lg font-semibold text-slate-800 flex items-center gap-2">
+            <CalendarRange size={18} className="text-slate-400" /> Month-wise Topup Insights
+          </h2>
+          <div className="flex items-center gap-2">
+            <button onClick={() => { setSelectedMonth((m) => addMonths(m, -1)); setPage(1); }} className="border border-slate-200 text-slate-600 rounded-lg p-2 hover:bg-slate-50 transition">
+              <ChevronLeft size={16} />
+            </button>
+            <span className="text-sm font-medium text-slate-700 min-w-[180px] text-center">{fmtMonth(selectedMonth)}</span>
+            <button onClick={() => { if (canNextMonth) { setSelectedMonth((m) => addMonths(m, 1)); setPage(1); } }} disabled={!canNextMonth} className="border border-slate-200 text-slate-600 rounded-lg p-2 hover:bg-slate-50 transition disabled:opacity-40 disabled:cursor-not-allowed">
+              <ChevronRight size={16} />
+            </button>
           </div>
         </div>
-      )}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+          <StatCard label="Total Transactions" value={monthItems.length.toLocaleString()} />
+          <StatCard label="Total Amount (USD)" value={`$${formatMoney(monthAmount)}`} />
+          {ROLE_METRICS.map((m) => (
+            <StatCard
+              key={m.key}
+              label={m.label}
+              value={`$${formatMoney(monthStats[m.key]?.amount || 0)}`}
+              sub={`${monthStats[m.key]?.count || 0} transactions`}
+            />
+          ))}
+        </div>
+      </div>
+
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <h2 className="text-lg font-semibold text-slate-800">Transaction Summary</h2>
+        <div className="flex items-center gap-2 bg-slate-100 rounded-lg p-1">
+          <button
+            onClick={() => { setTableView("day"); setPage(1); }}
+            className={`px-4 py-1.5 rounded-lg text-sm font-medium transition ${tableView === "day" ? "bg-white shadow-sm text-slate-800" : "text-slate-500 hover:text-slate-700"}`}
+          >
+            Day {fmtDay(selectedDay).split(",").slice(1).join(",").trim()}
+          </button>
+          <button
+            onClick={() => { setTableView("month"); setPage(1); }}
+            className={`px-4 py-1.5 rounded-lg text-sm font-medium transition ${tableView === "month" ? "bg-white shadow-sm text-slate-800" : "text-slate-500 hover:text-slate-700"}`}
+          >
+            Month {fmtMonth(selectedMonth)}
+          </button>
+        </div>
+      </div>
 
       {isAdmin ? (
         <>
@@ -156,9 +277,9 @@ export default function TopUpInsightsPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {insights.length === 0 ? (
+                  {tableItems.length === 0 ? (
                     <tr><td colSpan={5} className="px-4 py-8 text-center text-slate-400">No top-up data found.</td></tr>
-                  ) : paginatedInsights.map((item) => (
+                  ) : paginatedItems.map((item) => (
                     <tr key={item._id} className="hover:bg-slate-50/50 transition-colors">
                       <td className="px-4 py-3">
                         <div className="font-medium text-slate-800">{item.adAccountName || "—"}</div>
@@ -169,7 +290,7 @@ export default function TopUpInsightsPage() {
                         <div className="text-slate-300">{new Date(item.createdAt).toLocaleTimeString()}</div>
                       </td>
                       <td className="px-4 py-3 text-right text-emerald-600 font-medium align-top whitespace-nowrap">${formatMoney(item.amount)}</td>
-                      <td className="px-4 py-3 text-xs text-slate-600 align-top whitespace-nowrap">{(parsePerformer(item.description)?.email) || item.performedBy || "Unknown"}</td>
+                      <td className="px-4 py-3 text-xs text-slate-600 align-top whitespace-nowrap">{getUsername(parsePerformer(item.description)?.email || item.performedBy) || "Unknown"}</td>
                       <td className="px-4 py-3 text-xs text-slate-500 align-top min-w-[180px] max-w-[280px] whitespace-normal break-words">{item.description}</td>
                     </tr>
                   ))}
