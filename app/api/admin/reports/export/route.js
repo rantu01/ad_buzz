@@ -20,14 +20,10 @@ export async function GET(request) {
           { label: "Date", key: "date" },
           { label: "Deposits", accessor: (r) => `$${Number(r.deposits).toFixed(2)}` },
           { label: "Deposit Count", key: "depositCount" },
-          { label: "Withdrawals", accessor: (r) => `$${Number(r.withdrawals).toFixed(2)}` },
-          { label: "Withdrawal Count", key: "withdrawalCount" },
-          { label: "Net", accessor: (r) => `$${(Number(r.deposits) - Number(r.withdrawals)).toFixed(2)}` },
         ];
         summary = {
           "Total Deposits": `$${Number(data.summary.totalDeposits).toFixed(2)}`,
-          "Total Withdrawals": `$${Number(data.summary.totalWithdrawals).toFixed(2)}`,
-          "Net Revenue": `$${Number(data.summary.net).toFixed(2)}`,
+          "Net Revenue": `$${Number(data.summary.totalDeposits).toFixed(2)}`,
         };
         data = data.rows;
         break;
@@ -42,8 +38,6 @@ export async function GET(request) {
           { label: "Total Earned", accessor: (r) => `$${Number(r.totalEarned).toFixed(2)}` },
           { label: "Deposits", key: "deposits" },
           { label: "Deposit Total", accessor: (r) => `$${Number(r.depositTotal).toFixed(2)}` },
-          { label: "Withdrawals", key: "withdrawals" },
-          { label: "Withdrawal Total", accessor: (r) => `$${Number(r.withdrawalTotal).toFixed(2)}` },
         ];
         summary = { "Total Users": data.total };
         data = data.rows;

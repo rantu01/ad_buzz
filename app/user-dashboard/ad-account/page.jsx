@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/app/Component/Auth/AuthProvider";
 import { useSettings } from "@/app/Component/Settings/SettingsProvider";
+import useSSE from "@/app/Component/Hooks/useSSE";
 
 function timeAgo(date) {
   if (!date) return "\u2014";
@@ -18,17 +19,12 @@ function timeAgo(date) {
 }
 
 export default function AdAccountPage() {
-  const router = useRouter();
   const { user, loading: authLoading } = useAuth();
+  const queryClient = useQueryClient();
+  const uid = user?.uid;
 
-  const [adAccounts, setAdAccounts] = useState([]);
-  const [walletBalance, setWalletBalance] = useState(0);
-  const [userDollarRate, setUserDollarRate] = useState(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState("");
   const settings = useSettings();
   const defaultDollarRate = settings?.dollarRate || 129;
-  const effectiveRate = userDollarRate || defaultDollarRate;
 
   const [topUpModal, setTopUpModal] = useState(null);
   const [topUpAmount, setTopUpAmount] = useState("");
@@ -40,7 +36,51 @@ export default function AdAccountPage() {
   const [historyModal, setHistoryModal] = useState(null);
   const [historyData, setHistoryData] = useState([]);
   const [historyLoading, setHistoryLoading] = useState(false);
-  const [lastRefreshedAt, setLastRefreshedAt] = useState(null);
+
+  const adAccountsQuery = useQuery({
+    queryKey: ["user", "ad-accounts", uid],
+    queryFn: async () => {
+      const res = await fetch(`/api/user/ad-accounts?uid=${encodeURIComponent(uid)}`);
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.message || "Failed to load ad accounts");
+      return data.adAccounts || [];
+    },
+    enabled: Boolean(uid),
+    refetchInterval: 30000,
+  });
+  const adAccounts = adAccountsQuery.data || [];
+  const isLoading = authLoading || !uid;
+
+  const dashboardQuery = useQuery({
+    queryKey: ["user", "dashboard", uid],
+    queryFn: async () => {
+      const res = await fetch(`/api/user/dashboard?uid=${encodeURIComponent(uid)}`);
+      const data = await res.json();
+      if (!data.success) throw new Error("Failed to load dashboard");
+      return data.dashboard;
+    },
+    enabled: Boolean(uid),
+    refetchInterval: 30000,
+  });
+  const dashboard = dashboardQuery.data;
+  const walletBalance = Number(dashboard?.availableBalance || 0);
+  const userDollarRate = dashboard?.dollarRate || null;
+  const effectiveRate = userDollarRate || defaultDollarRate;
+
+  useSSE({
+    uid,
+    onEvent: (type) => {
+      if (type === "balance") {
+        queryClient.invalidateQueries({ queryKey: ["user", "dashboard", uid] });
+      }
+      if (type === "ad-account" || type === "sync") {
+        queryClient.invalidateQueries({ queryKey: ["user", "ad-accounts", uid] });
+      }
+    },
+  });
+
+  let error = "";
+  if (adAccountsQuery.isError) error = adAccountsQuery.error.message;
 
   const formatMoney = (val) => {
     const n = Number(val || 0);
@@ -67,56 +107,6 @@ export default function AdAccountPage() {
     document.addEventListener("click", handleClick);
     return () => document.removeEventListener("click", handleClick);
   }, [openMenuId]);
-
-  useEffect(() => {
-    async function loadData() {
-      if (!user?.uid) { setIsLoading(false); return; }
-      try {
-        setError("");
-        const [accountsRes, dashRes] = await Promise.all([
-          fetch(`/api/user/ad-accounts?uid=${encodeURIComponent(user.uid)}`),
-          fetch(`/api/user/dashboard?uid=${encodeURIComponent(user.uid)}`),
-        ]);
-        const accountsData = await accountsRes.json();
-        const dashData = await dashRes.json();
-        if (accountsData.success) setAdAccounts(accountsData.adAccounts || []);
-        if (dashData.success) {
-          setWalletBalance(Number(dashData.dashboard.availableBalance || 0));
-          if (dashData.dashboard.dollarRate) setUserDollarRate(dashData.dashboard.dollarRate);
-        }
-        setLastRefreshedAt(new Date());
-      } catch (err) {
-        setError(err.message || "Failed to load data");
-      } finally {
-        setIsLoading(false);
-      }
-    }
-    if (user?.uid) loadData();
-  }, [user?.uid]);
-
-  const refreshBalances = async () => {
-    if (!user?.uid) return;
-    try {
-      const [accountsRes, dashRes] = await Promise.all([
-        fetch(`/api/user/ad-accounts?uid=${encodeURIComponent(user.uid)}`),
-        fetch(`/api/user/dashboard?uid=${encodeURIComponent(user.uid)}`),
-      ]);
-      const accountsData = await accountsRes.json();
-      const dashData = await dashRes.json();
-      if (accountsData.success) setAdAccounts(accountsData.adAccounts || []);
-      if (dashData.success) {
-        setWalletBalance(Number(dashData.dashboard.availableBalance || 0));
-        if (dashData.dashboard.dollarRate) setUserDollarRate(dashData.dashboard.dollarRate);
-      }
-      setLastRefreshedAt(new Date());
-    } catch {}
-  };
-
-  useEffect(() => {
-    if (!user?.uid) return;
-    const id = setInterval(refreshBalances, 30000);
-    return () => clearInterval(id);
-  }, [user?.uid]);
 
   const totalBudget = adAccounts.reduce((s, a) => s + Number(a.metaSpendCap || a.spendCap || 0), 0);
   const totalSpent = adAccounts.reduce((s, a) => {
@@ -151,7 +141,8 @@ export default function AdAccountPage() {
       const data = await res.json();
       if (data.success) {
         setTopUpModal(null);
-        await refreshBalances();
+        queryClient.invalidateQueries({ queryKey: ["user", "ad-accounts", uid] });
+        queryClient.invalidateQueries({ queryKey: ["user", "dashboard", uid] });
       } else {
         setTopUpError(data.message || "Top-up failed");
       }
@@ -343,7 +334,7 @@ export default function AdAccountPage() {
                     {/* <td className="py-4 pr-4 text-sm font-medium text-slate-900">${formatMoney(metaBalanceDollars)}</td> */}
                     <td className="py-4 pr-4 text-xs text-slate-400" title={acc.lastSyncedAt ? new Date(acc.lastSyncedAt).toLocaleString() : ""}>
                       <span className="flex items-center gap-1">
-                        {acc.lastSyncedAt ? timeAgo(acc.lastSyncedAt) : (lastRefreshedAt ? "Cached" : "Loading...")}
+                        {acc.lastSyncedAt ? timeAgo(acc.lastSyncedAt) : (adAccountsQuery.dataUpdatedAt ? "Cached" : "Loading...")}
                       </span>
                     </td>
                     <td className="py-4 text-right whitespace-nowrap">

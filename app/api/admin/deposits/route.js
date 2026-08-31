@@ -11,11 +11,9 @@ export async function GET(request) {
     const { searchParams } = new URL(request.url);
     const status = searchParams.get("status");
 
-    const deposits = await getAllDeposits();
-    
-    const filtered = status ? deposits.filter(d => d.status === status) : deposits;
+    const deposits = await getAllDeposits(status);
 
-    return NextResponse.json({ success: true, deposits: filtered });
+    return NextResponse.json({ success: true, deposits });
   } catch (error) {
     return NextResponse.json(
       { success: false, message: error.message || "Failed to fetch deposits" },

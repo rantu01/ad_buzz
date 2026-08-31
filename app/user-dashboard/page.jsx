@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/app/Component/Auth/AuthProvider";
 import { useSettings } from "@/app/Component/Settings/SettingsProvider";
+import useSSE from "@/app/Component/Hooks/useSSE";
 
 function SkeletonCard() {
   return (
@@ -58,16 +59,10 @@ const statusBadge = (status) => {
 export default function UserDashboardPage() {
   const router = useRouter();
   const { user, loading } = useAuth();
-  const [dashboard, setDashboard] = useState({ availableBalance: 0 });
-  const [deposits, setDeposits] = useState([]);
-  const [withdrawals, setWithdrawals] = useState([]);
-  const [adAccounts, setAdAccounts] = useState([]);
-  const [userDollarRate, setUserDollarRate] = useState(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState("");
+  const queryClient = useQueryClient();
+  const uid = user?.uid;
   const settings = useSettings();
   const defaultDollarRate = settings?.dollarRate || 129;
-  const effectiveRate = userDollarRate || defaultDollarRate;
 
   const formatMoney = (val) => {
     const n = Number(val || 0);
@@ -75,35 +70,63 @@ export default function UserDashboardPage() {
     return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   };
 
-  useEffect(() => {
-    async function loadDashboard() {
-      if (!user?.uid) { setIsLoading(false); return; }
-      try {
-        setError("");
-        const [dashboardRes, depositsRes, withdrawalsRes, accountsRes] = await Promise.all([
-          fetch(`/api/user/dashboard?uid=${encodeURIComponent(user.uid)}`),
-          fetch(`/api/user/deposit?uid=${encodeURIComponent(user.uid)}`),
-          fetch(`/api/user/withdrawal?uid=${encodeURIComponent(user.uid)}`),
-          fetch(`/api/user/ad-accounts?uid=${encodeURIComponent(user.uid)}`),
-        ]);
-        const dashboardResult = await dashboardRes.json();
-        const depositsResult = await depositsRes.json();
-        const withdrawalsResult = await withdrawalsRes.json();
-        const accountsResult = await accountsRes.json();
-        if (!dashboardRes.ok || !dashboardResult.success) throw new Error(dashboardResult.message || "Failed to load dashboard.");
-        setDashboard(dashboardResult.dashboard);
-        if (dashboardResult.dashboard.dollarRate) setUserDollarRate(dashboardResult.dashboard.dollarRate);
-        setDeposits(depositsResult.deposits || []);
-        setWithdrawals(withdrawalsResult.withdrawals || []);
-        setAdAccounts(accountsResult.adAccounts || []);
-      } catch (err) {
-        setError(err.message || "Failed to load dashboard.");
-      } finally {
-        setIsLoading(false);
+  const dashboardQuery = useQuery({
+    queryKey: ["user", "dashboard", uid],
+    queryFn: async () => {
+      const res = await fetch(`/api/user/dashboard?uid=${encodeURIComponent(uid)}`);
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.message || "Failed to load dashboard.");
+      return data.dashboard;
+    },
+    enabled: Boolean(uid),
+    refetchInterval: 60000,
+  });
+  const dashboard = dashboardQuery.data || { availableBalance: 0, accountStatus: "active" };
+
+  const depositsQuery = useQuery({
+    queryKey: ["user", "deposits", uid],
+    queryFn: async () => {
+      const res = await fetch(`/api/user/deposit?uid=${encodeURIComponent(uid)}`);
+      const data = await res.json();
+      if (!data.success) throw new Error("Failed to load deposits");
+      return data.deposits || [];
+    },
+    enabled: Boolean(uid),
+  });
+  const deposits = depositsQuery.data || [];
+
+  const adAccountsQuery = useQuery({
+    queryKey: ["user", "ad-accounts", uid],
+    queryFn: async () => {
+      const res = await fetch(`/api/user/ad-accounts?uid=${encodeURIComponent(uid)}`);
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.message || "Failed to load ad accounts");
+      return data.adAccounts || [];
+    },
+    enabled: Boolean(uid),
+    refetchInterval: 60000,
+  });
+  const adAccounts = adAccountsQuery.data || [];
+
+  const userDollarRate = dashboard?.dollarRate || null;
+  const effectiveRate = userDollarRate || defaultDollarRate;
+  const isLoading = loading || (dashboardQuery.isLoading && depositsQuery.isLoading && adAccountsQuery.isLoading);
+  const error = dashboardQuery.isError ? dashboardQuery.error.message : "";
+
+  useSSE({
+    uid,
+    onEvent: (type) => {
+      if (type === "balance") {
+        queryClient.invalidateQueries({ queryKey: ["user", "dashboard", uid] });
       }
-    }
-    loadDashboard();
-  }, [user?.uid]);
+      if (type === "ad-account" || type === "sync") {
+        queryClient.invalidateQueries({ queryKey: ["user", "ad-accounts", uid] });
+      }
+      if (type === "balance" || type === "deposit") {
+        queryClient.invalidateQueries({ queryKey: ["user", "deposits", uid] });
+      }
+    },
+  });
 
   if (loading) return <div className="max-w-7xl mx-auto px-4 py-10 text-slate-600 font-medium">Loading dashboard...</div>;
 

@@ -145,8 +145,7 @@ export default function ReportsPage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
             <StatCard label="Total Users" value={overview.totalUsers} sub="Registered accounts" icon={Users} color="bg-blue-50 text-blue-600" />
             <StatCard label="Approved Deposits" value={`$${formatMoney(overview.approvedDepositsTotal)}`} sub={`${overview.approvedDepositsCount} transactions`} icon={TrendingUp} color="bg-emerald-50 text-emerald-600" />
-            <StatCard label="Approved Withdrawals" value={`$${formatMoney(overview.approvedWithdrawalsTotal)}`} sub={`${overview.approvedWithdrawalsCount} transactions`} icon={Wallet} color="bg-purple-50 text-purple-600" />
-            <StatCard label="Net Revenue" value={`$${formatMoney(overview.netRevenue)}`} sub="Deposits - Withdrawals" icon={DollarSign} color={overview.netRevenue >= 0 ? "bg-emerald-50 text-emerald-600" : "bg-red-50 text-red-600"} />
+            <StatCard label="Net Revenue" value={`$${formatMoney(overview.netRevenue)}`} sub="Total deposits" icon={DollarSign} color="bg-emerald-50 text-emerald-600" />
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <StatCard label="Ad Accounts" value={overview.adAccounts} sub="Total managed" icon={Target} color="bg-sky-50 text-sky-600" />
@@ -171,27 +170,23 @@ export default function ReportsPage() {
             </div>
           </div>
           {financial.summary && (
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
               <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4"><p className="text-xs text-emerald-600 font-medium">Total Deposits</p><p className="text-xl font-bold text-emerald-900">${formatMoney(financial.summary.totalDeposits)}</p></div>
-              <div className="bg-red-50 border border-red-200 rounded-xl p-4"><p className="text-xs text-red-600 font-medium">Total Withdrawals</p><p className="text-xl font-bold text-red-900">${formatMoney(financial.summary.totalWithdrawals)}</p></div>
-              <div className={`border rounded-xl p-4 ${financial.summary.net >= 0 ? "bg-emerald-50 border-emerald-200" : "bg-red-50 border-red-200"}`}><p className={`text-xs font-medium ${financial.summary.net >= 0 ? "text-emerald-600" : "text-red-600"}`}>Net Revenue</p><p className={`text-xl font-bold ${financial.summary.net >= 0 ? "text-emerald-900" : "text-red-900"}`}>${formatMoney(financial.summary.net)}</p></div>
+              <div className="bg-blue-50 border border-blue-200 rounded-xl p-4"><p className="text-xs text-blue-600 font-medium">Net Revenue</p><p className="text-xl font-bold text-blue-900">${formatMoney(financial.summary.totalDeposits)}</p></div>
             </div>
           )}
           <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse">
-                <thead><tr className="bg-slate-50 text-slate-400 text-xs font-bold uppercase tracking-wider border-b border-slate-200"><th className="py-3 px-4">Date</th><th className="py-3 px-4">Deposits</th><th className="py-3 px-4">Deposit Count</th><th className="py-3 px-4">Withdrawals</th><th className="py-3 px-4">Withdrawal Count</th><th className="py-3 px-4">Net</th></tr></thead>
+                <thead><tr className="bg-slate-50 text-slate-400 text-xs font-bold uppercase tracking-wider border-b border-slate-200"><th className="py-3 px-4">Date</th><th className="py-3 px-4">Deposits</th><th className="py-3 px-4">Deposit Count</th></tr></thead>
                 <tbody className="divide-y divide-slate-100 text-sm">
                   {financial.rows.length > 0 ? paginatedFinancial.map((r, i) => (
                     <tr key={r.date || i} className="hover:bg-slate-50/40">
                       <td className="py-3 px-4 font-medium">{r.date}</td>
                       <td className="py-3 px-4 text-emerald-600 font-medium">${formatMoney(r.deposits)}</td>
                       <td className="py-3 px-4">{r.depositCount}</td>
-                      <td className="py-3 px-4 text-red-600 font-medium">${formatMoney(r.withdrawals)}</td>
-                      <td className="py-3 px-4">{r.withdrawalCount}</td>
-                      <td className={`py-3 px-4 font-medium ${(r.deposits - r.withdrawals) >= 0 ? "text-emerald-600" : "text-red-600"}`}>${formatMoney(r.deposits - r.withdrawals)}</td>
                     </tr>
-                  )) : <tr><td colSpan={6} className="py-8 text-center text-slate-400">No financial data in this period</td></tr>}
+                  )) : <tr><td colSpan={3} className="py-8 text-center text-slate-400">No financial data in this period</td></tr>}
                 </tbody>
               </table>
             </div>
@@ -212,7 +207,7 @@ export default function ReportsPage() {
           <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse">
-                <thead><tr className="bg-slate-50 text-slate-400 text-xs font-bold uppercase tracking-wider border-b border-slate-200"><th className="py-3 px-4">User</th><th className="py-3 px-4">Balance</th><th className="py-3 px-4">Total Earned</th><th className="py-3 px-4">Deposits</th><th className="py-3 px-4">Withdrawals</th></tr></thead>
+                <thead><tr className="bg-slate-50 text-slate-400 text-xs font-bold uppercase tracking-wider border-b border-slate-200"><th className="py-3 px-4">User</th><th className="py-3 px-4">Balance</th><th className="py-3 px-4">Total Earned</th><th className="py-3 px-4">Deposits</th></tr></thead>
                 <tbody className="divide-y divide-slate-100 text-sm">
                   {userActivity.rows.length > 0 ? paginatedUsers.map((u, i) => (
                     <tr key={u.uid || i} className="hover:bg-slate-50/40">
@@ -220,9 +215,8 @@ export default function ReportsPage() {
                       <td className="py-3 px-4 font-medium">${formatMoney(u.balance)}</td>
                       <td className="py-3 px-4">${formatMoney(u.totalEarned)}</td>
                       <td className="py-3 px-4"><span className="font-medium">{u.deposits}</span> <span className="text-xs text-slate-400 ml-1">($${formatMoney(u.depositTotal)})</span></td>
-                      <td className="py-3 px-4"><span className="font-medium">{u.withdrawals}</span> <span className="text-xs text-slate-400 ml-1">($${formatMoney(u.withdrawalTotal)})</span></td>
                     </tr>
-                  )) : <tr><td colSpan={5} className="py-8 text-center text-slate-400">No user activity in this period</td></tr>}
+                  )) : <tr><td colSpan={4} className="py-8 text-center text-slate-400">No user activity in this period</td></tr>}
                 </tbody>
               </table>
             </div>

@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/app/Component/Auth/AuthProvider";
 import { useSettings } from "@/app/Component/Settings/SettingsProvider";
 import { ChevronRight, DollarSign, Info, Check, ArrowLeft, Upload } from "lucide-react";
@@ -11,14 +12,38 @@ export default function DepositsPage() {
   const settings = useSettings();
   const activeColor = settings?.secondaryColor || "#F48E2B";
   const defaultDollarRate = settings?.dollarRate || 129;
-  const [userDollarRate, setUserDollarRate] = useState(null);
+  const uid = user?.uid;
+
+  const dashboardQuery = useQuery({
+    queryKey: ["user", "dashboard", uid],
+    queryFn: async () => {
+      const res = await fetch(`/api/user/dashboard?uid=${encodeURIComponent(uid)}`);
+      const data = await res.json();
+      if (!data.success) throw new Error("Failed to load dashboard");
+      return data.dashboard;
+    },
+    enabled: Boolean(uid),
+  });
+  const dashboard = dashboardQuery.data;
+  const userDollarRate = dashboard?.dollarRate || null;
+  const balance = Number(dashboard?.availableBalance || 0);
+  const isLoadingBalance = dashboardQuery.isLoading;
+
+  const bankAccountsQuery = useQuery({
+    queryKey: ["user", "bank-accounts", uid],
+    queryFn: async () => {
+      const res = await fetch(`/api/user/bank-accounts?uid=${encodeURIComponent(uid)}`);
+      const data = await res.json();
+      if (data.success) return data.accounts || [];
+      return [];
+    },
+    enabled: Boolean(uid),
+  });
+  const bankAccounts = bankAccountsQuery.data || [];
+  const loadingAccounts = bankAccountsQuery.isLoading;
 
   const [currentStep, setCurrentStep] = useState(1);
   const [selectedAccount, setSelectedAccount] = useState(null);
-  const [balance, setBalance] = useState(0);
-  const [isLoadingBalance, setIsLoadingBalance] = useState(true);
-  const [bankAccounts, setBankAccounts] = useState([]);
-  const [loadingAccounts, setLoadingAccounts] = useState(true);
   const [submitting, setSubmitting] = useState(false);
 
   const [amountBDT, setAmountBDT] = useState("");
@@ -30,32 +55,6 @@ export default function DepositsPage() {
   const creditedUSD = amountBDT && !isNaN(parseFloat(amountBDT))
     ? (parseFloat(amountBDT) * (1 / effectiveRate)).toFixed(2)
     : "0.00";
-
-  const loadBalance = useCallback(async () => {
-    if (!user?.uid) { setIsLoadingBalance(false); return; }
-    try {
-      const res = await fetch(`/api/user/dashboard?uid=${encodeURIComponent(user.uid)}`);
-      const data = await res.json();
-      if (data.success) {
-        setBalance(data.dashboard.availableBalance || 0);
-        if (data.dashboard.dollarRate) setUserDollarRate(data.dashboard.dollarRate);
-      }
-    } catch { /* ignore */ }
-    finally { setIsLoadingBalance(false); }
-  }, [user?.uid]);
-
-  const loadAccounts = useCallback(async () => {
-    if (!user?.uid) { setLoadingAccounts(false); return; }
-    try {
-      const res = await fetch(`/api/user/bank-accounts?uid=${encodeURIComponent(user.uid)}`);
-      const data = await res.json();
-      if (data.success) setBankAccounts(data.accounts || []);
-    } catch { /* ignore */ }
-    finally { setLoadingAccounts(false); }
-  }, [user?.uid]);
-
-  useEffect(() => { loadBalance(); }, [loadBalance]);
-  useEffect(() => { loadAccounts(); }, [loadAccounts]);
 
   function resetAll() {
     setCurrentStep(1);

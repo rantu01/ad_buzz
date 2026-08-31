@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getAdAccountsByUid, createAdAccount } from "@/lib/adAccountModel";
 import clientPromise from "@/lib/mongodb";
+import { META_AD_ACCOUNT_PROJECTION } from "@/lib/projections";
 
 const DB_NAME = process.env.MONGODB_DB_NAME || "ad_buzz";
 
@@ -46,7 +47,10 @@ export async function GET(request) {
 
     const client = await clientPromise;
     const db = client.db(DB_NAME);
-    const metaAccounts = await db.collection("metaAdAccounts").find({}).toArray();
+    const metaAccounts = await db.collection("metaAdAccounts").find(
+      {},
+      { projection: META_AD_ACCOUNT_PROJECTION }
+    ).toArray();
     const metaByAccountId = {};
     for (const ma of metaAccounts) {
       metaByAccountId[ma.metaAccountId] = ma;

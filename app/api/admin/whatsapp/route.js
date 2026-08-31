@@ -10,7 +10,6 @@ export async function GET() {
           phoneNumberId: settings.phoneNumberId || "",
           businessAccountId: settings.businessAccountId || "",
           notifyOnDeposit: settings.notifyOnDeposit ?? true,
-          notifyOnWithdrawal: settings.notifyOnWithdrawal ?? true,
           notifyOnBalanceFreeze: settings.notifyOnBalanceFreeze ?? true,
           updatedAt: settings.updatedAt || null,
           hasAccessToken: Boolean(settings.accessToken),
@@ -26,7 +25,7 @@ export async function GET() {
 export async function PUT(request) {
   try {
     const body = await request.json();
-    const { enabled, phoneNumberId, businessAccountId, accessToken, notifyOnDeposit, notifyOnWithdrawal, notifyOnBalanceFreeze } = body;
+    const { enabled, phoneNumberId, businessAccountId, accessToken, notifyOnDeposit, notifyOnBalanceFreeze } = body;
 
     const updates = {};
     if (enabled !== undefined) updates.enabled = Boolean(enabled);
@@ -34,7 +33,6 @@ export async function PUT(request) {
     if (businessAccountId !== undefined) updates.businessAccountId = businessAccountId;
     if (accessToken !== undefined) updates.accessToken = accessToken;
     if (notifyOnDeposit !== undefined) updates.notifyOnDeposit = Boolean(notifyOnDeposit);
-    if (notifyOnWithdrawal !== undefined) updates.notifyOnWithdrawal = Boolean(notifyOnWithdrawal);
     if (notifyOnBalanceFreeze !== undefined) updates.notifyOnBalanceFreeze = Boolean(notifyOnBalanceFreeze);
 
     const result = await updateWhatsAppSettings(updates);
@@ -44,7 +42,6 @@ export async function PUT(request) {
           phoneNumberId: result.phoneNumberId || "",
           businessAccountId: result.businessAccountId || "",
           notifyOnDeposit: result.notifyOnDeposit ?? true,
-          notifyOnWithdrawal: result.notifyOnWithdrawal ?? true,
           notifyOnBalanceFreeze: result.notifyOnBalanceFreeze ?? true,
           hasAccessToken: Boolean(result.accessToken),
           updatedAt: result.updatedAt,

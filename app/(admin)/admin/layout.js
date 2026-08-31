@@ -7,7 +7,6 @@ import { isStaffRole, ROLES } from "@/lib/permissions";
 import AdminProvider from "./components/AdminProvider";
 import DashboardSidebar from "./components/Sidebar";
 import DashboardTopbar from "./components/Topbar";
-import SyncPoller from "./components/SyncPoller";
 
 function DashboardLayoutInner({ children }) {
   const router = useRouter();
@@ -52,7 +51,6 @@ function DashboardLayoutInner({ children }) {
 
   return (
     <div className="min-h-screen bg-[#F8F5F1] text-slate-900">
-      <SyncPoller />
       <DashboardSidebar open={open} onClose={() => setOpen(false)} />
       <div className="min-h-screen lg:pl-72">
         <DashboardTopbar onToggle={() => setOpen((value) => !value)} />

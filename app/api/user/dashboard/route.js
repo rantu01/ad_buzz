@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import clientPromise from "@/lib/mongodb";
+import { USER_PROJECTION } from "@/lib/projections";
 
 export async function GET(request) {
   try {
@@ -16,7 +17,7 @@ export async function GET(request) {
     const client = await clientPromise;
     const db = client.db(process.env.MONGODB_DB_NAME || "ad_buzz");
 
-    const user = await db.collection("users").findOne({ uid });
+    const user = await db.collection("users").findOne({ uid }, { projection: USER_PROJECTION });
 
     return NextResponse.json({
       success: true,

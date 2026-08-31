@@ -27,7 +27,7 @@ export default function WhatsAppSettingsPage() {
     const form = e.target;
     const payload = {
       enabled: form.enabled.checked, phoneNumberId: form.phoneNumberId.value.trim(), businessAccountId: form.businessAccountId.value.trim(),
-      accessToken: form.accessToken.value.trim(), notifyOnDeposit: form.notifyDeposit.checked, notifyOnWithdrawal: form.notifyWithdrawal.checked, notifyOnBalanceFreeze: form.notifyFreeze.checked,
+      accessToken: form.accessToken.value.trim(), notifyOnDeposit: form.notifyDeposit.checked, notifyOnBalanceFreeze: form.notifyFreeze.checked,
     };
     try {
       const res = await fetch("/api/admin/whatsapp", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
@@ -91,7 +91,6 @@ export default function WhatsAppSettingsPage() {
             <div className="space-y-4">
               <h3 className="text-sm font-semibold text-slate-700 flex items-center gap-2"><Bell size={16} /> Notification Triggers</h3>
               <label className="flex items-center gap-3 cursor-pointer"><input type="checkbox" name="notifyDeposit" defaultChecked={settings?.notifyOnDeposit ?? true} className="w-4 h-4 rounded border-slate-300 text-[#E05305]" /><span className="text-sm text-slate-700">Deposit Approved / Rejected</span></label>
-              <label className="flex items-center gap-3 cursor-pointer"><input type="checkbox" name="notifyWithdrawal" defaultChecked={settings?.notifyOnWithdrawal ?? true} className="w-4 h-4 rounded border-slate-300 text-[#E05305]" /><span className="text-sm text-slate-700">Withdrawal Approved / Rejected</span></label>
               <label className="flex items-center gap-3 cursor-pointer"><input type="checkbox" name="notifyFreeze" defaultChecked={settings?.notifyOnBalanceFreeze ?? true} className="w-4 h-4 rounded border-slate-300 text-[#E05305]" /><span className="text-sm text-slate-700">Account Frozen</span></label>
             </div>
             <button type="submit" disabled={saving} className="bg-[#E05305] text-white rounded-lg px-6 py-2.5 text-sm font-medium hover:bg-[#c84a04] transition disabled:opacity-50">{saving ? "Saving..." : "Save Settings"}</button>

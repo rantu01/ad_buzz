@@ -33,7 +33,7 @@ export default function UserSidebar({ open, onClose }) {
     const activeBlue = "#1E6BB8";
 
     const [paymentsOpen, setPaymentsOpen] = useState(
-        pathname.startsWith("/user-dashboard/deposits") || pathname.startsWith("/user-dashboard/Payment-History") || pathname.startsWith("/user-dashboard/withdrawals")
+        pathname.startsWith("/user-dashboard/deposits") || pathname.startsWith("/user-dashboard/Payment-History")
     );
     const [balanceOpen, setBalanceOpen] = useState(
         pathname.startsWith("/user-dashboard/balance")
@@ -43,7 +43,7 @@ export default function UserSidebar({ open, onClose }) {
         if (window.innerWidth < 1024) onClose();
     };
 
-    const paymentsActive = pathname.startsWith("/user-dashboard/deposits") || pathname.startsWith("/user-dashboard/Payment-History") || pathname.startsWith("/user-dashboard/withdrawals");
+    const paymentsActive = pathname.startsWith("/user-dashboard/deposits") || pathname.startsWith("/user-dashboard/Payment-History");
     const balanceActive = pathname.startsWith("/user-dashboard/balance");
 
     const activeBg = { backgroundColor: activeBlue };

@@ -1,11 +1,13 @@
                     "use client";
 
 import { useEffect, useState, useCallback, useMemo } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import Swal from "sweetalert2";
 import { Megaphone, RefreshCw, UserPlus, UserX, ExternalLink, CheckCircle, XCircle, AlertTriangle, Search, X, ChevronDown, Clock, DollarSign } from "lucide-react";
 import { useAdmin } from "../components/AdminProvider";
 import { hasPermission, ROLES } from "@/lib/permissions";
 import Pagination from "@/app/Component/Pagination";
+import useSSE from "@/app/Component/Hooks/useSSE";
 
 const ITEMS_PER_PAGE = 20;
 
@@ -27,10 +29,8 @@ export default function AdminAdAccountsPage() {
   const isAdmin = role === ROLES.ADMIN;
   const canManage = hasPermission(role, "manage_ad_accounts");
   const canAssign = hasPermission(role, "assign_ad_accounts");
+  const queryClient = useQueryClient();
 
-  const [adAccounts, setAdAccounts] = useState([]);
-  const [metaAccounts, setMetaAccounts] = useState([]);
-  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [balanceFilter, setBalanceFilter] = useState("");
@@ -38,9 +38,7 @@ export default function AdminAdAccountsPage() {
   const [assignFilter, setAssignFilter] = useState("");
   const [syncing, setSyncing] = useState(false);
   const [savingAccounts, setSavingAccounts] = useState({});
-  const [users, setUsers] = useState([]);
   const [lastManualRefresh, setLastManualRefresh] = useState(null);
-  const [lastOverallSync, setLastOverallSync] = useState(null);
 
   const [assignModal, setAssignModal] = useState(false);
   const [assignTab, setAssignTab] = useState("accounts");
@@ -52,46 +50,59 @@ export default function AdminAdAccountsPage() {
   const [accountSearch, setAccountSearch] = useState("");
   const [page, setPage] = useState(1);
 
-  const loadData = useCallback(async () => {
-    setLoading(true);
-    try {
+  const adAccountsQuery = useQuery({
+    queryKey: ["admin", "ad-accounts", "list"],
+    queryFn: async () => {
       const res = await fetch("/api/admin/ad-accounts?includeUnassigned=true");
       const data = await res.json();
-      if (data.success) {
-        setAdAccounts(data.adAccounts || []);
-        const syncedTimes = (data.adAccounts || [])
-          .map(a => a.lastSyncedAt ? new Date(a.lastSyncedAt).getTime() : 0)
-          .filter(t => t > 0);
-        if (syncedTimes.length > 0) {
-          setLastOverallSync(new Date(Math.max(...syncedTimes)));
-        }
-      }
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+      if (!res.ok || !data.success) throw new Error(data.message || "Failed to load ad accounts");
+      return data.adAccounts || [];
+    },
+  });
+  const adAccounts = adAccountsQuery.data || [];
 
-  const loadMetaAccounts = useCallback(async () => {
-    try {
+  const metaAccountsQuery = useQuery({
+    queryKey: ["admin", "meta-accounts"],
+    queryFn: async () => {
       const res = await fetch("/api/admin/meta-api/sync?type=meta-accounts");
       const data = await res.json();
-      if (data.success) setMetaAccounts(data.accounts || []);
-    } catch {}
-  }, []);
+      if (data.success) return data.accounts || [];
+      return [];
+    },
+  });
+  const metaAccounts = metaAccountsQuery.data || [];
 
-  const loadUsers = useCallback(async () => {
-    try {
+  const usersQuery = useQuery({
+    queryKey: ["admin", "users"],
+    queryFn: async () => {
       const res = await fetch("/api/admin/users");
       const data = await res.json();
-      if (data.success) setUsers(data.users || []);
-    } catch {}
-  }, []);
+      if (data.success) return data.users || [];
+      return [];
+    },
+  });
+  const users = usersQuery.data || [];
+  const loading = adAccountsQuery.isLoading;
 
-  useEffect(() => {
-    loadData();
-    loadMetaAccounts();
-    loadUsers();
-  }, [loadData, loadMetaAccounts, loadUsers]);
+  useSSE({
+    uid: profile?.uid || undefined,
+    onEvent: (type) => {
+      if (type === "sync" || type === "meta" || type === "ad-account") {
+        queryClient.invalidateQueries({ queryKey: ["admin", "ad-accounts", "list"] });
+      }
+    },
+  });
+
+  const lastOverallSync = useMemo(() => {
+    const syncedTimes = adAccounts
+      .map(a => a.lastSyncedAt ? new Date(a.lastSyncedAt).getTime() : 0)
+      .filter(t => t > 0);
+    return syncedTimes.length > 0 ? new Date(Math.max(...syncedTimes)) : null;
+  }, [adAccounts]);
+
+  const invalidateAll = () => {
+    queryClient.invalidateQueries({ queryKey: ["admin", "ad-accounts", "list"] });
+  };
 
   const updateAccount = async (_id, updates) => {
     setSavingAccounts((prev) => ({ ...prev, [_id]: true }));
@@ -107,7 +118,7 @@ export default function AdminAdAccountsPage() {
         return;
       }
       await Swal.fire({ icon: "success", title: "Updated", timer: 1000, showConfirmButton: false });
-      loadData();
+      invalidateAll();
     } finally {
       setSavingAccounts((prev) => { const next = { ...prev }; delete next[_id]; return next; });
     }
@@ -130,7 +141,7 @@ export default function AdminAdAccountsPage() {
       return;
     }
     await Swal.fire({ icon: "success", title: "Deleted", timer: 1000, showConfirmButton: false });
-    loadData();
+    invalidateAll();
   };
 
   const openAssignModal = () => {
@@ -185,7 +196,7 @@ export default function AdminAdAccountsPage() {
           showConfirmButton: false,
         });
         setAssignModal(false);
-        loadData();
+        invalidateAll();
       } else {
         await Swal.fire({ icon: "error", title: "Assign failed", text: data.message });
       }
@@ -221,7 +232,7 @@ export default function AdminAdAccountsPage() {
       const data = await res.json();
       if (data.success) {
         await Swal.fire({ icon: "success", title: "Top-up successful", timer: 1500, showConfirmButton: false });
-        loadData();
+        invalidateAll();
       } else {
         await Swal.fire({ icon: "error", title: "Top-up failed", text: data.message });
       }
@@ -248,7 +259,7 @@ export default function AdminAdAccountsPage() {
       return;
     }
     await Swal.fire({ icon: "success", title: "Account unassigned", timer: 1200, showConfirmButton: false });
-    loadData();
+    invalidateAll();
   };
 
   const handleImportFromMeta = async () => {
@@ -311,7 +322,7 @@ export default function AdminAdAccountsPage() {
       timer: errors > 0 ? 4000 : 2000,
       showConfirmButton: false,
     });
-    loadData();
+    invalidateAll();
     setImporting(false);
   };
 
@@ -333,7 +344,7 @@ export default function AdminAdAccountsPage() {
       const data = await res.json();
       if (data.success) {
         setLastManualRefresh(Date.now());
-        loadData();
+        invalidateAll();
       } else {
         await Swal.fire({ icon: "error", title: "Sync failed", text: data.message || "Unknown error" });
       }

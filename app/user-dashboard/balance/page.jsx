@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/app/Component/Auth/AuthProvider";
+import useSSE from "@/app/Component/Hooks/useSSE";
 
 function SkeletonCard() {
   return (
@@ -39,11 +40,8 @@ function SkeletonPanel() {
 export default function BalancePage() {
   const router = useRouter();
   const { user, loading: authLoading } = useAuth();
-  const [dashboard, setDashboard] = useState({ availableBalance: 0, totalDeposited: 0, totalWithdrawn: 0 });
-  const [deposits, setDeposits] = useState([]);
-  const [withdrawals, setWithdrawals] = useState([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState("");
+  const queryClient = useQueryClient();
+  const uid = user?.uid;
 
   const formatMoney = (val) => {
     const n = Number(val || 0);
@@ -51,31 +49,43 @@ export default function BalancePage() {
     return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   };
 
-  useEffect(() => {
-    async function loadData() {
-      if (!user?.uid) { setIsLoading(false); return; }
-      try {
-        setError("");
-        const [dashboardRes, depositsRes, withdrawalsRes] = await Promise.all([
-          fetch(`/api/user/dashboard?uid=${encodeURIComponent(user.uid)}`),
-          fetch(`/api/user/deposit?uid=${encodeURIComponent(user.uid)}`),
-          fetch(`/api/user/withdrawal?uid=${encodeURIComponent(user.uid)}`),
-        ]);
-        const d = await dashboardRes.json();
-        const dep = await depositsRes.json();
-        const wd = await withdrawalsRes.json();
-        if (!d.success) throw new Error(d.message || "Failed to load data.");
-        setDashboard(d.dashboard);
-        setDeposits(dep.deposits || []);
-        setWithdrawals(wd.withdrawals || []);
-      } catch (err) {
-        setError(err.message);
-      } finally {
-        setIsLoading(false);
+  const dashboardQuery = useQuery({
+    queryKey: ["user", "dashboard", uid],
+    queryFn: async () => {
+      const res = await fetch(`/api/user/dashboard?uid=${encodeURIComponent(uid)}`);
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.message || "Failed to load data.");
+      return data.dashboard;
+    },
+    enabled: Boolean(uid),
+    refetchInterval: 60000,
+  });
+  const dashboard = dashboardQuery.data || { availableBalance: 0, totalEarned: 0 };
+
+  const depositsQuery = useQuery({
+    queryKey: ["user", "deposits", uid],
+    queryFn: async () => {
+      const res = await fetch(`/api/user/deposit?uid=${encodeURIComponent(uid)}`);
+      const data = await res.json();
+      if (!data.success) throw new Error("Failed to load deposits");
+      return data.deposits || [];
+    },
+    enabled: Boolean(uid),
+  });
+  const deposits = depositsQuery.data || [];
+
+  const isLoading = authLoading || (dashboardQuery.isLoading && depositsQuery.isLoading);
+  const error = dashboardQuery.isError ? dashboardQuery.error.message : "";
+
+  useSSE({
+    uid,
+    onEvent: (type) => {
+      if (type === "balance") {
+        queryClient.invalidateQueries({ queryKey: ["user", "dashboard", uid] });
+        queryClient.invalidateQueries({ queryKey: ["user", "deposits", uid] });
       }
-    }
-    loadData();
-  }, [user?.uid]);
+    },
+  });
 
   if (authLoading) return <div className="max-w-7xl mx-auto px-4 py-10 text-slate-600 font-medium">Loading balance...</div>;
 
@@ -102,7 +112,6 @@ export default function BalancePage() {
   }
 
   const approvedDeposits = deposits.filter(d => d.status === "approved").reduce((s, d) => s + Number(d.amount), 0);
-  const approvedWithdrawals = withdrawals.filter(w => w.status === "approved").reduce((s, w) => s + Number(w.amount), 0);
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-8">
@@ -127,12 +136,12 @@ export default function BalancePage() {
        
         <div className="bg-white rounded-2xl border-2 border-orange-400/30 p-6 shadow-sm relative overflow-hidden">
           <div className="absolute top-0 right-0 w-32 h-32 bg-orange-500/5 rounded-full -mr-10 -mt-10"></div>
-          <p className="text-xs text-slate-400 uppercase tracking-wider font-semibold relative z-10">Net Balance</p>
-          <p className={`text-3xl font-bold mt-2 relative z-10 ${(approvedDeposits - approvedWithdrawals) >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>
-            ${formatMoney(approvedDeposits - approvedWithdrawals)}
+          <p className="text-xs text-slate-400 uppercase tracking-wider font-semibold relative z-10">Total Earned</p>
+          <p className="text-3xl font-bold mt-2 relative z-10 text-orange-700">
+            ${formatMoney(dashboard.totalEarned)}
           </p>
-          <p className={`text-xs mt-2 font-medium relative z-10 ${(approvedDeposits - approvedWithdrawals) >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-            {approvedDeposits - approvedWithdrawals >= 0 ? 'Positive' : 'Negative'} cash flow
+          <p className="text-xs mt-2 font-medium relative z-10 text-orange-600">
+            Lifetime earnings
           </p>
         </div>
       </div>

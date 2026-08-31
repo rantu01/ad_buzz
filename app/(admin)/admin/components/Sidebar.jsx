@@ -10,7 +10,6 @@ import { getAllowedRoutes } from "@/lib/permissions";
 const ICON_MAP = {
   overview: LayoutGrid,
   deposits: DollarSign,
-  withdrawals: DollarSign,
   "ad-accounts": Megaphone,
   "user-management": Users,
   "payment-methods": CreditCard,

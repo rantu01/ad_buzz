@@ -67,7 +67,6 @@ export default function BalanceHistoryPage() {
           className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-orange-500/30 bg-white">
           <option value="">All Types</option>
           <option value="deposit">Deposit</option>
-          <option value="withdrawal">Withdrawal</option>
           <option value="payment">Payment</option>
           <option value="refund">Refund</option>
           <option value="admin">Admin Adjustment</option>

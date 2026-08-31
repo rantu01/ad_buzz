@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAdmin } from "../components/AdminProvider";
 import { useSettings } from "@/app/Component/Settings/SettingsProvider";
 import Pagination from "@/app/Component/Pagination";
+import useSSE from "@/app/Component/Hooks/useSSE";
 
 const ITEMS_PER_PAGE = 20;
 
@@ -24,10 +26,7 @@ export default function AdminAdAccountsTopUpPage() {
   const settings = useSettings();
   const defaultDollarRate = settings?.dollarRate || 129;
   const adminName = profile?.displayName || profile?.email || "Admin";
-
-  const [adAccounts, setAdAccounts] = useState([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState("");
+  const queryClient = useQueryClient();
 
   const [topUpModal, setTopUpModal] = useState(null);
   const [topUpAmount, setTopUpAmount] = useState("");
@@ -37,11 +36,34 @@ export default function AdminAdAccountsTopUpPage() {
   const [historyModal, setHistoryModal] = useState(null);
   const [historyData, setHistoryData] = useState([]);
   const [historyLoading, setHistoryLoading] = useState(false);
-  const [lastRefreshedAt, setLastRefreshedAt] = useState(null);
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
 
   useEffect(() => { setPage(1); }, [search]);
+
+  const adAccountsQuery = useQuery({
+    queryKey: ["admin", "ad-accounts", "list"],
+    queryFn: async () => {
+      const res = await fetch("/api/admin/ad-accounts?includeUnassigned=true");
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.message || "Failed to load data");
+      return data.adAccounts || [];
+    },
+    refetchInterval: 30000,
+  });
+  const adAccounts = adAccountsQuery.data || [];
+  const isLoading = adAccountsQuery.isLoading;
+  const error = adAccountsQuery.error ? (adAccountsQuery.error.message || "Failed to load data") : "";
+  const lastRefreshedAt = adAccountsQuery.dataUpdatedAt ? new Date(adAccountsQuery.dataUpdatedAt) : null;
+
+  useSSE({
+    uid: profile?.uid || undefined,
+    onEvent: (type) => {
+      if (type === "sync" || type === "meta" || type === "ad-account") {
+        queryClient.invalidateQueries({ queryKey: ["admin", "ad-accounts", "list"] });
+      }
+    },
+  });
 
   const filteredAccounts = search
     ? adAccounts.filter((a) => {
@@ -71,39 +93,6 @@ export default function AdminAdAccountsTopUpPage() {
       </span>
     );
   };
-
-  useEffect(() => {
-    async function loadData() {
-      try {
-        setError("");
-        const [accountsRes] = await Promise.all([
-          fetch("/api/admin/ad-accounts?includeUnassigned=true"),
-        ]);
-        const accountsData = await accountsRes.json();
-        if (accountsData.success) setAdAccounts(accountsData.adAccounts || []);
-        setLastRefreshedAt(new Date());
-      } catch (err) {
-        setError(err.message || "Failed to load data");
-      } finally {
-        setIsLoading(false);
-      }
-    }
-    loadData();
-  }, []);
-
-  const refreshBalances = async () => {
-    try {
-      const accountsRes = await fetch("/api/admin/ad-accounts?includeUnassigned=true");
-      const accountsData = await accountsRes.json();
-      if (accountsData.success) setAdAccounts(accountsData.adAccounts || []);
-      setLastRefreshedAt(new Date());
-    } catch {}
-  };
-
-  useEffect(() => {
-    const id = setInterval(refreshBalances, 30000);
-    return () => clearInterval(id);
-  }, []);
 
   const totalBudget = adAccounts.reduce((s, a) => s + Number(a.metaSpendCap || a.spendCap || 0), 0);
   const totalSpent = adAccounts.reduce((s, a) => {
@@ -140,7 +129,7 @@ export default function AdminAdAccountsTopUpPage() {
       const data = await res.json();
       if (data.success) {
         setTopUpModal(null);
-        await refreshBalances();
+        queryClient.invalidateQueries({ queryKey: ["admin", "ad-accounts", "list"] });
       } else {
         setTopUpError(data.message || "Top-up failed");
       }

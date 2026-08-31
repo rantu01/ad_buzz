@@ -8,8 +8,8 @@ export default function DashboardPage() {
   const { profile } = useAdmin();
   const role = profile?.role || "customer";
   const [stats, setStats] = useState({
-    users: 0, pendingDeposits: 0, pendingWithdrawals: 0,
-    totalDeposits: 0, totalWithdrawals: 0, adAccounts: 0,
+    users: 0, pendingDeposits: 0,
+    totalDeposits: 0, adAccounts: 0,
     openTickets: 0,
   });
   const [loading, setLoading] = useState(true);
@@ -24,10 +24,6 @@ export default function DashboardPage() {
         if (hasPermission(role, "view_deposits") || hasPermission(role, "approve_deposits")) calls.push(fetch("/api/admin/deposits").then(r => r.json()).then(d => {
           const deps = d.deposits || [];
           return { pendingDeposits: deps.filter(x => x.status === "pending").length, totalDeposits: deps.length };
-        }).catch(() => ({})));
-        if (hasPermission(role, "view_withdrawals") || hasPermission(role, "approve_withdrawals")) calls.push(fetch("/api/admin/withdrawals").then(r => r.json()).then(d => {
-          const wds = d.withdrawals || [];
-          return { pendingWithdrawals: wds.filter(x => x.status === "pending").length, totalWithdrawals: wds.length };
         }).catch(() => ({})));
         if (hasPermission(role, "view_ad_accounts")) calls.push(fetch("/api/admin/ad-accounts").then(r => r.json()).then(d => ({ adAccounts: (d.adAccounts || []).length })).catch(() => ({})));
         if (hasPermission(role, "view_tickets")) calls.push(fetch("/api/admin/support-tickets").then(r => r.json()).then(d => ({ openTickets: (d.tickets || []).filter(x => x.status !== "closed").length })).catch(() => ({})));
@@ -45,9 +41,7 @@ export default function DashboardPage() {
     ...(hasPermission(role, "view_users") ? [{ label: "Total Users", value: stats.users, color: "bg-blue-50 text-blue-600 border-blue-200" }] : []),
     ...(hasPermission(role, "view_ad_accounts") ? [{ label: "Ad Accounts", value: stats.adAccounts, color: "bg-purple-50 text-purple-600 border-purple-200" }] : []),
     ...(hasPermission(role, "view_deposits") ? [{ label: "Pending Deposits", value: stats.pendingDeposits, color: "bg-amber-50 text-amber-600 border-amber-200" }] : []),
-    ...(hasPermission(role, "view_withdrawals") ? [{ label: "Pending Withdrawals", value: stats.pendingWithdrawals, color: "bg-red-50 text-red-600 border-red-200" }] : []),
     ...(hasPermission(role, "view_deposits") ? [{ label: "Total Deposits", value: stats.totalDeposits, color: "bg-emerald-50 text-emerald-600 border-emerald-200" }] : []),
-    ...(hasPermission(role, "view_withdrawals") ? [{ label: "Total Withdrawals", value: stats.totalWithdrawals, color: "bg-indigo-50 text-indigo-600 border-indigo-200" }] : []),
     ...(hasPermission(role, "view_tickets") ? [{ label: "Open Tickets", value: stats.openTickets, color: "bg-rose-50 text-rose-600 border-rose-200" }] : []),
   ];
 

@@ -2,9 +2,12 @@ import { NextResponse } from "next/server";
 import clientPromise from "@/lib/mongodb";
 import { syncAllAdAccounts } from "@/lib/metaApiService";
 import { getMetaSettings, createSyncLog } from "@/lib/metaSettingsModel";
+import { initializeIndexes } from "@/lib/indexes";
 
 const DB_NAME = process.env.MONGODB_DB_NAME || "ad_buzz";
 const CRON_SECRET = process.env.CRON_SECRET || "";
+
+initializeIndexes();
 
 export async function POST(request) {
   try {

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { fetchAdAccountsFromBM } from "@/lib/metaApiService";
 import { saveMetaAdAccounts, createSyncLog, getMetaSettings } from "@/lib/metaSettingsModel";
 import { startAutoMetaFetch } from "@/lib/autoMetaFetch";
+import { initializeIndexes } from "@/lib/indexes";
 
 const CRON_SECRET = process.env.CRON_SECRET || "";
 
@@ -12,6 +13,7 @@ function isAuthorized(request) {
 }
 
 startAutoMetaFetch();
+initializeIndexes();
 
 export async function POST(request) {
   try {
