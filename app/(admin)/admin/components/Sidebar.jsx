@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutGrid, Users, X, DollarSign, History, Megaphone, RefreshCw, MessageSquare, BarChart3, Settings, LifeBuoy, TrendingUp, CreditCard, ArrowUpCircle } from "lucide-react";
+import { LayoutGrid, Users, X, DollarSign, History, Megaphone, RefreshCw, MessageSquare, BarChart3, Settings, LifeBuoy, TrendingUp, CreditCard, ArrowUpCircle, ShieldCheck } from "lucide-react";
 import { useSettings } from "@/app/Component/Settings/SettingsProvider";
 import { useAdmin } from "./AdminProvider";
 import { getAllowedRoutes } from "@/lib/permissions";
@@ -21,6 +21,7 @@ const ICON_MAP = {
   "meta-api": RefreshCw,
   whatsapp: MessageSquare,
   settings: Settings,
+  roles: ShieldCheck,
 };
 
 const ALL_NAV = [
@@ -29,6 +30,7 @@ const ALL_NAV = [
   { label: "Ad Accounts Insights", href: "/admin/ad-accounts", key: "ad-accounts" },
   { label: "Ad Accounts TopUp", href: "/admin/ad-accounts-topup", key: "ad-accounts-topup" },
   { label: "User Management", href: "/admin/user-management", key: "user-management" },
+  { label: "Roles & Permissions", href: "/admin/roles", key: "roles" },
   { label: "Payment Methods", href: "/admin/payment-methods", key: "payment-methods" },
   { label: "Support Tickets", href: "/admin/support-tickets", key: "support-tickets" },
   { label: "Balance Logs", href: "/admin/balance-logs", key: "balance-logs" },
@@ -42,12 +44,12 @@ const ALL_NAV = [
 export default function DashboardSidebar({ open, onClose }) {
   const pathname = usePathname();
   const settings = useSettings();
-  const { profile } = useAdmin();
+  const { profile, access } = useAdmin();
   const logo = settings?.logo || "/logo.jpeg";
   const secondary = settings?.secondaryColor || "#F48E2B";
   const role = profile?.role || "customer";
 
-  const allowed = getAllowedRoutes(role);
+  const allowed = getAllowedRoutes(role, access?.permissions);
   const navItems = ALL_NAV.filter((item) =>
     item.key === "overview" ? true : allowed.includes(item.key)
   );
@@ -71,11 +73,28 @@ export default function DashboardSidebar({ open, onClose }) {
         </div>
 
         <div className="px-6 py-5">
-          <div className="rounded-2xl border border-white/10 bg-white/5 p-4 backdrop-blur" style={{ borderColor: `${secondary}33` }}>
-            <p className="text-sm text-white/70">Dashboard</p>
-            <p className="mt-1 text-lg font-semibold text-white capitalize">{roleLabel}</p>
-            <div className="mt-3 inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-medium" style={{ backgroundColor: `${secondary}26`, color: secondary }}>
-              <span className="h-2 w-2 rounded-full" style={{ backgroundColor: secondary }} /> Online
+          {/* Level Switcher */}
+          <div className="px-3 pt-3">
+            <div className="flex items-center gap-1 p-1 rounded-xl bg-slate-800 border border-slate-700">
+              {/* Level 1 */}
+              <button
+                className="flex-1 py-2 rounded-lg text-xs font-bold bg-orange-500 text-white shadow-md cursor-default"
+                title="Current Level"
+                aria-current="page"
+              >
+                Level 1
+              </button>
+
+              {/* Level 2 */}
+              <button
+                onClick={() => {
+                  window.location.href = "https://apps2.adsbuzzbd.com/";
+                }}
+                className="flex-1 py-2 rounded-lg text-xs font-bold text-slate-400 hover:text-white hover:bg-slate-700 transition-all duration-200 cursor-pointer"
+                title="Go to Level 2"
+              >
+                Level 2
+              </button>
             </div>
           </div>
         </div>
@@ -91,7 +110,7 @@ export default function DashboardSidebar({ open, onClose }) {
                   className={`group flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-medium transition-colors ${active
                     ? "text-slate-950 shadow-lg"
                     : "text-white/70 hover:bg-white/8 hover:text-white"
-                  }`}
+                    }`}
                   style={active ? { backgroundColor: secondary, boxShadow: `0 4px 14px ${secondary}33` } : {}}
                   onClick={() => { if (window.innerWidth < 1024) onClose(); }}>
                   <span className={`flex h-9 w-9 items-center justify-center rounded-xl ${active ? "bg-white/20" : "bg-white/10 group-hover:bg-white/15"}`}>

@@ -13,6 +13,7 @@ export function useAdmin() {
 export default function AdminProvider({ children }) {
   const { user, loading: authLoading } = useAuth();
   const [profile, setProfile] = useState(null);
+  const [access, setAccess] = useState(null); // { permissions: { roleKey: [...] } }
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -21,10 +22,21 @@ export default function AdminProvider({ children }) {
       if (authLoading) return;
       if (!user?.uid) { setLoading(false); return; }
       try {
-        const res = await fetch(`/api/user/dashboard?uid=${encodeURIComponent(user.uid)}`);
-        const data = await res.json();
+        const [dashRes, rolesRes] = await Promise.all([
+          fetch(`/api/user/dashboard?uid=${encodeURIComponent(user.uid)}`),
+          fetch("/api/admin/roles"),
+        ]);
+        const data = await dashRes.json();
         if (mounted && data.success) {
           setProfile(data.dashboard);
+        }
+        const rolesData = await rolesRes.json().catch(() => ({}));
+        if (mounted && Array.isArray(rolesData.roles)) {
+          setAccess({
+            permissions: Object.fromEntries(
+              rolesData.roles.map((r) => [r.key, r.permissions || []])
+            ),
+          });
         }
       } catch { /* ignore */ }
       finally { if (mounted) setLoading(false); }
@@ -34,7 +46,7 @@ export default function AdminProvider({ children }) {
   }, [user?.uid, authLoading]);
 
   const isStaff = profile && isStaffRole(profile.role);
-  const value = { profile, loading: loading || authLoading, isStaff };
+  const value = { profile, loading: loading || authLoading, isStaff, access };
 
   return <AdminContext.Provider value={value}>{children}</AdminContext.Provider>;
 }

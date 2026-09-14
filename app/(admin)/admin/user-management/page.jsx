@@ -10,11 +10,12 @@ import Pagination from "@/app/Component/Pagination";
 const ITEMS_PER_PAGE = 20;
 
 export default function UserManagementPage() {
-  const { profile } = useAdmin();
+  const { profile, access } = useAdmin();
   const role = profile?.role || "customer";
   const isAdmin = role === "admin";
-  const canManageBalance = hasPermission(role, "manage_user_balance");
-  const canCreateUsers = hasPermission(role, "create_users");
+  const livePerms = access?.permissions;
+  const canManageBalance = hasPermission(role, "manage_user_balance", livePerms);
+  const canCreateUsers = hasPermission(role, "create_users", livePerms);
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -24,13 +25,21 @@ export default function UserManagementPage() {
   const [editForm, setEditForm] = useState({});
   const [saving, setSaving] = useState(false);
   const [page, setPage] = useState(1);
+  const [roleOptions, setRoleOptions] = useState(Object.entries(ROLE_LABELS).map(([key, label]) => ({ key, label })));
 
   const loadData = async () => {
     setLoading(true);
     try {
-      const res = await fetch("/api/admin/users");
-      const data = await res.json();
+      const [usersRes, rolesRes] = await Promise.all([
+        fetch("/api/admin/users"),
+        fetch("/api/admin/roles"),
+      ]);
+      const data = await usersRes.json();
       setUsers(data.users || []);
+      const rolesData = await rolesRes.json().catch(() => ({}));
+      if (Array.isArray(rolesData.roles) && rolesData.roles.length) {
+        setRoleOptions(rolesData.roles.map((r) => ({ key: r.key, label: r.label || r.name || r.key })));
+      }
     } finally {
       setLoading(false);
     }
@@ -343,7 +352,7 @@ setCreateForm({ email: "", password: "", displayName: "", confirmPassword: "", g
                   <select value={editForm.role} onChange={(e) => setEditForm((p) => ({ ...p, role: e.target.value }))}
                     disabled={!isAdmin}
                     className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-secondary/30 focus:border-secondary">
-                    {Object.entries(ROLE_LABELS).map(([key, label]) => (
+                    {roleOptions.map(({ key, label }) => (
                       <option key={key} value={key}>{label}</option>
                     ))}
                   </select>

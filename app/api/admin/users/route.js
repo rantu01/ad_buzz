@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import clientPromise from "@/lib/mongodb";
 import { getUserByUid } from "@/lib/userModel";
 import { ROLES, ROLE_LABELS } from "@/lib/permissions";
+import { getRoleByKey } from "@/lib/roleModel";
 import { deleteFirebaseAuthUser, updateFirebaseUserPassword } from "@/lib/firebaseAdmin";
 import { createBalanceLog } from "@/lib/balanceLog";
 
@@ -84,6 +85,15 @@ export async function PATCH(request) {
         return NextResponse.json(
           { success: false, message: "Only admins can change user roles." },
           { status: 403 }
+        );
+      }
+      // Role must exist in the managed `roles` collection (or be a known key),
+      // so custom roles created from /admin/roles are assignable here.
+      const roleDoc = await getRoleByKey(role);
+      if (!roleDoc && !Object.values(ROLES).includes(role)) {
+        return NextResponse.json(
+          { success: false, message: `Unknown role "${role}". Create it from Roles & Permissions first.` },
+          { status: 400 }
         );
       }
       update.role = role;

@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { useAdmin } from "../components/AdminProvider";
-import { ROLES, ROLE_LABELS } from "@/lib/permissions";
+import { ROLES, ROLE_LABELS, PERMISSIONS, hasPermission } from "@/lib/permissions";
 import Pagination from "@/app/Component/Pagination";
 import { ChevronLeft, ChevronRight, CalendarDays, CalendarRange } from "lucide-react";
 
@@ -69,11 +69,11 @@ function StatCard({ label, value, sub }) {
 }
 
 export default function TopUpInsightsPage() {
-  const { profile, loading: profileLoading } = useAdmin();
+  const { profile, access, loading: profileLoading } = useAdmin();
 
   const role = profile?.role;
+  const canView = hasPermission(role, PERMISSIONS.VIEW_TOPUP_INSIGHTS, access?.permissions);
   const isAdmin = role === ROLES.ADMIN;
-  const isKeyManagerOrAccMgr = role === ROLES.KEY_MANAGER || role === ROLES.ACCOUNTS_MANAGER;
 
   const today = new Date();
 
@@ -100,42 +100,46 @@ export default function TopUpInsightsPage() {
 
   useEffect(() => {
     if (profileLoading) return;
-    if (!isAdmin && !isKeyManagerOrAccMgr) return;
+    if (!canView) return;
     (async () => {
       const all = await fetchInsights({ uid: "all" });
       setOverall({ total: all.total, totalAmount: all.totalAmount });
       setLoading(false);
     })();
-  }, [profileLoading, isAdmin, isKeyManagerOrAccMgr, fetchInsights]);
+  }, [profileLoading, canView, fetchInsights]);
 
   useEffect(() => {
     if (profileLoading) return;
-    if (!isAdmin && !isKeyManagerOrAccMgr) return;
+    if (!canView) return;
     const from = startOfDay(selectedDay);
     const to = addDays(from, 1);
     (async () => {
       const res = await fetchInsights({ uid: "all", from: from.toISOString(), to: to.toISOString() });
       setDayItems(res.insights || []);
     })();
-  }, [profileLoading, isAdmin, isKeyManagerOrAccMgr, fetchInsights, selectedDay]);
+  }, [profileLoading, canView, fetchInsights, selectedDay]);
 
   useEffect(() => {
     if (profileLoading) return;
-    if (!isAdmin && !isKeyManagerOrAccMgr) return;
+    if (!canView) return;
     const from = startOfMonth(selectedMonth);
     const to = addMonths(from, 1);
     (async () => {
       const res = await fetchInsights({ uid: "all", from: from.toISOString(), to: to.toISOString() });
       setMonthItems(res.insights || []);
     })();
-  }, [profileLoading, isAdmin, isKeyManagerOrAccMgr, fetchInsights, selectedMonth]);
+  }, [profileLoading, canView, fetchInsights, selectedMonth]);
 
   if (profileLoading || loading) {
+    // When access is denied there is nothing to load — stop the spinner.
+    if (!profileLoading && !canView) {
+      return <p className="text-slate-500">Your role does not have permission to access this page.</p>;
+    }
     return <p className="text-slate-500">Loading insights...</p>;
   }
 
-  if (!isAdmin && !isKeyManagerOrAccMgr) {
-    return <p className="text-slate-500">You do not have access to this page.</p>;
+  if (!canView) {
+    return <p className="text-slate-500">Your role does not have permission to access this page.</p>;
   }
 
   function computeStats(items) {

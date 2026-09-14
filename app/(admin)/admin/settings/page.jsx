@@ -1,16 +1,14 @@
 "use client";
 
 import { useEffect, useState, useRef } from "react";
-import { useRouter } from "next/navigation";
 import Swal from "sweetalert2";
 import { useAuth } from "@/app/Component/Auth/AuthProvider";
 import { useAdmin } from "../components/AdminProvider";
-import { ROLES } from "@/lib/permissions";
+import { PERMISSIONS, hasPermission } from "@/lib/permissions";
 
 export default function AdminSettingsPage() {
-  const router = useRouter();
   const { user } = useAuth();
-  const { profile, loading: profileLoading } = useAdmin();
+  const { profile, access, loading: profileLoading } = useAdmin();
   const [siteName, setSiteName] = useState("Ad Buzz");
   const [primaryColor, setPrimaryColor] = useState("#135B9A");
   const [secondaryColor, setSecondaryColor] = useState("#F48E2B");
@@ -21,14 +19,12 @@ export default function AdminSettingsPage() {
   const [saving, setSaving] = useState(false);
   const fileInputRef = useRef(null);
 
-  const isAdmin = profile?.role === ROLES.ADMIN;
+  const canView =
+    hasPermission(profile?.role, PERMISSIONS.VIEW_SETTINGS, access?.permissions) ||
+    hasPermission(profile?.role, PERMISSIONS.MANAGE_SETTINGS, access?.permissions);
 
   useEffect(() => {
-    if (profileLoading) return;
-    if (!isAdmin) {
-      router.replace("/admin");
-      return;
-    }
+    if (profileLoading || !canView) return;
     fetch("/api/admin/settings", {
       headers: { "x-user-id": user?.uid || "" },
     })
@@ -44,7 +40,7 @@ export default function AdminSettingsPage() {
       })
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, [profileLoading, isAdmin, router, user?.uid]);
+  }, [profileLoading, canView, user?.uid]);
 
   function toBase64(file) {
     return new Promise((resolve, reject) => {
@@ -95,6 +91,12 @@ export default function AdminSettingsPage() {
     setLogoFile(null);
     setLogoPreview(null);
     if (fileInputRef.current) fileInputRef.current.value = "";
+  }
+
+  if (profileLoading) return <p className="text-slate-500">Loading settings...</p>;
+
+  if (!canView) {
+    return <p className="text-slate-500">Your role does not have permission to access this page.</p>;
   }
 
   if (loading) return <p className="text-slate-500">Loading settings...</p>;
