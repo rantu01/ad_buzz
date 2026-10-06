@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { fetchAdAccountsFromBM } from "@/lib/metaApiService";
 import { saveMetaAdAccounts, createSyncLog, getMetaSettings } from "@/lib/metaSettingsModel";
+import { ensureAdAccountsForMeta } from "@/lib/adAccountModel";
 import { startAutoMetaFetch } from "@/lib/autoMetaFetch";
 import { initializeIndexes } from "@/lib/indexes";
 
@@ -31,12 +32,15 @@ export async function POST(request) {
 
     const accounts = await fetchAdAccountsFromBM();
     await saveMetaAdAccounts(accounts);
+    // Materialize brand-new Meta accounts as adAccounts so they appear on
+    // /admin/ad-accounts-topup without a manual re-import.
+    const created = await ensureAdAccountsForMeta(accounts);
     await createSyncLog({
       type: "info",
-      message: `[Auto-fetch] Fetched ${accounts.length} ad accounts from Meta BM`,
+      message: `[Auto-fetch] Fetched ${accounts.length} ad accounts from Meta BM${created > 0 ? `, created ${created} new ad accounts` : ""}`,
     });
 
-    return NextResponse.json({ success: true, count: accounts.length });
+    return NextResponse.json({ success: true, count: accounts.length, created });
   } catch (error) {
     return NextResponse.json({ success: false, message: error.message }, { status: 500 });
   }

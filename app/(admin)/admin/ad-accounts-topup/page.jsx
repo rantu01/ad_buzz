@@ -5,7 +5,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAdmin } from "../components/AdminProvider";
 import { useSettings } from "@/app/Component/Settings/SettingsProvider";
 import Pagination from "@/app/Component/Pagination";
-import useSSE from "@/app/Component/Hooks/useSSE";
+import useAdAccountRealtime from "@/app/Component/Hooks/useAdAccountRealtime";
 
 const ITEMS_PER_PAGE = 20;
 
@@ -49,20 +49,18 @@ export default function AdminAdAccountsTopUpPage() {
       if (!res.ok || !data.success) throw new Error(data.message || "Failed to load data");
       return data.adAccounts || [];
     },
-    refetchInterval: 30000,
+    // Realtime updates arrive via SSE row-level patches (useAdAccountRealtime).
+    // No full-list polling: a single shared backend reconcile feeds all clients.
   });
   const adAccounts = adAccountsQuery.data || [];
   const isLoading = adAccountsQuery.isLoading;
   const error = adAccountsQuery.error ? (adAccountsQuery.error.message || "Failed to load data") : "";
   const lastRefreshedAt = adAccountsQuery.dataUpdatedAt ? new Date(adAccountsQuery.dataUpdatedAt) : null;
 
-  useSSE({
+  useAdAccountRealtime({
     uid: profile?.uid || undefined,
-    onEvent: (type) => {
-      if (type === "sync" || type === "meta" || type === "ad-account") {
-        queryClient.invalidateQueries({ queryKey: ["admin", "ad-accounts", "list"] });
-      }
-    },
+    queryClient,
+    queryKey: ["admin", "ad-accounts", "list"],
   });
 
   const filteredAccounts = search

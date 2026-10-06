@@ -7,7 +7,7 @@ import { Megaphone, RefreshCw, UserPlus, UserX, ExternalLink, CheckCircle, XCirc
 import { useAdmin } from "../components/AdminProvider";
 import { hasPermission, ROLES } from "@/lib/permissions";
 import Pagination from "@/app/Component/Pagination";
-import useSSE from "@/app/Component/Hooks/useSSE";
+import useAdAccountRealtime from "@/app/Component/Hooks/useAdAccountRealtime";
 
 const ITEMS_PER_PAGE = 20;
 
@@ -84,13 +84,10 @@ export default function AdminAdAccountsPage() {
   const users = usersQuery.data || [];
   const loading = adAccountsQuery.isLoading;
 
-  useSSE({
+  useAdAccountRealtime({
     uid: profile?.uid || undefined,
-    onEvent: (type) => {
-      if (type === "sync" || type === "meta" || type === "ad-account") {
-        queryClient.invalidateQueries({ queryKey: ["admin", "ad-accounts", "list"] });
-      }
-    },
+    queryClient,
+    queryKey: ["admin", "ad-accounts", "list"],
   });
 
   const lastOverallSync = useMemo(() => {

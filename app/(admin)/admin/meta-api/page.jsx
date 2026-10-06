@@ -58,7 +58,10 @@ export default function MetaApiSettingsPage() {
   }, [loadSettings, loadMetaAccounts, loadSyncLogs]);
 
   useEffect(() => {
-    const id = setInterval(loadMetaAccounts, 30000);
+    // Slow fallback refresh only; realtime changes arrive via SSE granular
+    // events on the ad-account pages. A single shared backend reconcile
+    // feeds all clients, so this page must not poll the full list aggressively.
+    const id = setInterval(loadMetaAccounts, 300000);
     return () => clearInterval(id);
   }, [loadMetaAccounts]);
 
@@ -70,6 +73,7 @@ export default function MetaApiSettingsPage() {
       businessManagerId: form.bmId.value.trim(),
       appId: form.appId.value.trim(),
       accessToken: form.accessToken.value.trim(),
+      appSecret: form.appSecret?.value?.trim() || undefined,
       autoSyncEnabled: form.autoSync.checked,
     };
 
@@ -208,6 +212,12 @@ export default function MetaApiSettingsPage() {
             <div>
               <label className="block text-sm font-semibold text-slate-700 mb-1.5">Access Token {settings?.hasAccessToken && <span className="ml-2 inline-flex items-center gap-1 text-xs text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full"><CheckCircle size={12} /> Configured</span>}</label>
               <textarea name="accessToken" rows={3} placeholder="EAAx..." className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm bg-white font-mono" defaultValue="" />
+              <p className="text-xs text-slate-400 mt-1">Leave blank to keep the existing token.</p>
+            </div>
+            <div>
+              <label className="block text-sm font-semibold text-slate-700 mb-1.5">App Secret {settings?.hasAppSecret && <span className="ml-2 inline-flex items-center gap-1 text-xs text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full"><CheckCircle size={12} /> Configured</span>}</label>
+              <input name="appSecret" type="password" placeholder="Meta App Secret (for webhook signature verification)" className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm bg-white font-mono" defaultValue="" autoComplete="new-password" />
+              <p className="text-xs text-slate-400 mt-1">Required to verify Meta webhook signatures at <span className="font-mono">/api/meta/webhook</span>. Leave blank to keep the existing secret.</p>
             </div>
             <div className="flex items-center gap-3">
               <button type="button" onClick={handleTestConnection} disabled={syncing} className="border border-slate-200 text-slate-700 rounded-lg px-4 py-2.5 text-sm font-medium hover:bg-slate-50 transition disabled:opacity-50">

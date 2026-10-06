@@ -11,6 +11,7 @@ export async function GET() {
       autoSyncEnabled: settings.autoSyncEnabled || false,
       updatedAt: settings.updatedAt || null,
       hasAccessToken: Boolean(settings.accessToken),
+      hasAppSecret: Boolean(settings.appSecret),
     } : null;
     return NextResponse.json({ success: true, settings: safe });
   } catch (error) {
@@ -21,12 +22,13 @@ export async function GET() {
 export async function PUT(request) {
   try {
     const body = await request.json();
-    const { businessManagerId, appId, accessToken, autoSyncEnabled } = body;
+    const { businessManagerId, appId, accessToken, autoSyncEnabled, appSecret } = body;
 
     const updates = {};
     if (businessManagerId !== undefined) updates.businessManagerId = businessManagerId;
     if (appId !== undefined) updates.appId = appId;
-    if (accessToken !== undefined) updates.accessToken = accessToken;
+    if (accessToken !== undefined && accessToken !== "") updates.accessToken = accessToken;
+    if (appSecret !== undefined && appSecret !== "") updates.appSecret = appSecret;
     if (autoSyncEnabled !== undefined) updates.autoSyncEnabled = Boolean(autoSyncEnabled);
 
     const result = await updateMetaSettings(updates);

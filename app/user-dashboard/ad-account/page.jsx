@@ -5,6 +5,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/app/Component/Auth/AuthProvider";
 import { useSettings } from "@/app/Component/Settings/SettingsProvider";
 import useSSE from "@/app/Component/Hooks/useSSE";
+import useAdAccountRealtime from "@/app/Component/Hooks/useAdAccountRealtime";
 
 function timeAgo(date) {
   if (!date) return "\u2014";
@@ -46,7 +47,7 @@ export default function AdAccountPage() {
       return data.adAccounts || [];
     },
     enabled: Boolean(uid),
-    refetchInterval: 30000,
+    // Realtime updates arrive via SSE row-level patches (useAdAccountRealtime).
   });
   const adAccounts = adAccountsQuery.data || [];
   const isLoading = authLoading || !uid;
@@ -60,21 +61,23 @@ export default function AdAccountPage() {
       return data.dashboard;
     },
     enabled: Boolean(uid),
-    refetchInterval: 30000,
   });
   const dashboard = dashboardQuery.data;
   const walletBalance = Number(dashboard?.availableBalance || 0);
   const userDollarRate = dashboard?.dollarRate || null;
   const effectiveRate = userDollarRate || defaultDollarRate;
 
+  useAdAccountRealtime({
+    uid,
+    queryClient,
+    queryKey: ["user", "ad-accounts", uid],
+  });
+
   useSSE({
     uid,
     onEvent: (type) => {
       if (type === "balance") {
         queryClient.invalidateQueries({ queryKey: ["user", "dashboard", uid] });
-      }
-      if (type === "ad-account" || type === "sync") {
-        queryClient.invalidateQueries({ queryKey: ["user", "ad-accounts", uid] });
       }
     },
   });

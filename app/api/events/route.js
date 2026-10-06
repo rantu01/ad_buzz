@@ -1,10 +1,11 @@
-import { registerClient, sendHeartbeat } from "@/lib/sseManager";
+import { registerClient, subscribeChannel, sendHeartbeat } from "@/lib/sseManager";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(request) {
   const { searchParams } = new URL(request.url);
   const uid = searchParams.get("uid") || null;
+  const channels = searchParams.getAll("channel");
 
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
@@ -21,6 +22,12 @@ export async function GET(request) {
       const clientId = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 
       const unregister = registerClient({ id: clientId, uid, write });
+      for (const c of channels) {
+        try { subscribeChannel(clientId, c); } catch {}
+      }
+      // Admin dashboard pages listen on admin:meta for sync/meta events.
+      // Auto-subscribe so ?channel= is optional and reconnects keep working.
+      try { subscribeChannel(clientId, "admin:meta"); } catch {}
 
       const heartbeat = setInterval(() => {
         try { sendHeartbeat(clientId); } catch {}

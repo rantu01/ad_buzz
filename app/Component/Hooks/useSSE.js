@@ -2,9 +2,22 @@
 
 import { useEffect, useRef } from "react";
 
+const GRANULAR_EVENTS = [
+  "balance",
+  "sync",
+  "meta",
+  "ad-account",
+  "ad_account.created",
+  "ad_account.updated",
+  "ad_account.deleted",
+  "meta-status",
+];
+
 export default function useSSE({ uid, channels = [], onEvent } = {}) {
   const onEventRef = useRef(onEvent);
-  onEventRef.current = onEvent;
+  useEffect(() => {
+    onEventRef.current = onEvent;
+  }, [onEvent]);
 
   useEffect(() => {
     if (!uid) return;
@@ -14,35 +27,49 @@ export default function useSSE({ uid, channels = [], onEvent } = {}) {
       for (const c of channels) params.append("channel", c);
     }
 
-    const es = new EventSource(`/api/events?${params.toString()}`);
+    let es = null;
+    let closed = false;
+    let retryMs = 3000;
 
-    es.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        onEventRef.current?.("message", data);
-      } catch {}
-    };
+    const connect = () => {
+      if (closed) return;
+      es = new EventSource(`/api/events?${params.toString()}`);
 
-    const handlers = {};
-    const handle = (type) => {
-      if (handlers[type]) return;
-      handlers[type] = (event) => {
+      es.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
-          onEventRef.current?.(type, data);
+          onEventRef.current?.("message", data);
         } catch {}
       };
-      es.addEventListener(type, handlers[type]);
+
+      for (const type of GRANULAR_EVENTS) {
+        es.addEventListener(type, (event) => {
+          try {
+            const data = JSON.parse(event.data);
+            retryMs = 3000; // successful event resets backoff
+            onEventRef.current?.(type, data);
+          } catch {}
+        });
+      }
+
+      es.onerror = () => {
+        // EventSource auto-retries, but if the stream dies hard, reconnect
+        // with backoff so network interruptions recover.
+        try { es?.close(); } catch {}
+        if (closed) return;
+        const delay = Math.min(retryMs, 30000);
+        retryMs = Math.min(retryMs * 2, 30000);
+        setTimeout(connect, delay);
+      };
     };
 
-    handle("balance");
-    handle("sync");
-    handle("meta");
-    handle("ad-account");
+    connect();
 
     return () => {
-      es.close();
+      closed = true;
+      try { es?.close(); } catch {}
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [uid, channels.join(",")]);
 
   return null;
