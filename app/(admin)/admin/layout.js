@@ -5,6 +5,7 @@ import { useRouter, usePathname } from "next/navigation";
 import { ShieldAlert } from "lucide-react";
 import { useAuth } from "@/app/Component/Auth/AuthProvider";
 import { isStaffRole, canAccessAdminPath, getAdminRouteKey } from "@/lib/permissions";
+import { useLoginSession } from "@/app/Component/Hooks/useLoginSession";
 import AdminProvider, { useAdmin } from "./components/AdminProvider";
 import TicketAlertProvider from "./components/TicketAlertProvider";
 import DepositAlertProvider from "./components/DepositAlertProvider";
@@ -33,6 +34,10 @@ function DashboardLayoutInner({ children }) {
   const { user, loading: authLoading } = useAuth();
   const { profile, loading: adminLoading, isStaff, access } = useAdmin();
   const [open, setOpen] = useState(false);
+
+  // Track this browser as a login session (same existing session system as
+  // the user dashboard; best-effort, powers the Profile login-activity list).
+  useLoginSession(user?.uid, user?.email);
 
   const loading = authLoading || adminLoading;
 

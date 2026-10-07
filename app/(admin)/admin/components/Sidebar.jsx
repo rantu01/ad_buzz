@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutGrid, Users, X, DollarSign, History, Megaphone, RefreshCw, MessageSquare, BarChart3, Settings, LifeBuoy, TrendingUp, CreditCard, ArrowUpCircle, ShieldCheck } from "lucide-react";
+import React from "react";
+import { LayoutGrid, Users, User, X, DollarSign, History, Megaphone, RefreshCw, MessageSquare, BarChart3, Settings, LifeBuoy, TrendingUp, CreditCard, ArrowUpCircle, ShieldCheck, ChevronDown } from "lucide-react";
 import { useSettings } from "@/app/Component/Settings/SettingsProvider";
 import { useAdmin } from "./AdminProvider";
 import { useTicketAlerts } from "./TicketAlertProvider";
@@ -24,23 +25,27 @@ const ICON_MAP = {
   whatsapp: MessageSquare,
   settings: Settings,
   roles: ShieldCheck,
+  profile: User,
 };
 
 const ALL_NAV = [
   { label: "Overview", href: "/admin", key: "overview" },
-  { label: "Deposit Verification", href: "/admin/deposits", key: "deposits" },
   { label: "Ad Accounts Insights", href: "/admin/ad-accounts", key: "ad-accounts" },
   { label: "Ad Accounts TopUp", href: "/admin/ad-accounts-topup", key: "ad-accounts-topup" },
+  { label: "Deposit Verification", href: "/admin/deposits", key: "deposits" },
+  { label: "Support Tickets", href: "/admin/support-tickets", key: "support-tickets" },
+  { label: "Payment Methods", href: "/admin/payment-methods", key: "payment-methods" },
+  { label: "Top-Up Insights", href: "/admin/top-up-insights", key: "top-up-insights" },
+  { label: "Balance Logs", href: "/admin/balance-logs", key: "balance-logs" },
   { label: "User Management", href: "/admin/user-management", key: "user-management" },
   { label: "Roles & Permissions", href: "/admin/roles", key: "roles" },
-  { label: "Payment Methods", href: "/admin/payment-methods", key: "payment-methods" },
-  { label: "Support Tickets", href: "/admin/support-tickets", key: "support-tickets" },
-  { label: "Balance Logs", href: "/admin/balance-logs", key: "balance-logs" },
-  { label: "Top-Up Insights", href: "/admin/top-up-insights", key: "top-up-insights" },
   { label: "Reports", href: "/admin/reports", key: "reports" },
+];
+
+const SETTINGS_CHILDREN = [
+  { label: "General", href: "/admin/settings", key: "settings" },
   { label: "Meta API", href: "/admin/meta-api", key: "meta-api" },
   { label: "WhatsApp", href: "/admin/whatsapp", key: "whatsapp" },
-  { label: "Settings", href: "/admin/settings", key: "settings" },
 ];
 
 export default function DashboardSidebar({ open, onClose }) {
@@ -63,6 +68,59 @@ export default function DashboardSidebar({ open, onClose }) {
     item.key === "overview" ? true : allowed.includes(item.key)
   );
   const roleLabel = role.replace(/_/g, " ").replace(/\b\w/g, (l) => l.toUpperCase());
+
+  // Requested sidebar order. Any existing item NOT listed here is kept and
+  // rendered below the listed items, preserving its relative order.
+  const NAV_ORDER = [
+    "overview",
+    "ad-accounts",
+    "ad-accounts-topup",
+    "deposits",
+    "support-tickets",
+    "payment-methods",
+    "top-up-insights",
+    "balance-logs",
+    "user-management",
+    "roles",
+    "settings",
+  ];
+  const orderIndex = (key) => {
+    const i = NAV_ORDER.indexOf(key);
+    return i === -1 ? NAV_ORDER.length : i;
+  };
+  const orderedTopItems = navItems
+    .filter((item) => NAV_ORDER.includes(item.key))
+    .sort((a, b) => orderIndex(a.key) - orderIndex(b.key));
+  const extraItems = navItems.filter((item) => !NAV_ORDER.includes(item.key));
+
+  const renderNavItem = (item) => {
+    const active = pathname === item.href;
+    const Icon = ICON_MAP[item.key] || LayoutGrid;
+    return (
+      <Link key={item.href} href={item.href}
+        className={`group flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-medium transition-colors ${active
+          ? "text-slate-950 shadow-lg"
+          : "text-white/70 hover:bg-white/8 hover:text-white"
+          }`}
+        style={active ? { backgroundColor: secondary, boxShadow: `0 4px 14px ${secondary}33` } : {}}
+        onClick={() => { if (window.innerWidth < 1024) onClose(); }}>
+        <span className={`flex h-9 w-9 items-center justify-center rounded-xl ${active ? "bg-white/20" : "bg-white/10 group-hover:bg-white/15"}`}>
+          <Icon size={18} />
+        </span>
+        <span>{item.label}</span>
+        {badgeFor(item.key) > 0 && (
+          <span className="ml-auto flex h-5 min-w-[20px] items-center justify-center rounded-full bg-red-500 px-1.5 text-[11px] font-bold text-white">
+            {badgeFor(item.key) > 99 ? "99+" : badgeFor(item.key)}
+          </span>
+        )}
+      </Link>
+    );
+  };
+
+  const settingsChildren = SETTINGS_CHILDREN.filter((item) => allowed.includes(item.key));
+  const settingsActive = settingsChildren.some((item) => pathname === item.href || pathname.startsWith(item.href + "/"));
+  const [settingsOpen, setSettingsOpen] = React.useState(false);
+  const settingsExpanded = settingsOpen || settingsActive;
 
   return (
     <>
@@ -111,29 +169,51 @@ export default function DashboardSidebar({ open, onClose }) {
         <nav className="flex-1 overflow-y-auto px-4 pb-6">
           <p className="px-2 pb-3 text-xs font-semibold uppercase tracking-[0.3em] text-white/40">Navigation</p>
           <div className="space-y-1">
-            {navItems.map((item) => {
-              const active = pathname === item.href;
-              const Icon = ICON_MAP[item.key] || LayoutGrid;
-              return (
-                <Link key={item.href} href={item.href}
-                  className={`group flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-medium transition-colors ${active
+            {orderedTopItems.map((item) => renderNavItem(item))}
+            {settingsChildren.length > 0 && (
+              <div>
+                <button
+                  onClick={() => setSettingsOpen((v) => !v)}
+                  aria-expanded={settingsExpanded}
+                  className={`group flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-sm font-medium transition-colors ${settingsActive
                     ? "text-slate-950 shadow-lg"
                     : "text-white/70 hover:bg-white/8 hover:text-white"
                     }`}
-                  style={active ? { backgroundColor: secondary, boxShadow: `0 4px 14px ${secondary}33` } : {}}
-                  onClick={() => { if (window.innerWidth < 1024) onClose(); }}>
-                  <span className={`flex h-9 w-9 items-center justify-center rounded-xl ${active ? "bg-white/20" : "bg-white/10 group-hover:bg-white/15"}`}>
-                    <Icon size={18} />
+                  style={settingsActive ? { backgroundColor: secondary, boxShadow: `0 4px 14px ${secondary}33` } : {}}>
+                  <span className={`flex h-9 w-9 items-center justify-center rounded-xl ${settingsActive ? "bg-white/20" : "bg-white/10 group-hover:bg-white/15"}`}>
+                    <Settings size={18} />
                   </span>
-                  <span>{item.label}</span>
-                  {badgeFor(item.key) > 0 && (
-                    <span className="ml-auto flex h-5 min-w-[20px] items-center justify-center rounded-full bg-red-500 px-1.5 text-[11px] font-bold text-white">
-                      {badgeFor(item.key) > 99 ? "99+" : badgeFor(item.key)}
-                    </span>
-                  )}
-                </Link>
-              );
-            })}
+                  <span className="flex-1 text-left">Settings</span>
+                  <ChevronDown size={16} className={`transition-transform duration-200 ${settingsExpanded ? "rotate-0" : "-rotate-90"}`} />
+                </button>
+                <div className={`grid transition-all duration-200 ease-in-out ${settingsExpanded ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"}`}>
+                  <div className="overflow-hidden">
+                    <div className="ml-4 mt-1 space-y-1 border-l-2 border-white/10 pl-6">
+                      {settingsChildren.map((child) => {
+                        const childActive = pathname === child.href || pathname.startsWith(child.href + "/");
+                        const ChildIcon = ICON_MAP[child.key] || LayoutGrid;
+                        return (
+                          <Link key={child.href} href={child.href}
+                            className={`group flex items-center gap-3 rounded-xl px-4 py-2.5 text-sm font-medium transition-colors ${childActive
+                              ? "text-slate-950 shadow-lg"
+                              : "text-white/60 hover:bg-white/8 hover:text-white"
+                              }`}
+                            style={childActive ? { backgroundColor: secondary, boxShadow: `0 4px 14px ${secondary}33` } : {}}
+                            onClick={() => { if (window.innerWidth < 1024) onClose(); }}>
+                            <span className={`flex h-8 w-8 items-center justify-center rounded-lg ${childActive ? "bg-white/20" : "bg-white/10 group-hover:bg-white/15"}`}>
+                              <ChildIcon size={16} />
+                            </span>
+                            <span>{child.label}</span>
+                          </Link>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+            {extraItems.map((item) => renderNavItem(item))}
+            {renderNavItem({ label: "Profile", href: "/admin/profile", key: "profile" })}
           </div>
         </nav>
       </aside>
