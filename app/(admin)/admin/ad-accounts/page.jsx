@@ -11,6 +11,9 @@ import useAdAccountRealtime from "@/app/Component/Hooks/useAdAccountRealtime";
 
 const ITEMS_PER_PAGE = 20;
 
+// Stable empty refs so memoized selectors don't recompute on every render.
+const EMPTY_ARRAY = [];
+
 function timeAgo(date) {
   if (!date) return "\u2014";
   const diffMs = Date.now() - new Date(date).getTime();
@@ -58,9 +61,18 @@ export default function AdminAdAccountsPage() {
       if (!res.ok || !data.success) throw new Error(data.message || "Failed to load ad accounts");
       return data.adAccounts || [];
     },
+    // Backend already joins fresh Meta state into each row and pushes live
+    // updates over SSE (row-level patches, no refetch). A short staleTime
+    // stops duplicate fetches on remount/focus; realtime still arrives.
+    staleTime: 30 * 1000,
+    gcTime: 5 * 60 * 1000,
+    refetchOnWindowFocus: false,
+    retry: 1,
   });
-  const adAccounts = adAccountsQuery.data || [];
+  const adAccounts = adAccountsQuery.data ?? EMPTY_ARRAY;
 
+  // Only needed inside the Import-from-Meta modal: lazy so page load is a
+  // single list request (the list response already carries joined Meta state).
   const metaAccountsQuery = useQuery({
     queryKey: ["admin", "meta-accounts"],
     queryFn: async () => {
@@ -69,20 +81,26 @@ export default function AdminAdAccountsPage() {
       if (data.success) return data.accounts || [];
       return [];
     },
+    enabled: !!importModal,
+    staleTime: 30 * 1000,
   });
-  const metaAccounts = metaAccountsQuery.data || [];
+  const metaAccounts = metaAccountsQuery.data ?? EMPTY_ARRAY;
 
   const usersQuery = useQuery({
     queryKey: ["admin", "users"],
     queryFn: async () => {
-      const res = await fetch("/api/admin/users");
+      const res = await fetch("/api/admin/users?limit=1000");
       const data = await res.json();
       if (data.success) return data.users || [];
       return [];
     },
+    // The directory is only needed inside the assign modal: don't download
+    // it on page load. React Query caches it for repeat opens.
+    enabled: !!assignModal,
   });
-  const users = usersQuery.data || [];
+  const users = usersQuery.data ?? EMPTY_ARRAY;
   const loading = adAccountsQuery.isLoading;
+  const backgroundRefreshing = adAccountsQuery.isFetching && !adAccountsQuery.isLoading;
 
   useAdAccountRealtime({
     uid: profile?.uid || undefined,
@@ -91,10 +109,13 @@ export default function AdminAdAccountsPage() {
   });
 
   const lastOverallSync = useMemo(() => {
-    const syncedTimes = adAccounts
-      .map(a => a.lastSyncedAt ? new Date(a.lastSyncedAt).getTime() : 0)
-      .filter(t => t > 0);
-    return syncedTimes.length > 0 ? new Date(Math.max(...syncedTimes)) : null;
+    let max = 0;
+    for (const a of adAccounts) {
+      if (!a.lastSyncedAt) continue;
+      const t = new Date(a.lastSyncedAt).getTime();
+      if (t > max) max = t;
+    }
+    return max > 0 ? new Date(max) : null;
   }, [adAccounts]);
 
   const invalidateAll = () => {
@@ -259,11 +280,8 @@ export default function AdminAdAccountsPage() {
     invalidateAll();
   };
 
-  const handleImportFromMeta = async () => {
-    if (metaAccounts.length === 0) {
-      await Swal.fire({ icon: "info", title: "No Meta accounts", text: "Fetch accounts from Meta BM first." });
-      return;
-    }
+  // Meta directory loads lazily when the modal opens (see metaAccountsQuery).
+  const handleImportFromMeta = () => {
     setImportModal(true);
   };
 
@@ -323,12 +341,15 @@ export default function AdminAdAccountsPage() {
     setImporting(false);
   };
 
-  const handleSyncSpend = async () => {
+  // Refresh pulls a fresh BM reconcile (balances, spend caps, prepaid Funds)
+  // then re-reads the joined list. The old "sync-spend" path only refreshed
+  // insights (not shown on this page), so balances never looked fresh.
+  const handleRefresh = async () => {
     if (syncing) return;
     const now = Date.now();
-    if (lastManualRefresh && now - lastManualRefresh < 300000) {
-      const waitSec = Math.ceil((300000 - (now - lastManualRefresh)) / 1000);
-      await Swal.fire({ icon: "info", title: `Wait ${waitSec}s before next sync`, timer: 1500, showConfirmButton: false });
+    if (lastManualRefresh && now - lastManualRefresh < 60000) {
+      const waitSec = Math.ceil((60000 - (now - lastManualRefresh)) / 1000);
+      await Swal.fire({ icon: "info", title: `Wait ${waitSec}s before next refresh`, timer: 1500, showConfirmButton: false });
       return;
     }
     setSyncing(true);
@@ -336,14 +357,17 @@ export default function AdminAdAccountsPage() {
       const res = await fetch("/api/admin/meta-api/sync", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "sync-spend" }),
+        body: JSON.stringify({ action: "fetch-accounts" }),
       });
       const data = await res.json();
       if (data.success) {
         setLastManualRefresh(Date.now());
         invalidateAll();
+      } else if (res.status === 429 || data.throttled || data.locked) {
+        await Swal.fire({ icon: "info", title: "Sync already running", text: data.message || "Please wait a moment and try again.", timer: 2000, showConfirmButton: false });
+        invalidateAll();
       } else {
-        await Swal.fire({ icon: "error", title: "Sync failed", text: data.message || "Unknown error" });
+        await Swal.fire({ icon: "error", title: "Refresh failed", text: data.message || "Unknown error" });
       }
     } catch (err) {
       await Swal.fire({ icon: "error", title: "Error", text: err.message });
@@ -352,13 +376,18 @@ export default function AdminAdAccountsPage() {
     }
   };
 
-  const filteredUsers = users.filter((u) => {
+  // Memoized: these scan the full (client-paginated) dataset, so recompute
+  // only when their inputs change — not on every modal/spinner keystroke.
+  const filteredUsers = useMemo(() => users.filter((u) => {
     if (!userSearch) return true;
     const q = userSearch.toLowerCase();
     return u.displayName?.toLowerCase().includes(q) || u.email?.toLowerCase().includes(q) || u.uid?.toLowerCase().includes(q);
-  });
+  }), [users, userSearch]);
 
-  const unassignedAccounts = adAccounts.filter((a) => !a.uid || a.uid === "");
+  const unassignedAccounts = useMemo(
+    () => adAccounts.filter((a) => !a.uid || a.uid === ""),
+    [adAccounts]
+  );
 
   const formatMoney = (val) => {
     const n = Number(val || 0);
@@ -366,10 +395,22 @@ export default function AdminAdAccountsPage() {
     return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   };
 
-  const metaByAccountId = {};
-  for (const ma of metaAccounts) {
-    metaByAccountId[ma.metaAccountId] = ma;
-  }
+  // Nullable money: null/undefined/NaN means "unavailable" (Meta state
+  // missing, permission error, …) — render N/A, never a misleading $0.00.
+  // A genuine $0 from Meta is still $0.00.
+  const formatMoneyNullable = (val) => {
+    if (val === null || val === undefined) return null;
+    const n = Number(val);
+    if (!Number.isFinite(n)) return null;
+    return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  };
+
+  const formatTopupDate = (iso) => {
+    if (!iso) return null;
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return null;
+    return d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
+  };
 
   const getMetaStatusLabel = (accountStatus) => {
     switch (accountStatus) {
@@ -396,10 +437,9 @@ export default function AdminAdAccountsPage() {
     );
   };
 
-  const filtered = adAccounts.map((acc) => {
-    const meta = acc.metaAccountId ? metaByAccountId[acc.metaAccountId] : null;
-    return { ...acc, _meta: meta };
-  }).filter((a) => {
+  // Meta state already arrives joined on each row from the backend —
+  // no second Meta fetch, no per-row merge here.
+  const filtered = useMemo(() => adAccounts.filter((a) => {
     if (search) {
       const q = search.toLowerCase();
       if (!a.name?.toLowerCase().includes(q) && !a.accountId?.toLowerCase().includes(q) && !a.email?.toLowerCase().includes(q) && !a.uid?.toLowerCase().includes(q)) return false;
@@ -408,23 +448,23 @@ export default function AdminAdAccountsPage() {
     if (assignFilter === "assigned" && !a.uid) return false;
     if (assignFilter === "unassigned" && a.uid) return false;
     if (balanceFilter) {
-      const budget = Number(a.metaSpendCap || a.spendCap || 0);
-      const spent = Number(a.metaAmountSpent || 0);
-      const remaining = budget - spent;
+      const remaining = a.remainingBalance ?? (Number(a.metaSpendCap || a.spendCap || 0) - Number(a.metaAmountSpent || 0));
+      if (remaining == null) return false;
       if (balanceFilter === "under10" && remaining >= 10) return false;
       if (balanceFilter === "20-30" && (remaining < 20 || remaining > 30)) return false;
       if (balanceFilter === "50-60" && (remaining < 50 || remaining > 60)) return false;
       if (balanceFilter === "above100" && remaining <= 100) return false;
     }
     if (metaBalanceFilter) {
-      const metaBal = Number(a.metaBalance || 0);
+      if (a.metaBalance == null) return false;
+      const metaBal = Number(a.metaBalance);
       if (metaBalanceFilter === "50-100" && (metaBal < 50 || metaBal > 100)) return false;
       if (metaBalanceFilter === "100-200" && (metaBal < 100 || metaBal > 200)) return false;
       if (metaBalanceFilter === "200-300" && (metaBal < 200 || metaBal > 300)) return false;
       if (metaBalanceFilter === "above300" && metaBal <= 300) return false;
     }
     return true;
-  });
+  }), [adAccounts, search, statusFilter, assignFilter, balanceFilter, metaBalanceFilter]);
 
   useEffect(() => { setPage(1); }, [search, statusFilter, balanceFilter, metaBalanceFilter, assignFilter]);
 
@@ -440,8 +480,15 @@ export default function AdminAdAccountsPage() {
   const totalPages = Math.ceil(filtered.length / ITEMS_PER_PAGE);
   const paginatedAccounts = filtered.slice((page - 1) * ITEMS_PER_PAGE, page * ITEMS_PER_PAGE);
 
-  const totalBudget = adAccounts.reduce((s, a) => s + Number(a.metaSpendCap || a.spendCap || 0), 0);
-  const totalSpent = adAccounts.reduce((s, a) => s + Number(a.metaAmountSpent || 0), 0);
+  const { totalBudget, totalSpent } = useMemo(() => {
+    let budget = 0;
+    let spent = 0;
+    for (const a of adAccounts) {
+      budget += Number(a.metaSpendCap || a.spendCap || 0);
+      spent += Number(a.metaAmountSpent || 0);
+    }
+    return { totalBudget: budget, totalSpent: spent };
+  }, [adAccounts]);
 
   return (
     <div>
@@ -454,7 +501,11 @@ export default function AdminAdAccountsPage() {
           {lastOverallSync && (
             <p className="text-xs text-slate-400 flex items-center gap-1 mt-1">
               <Clock size={12} /> Last sync: {timeAgo(lastOverallSync)}
+              {backgroundRefreshing && <span className="text-blue-500 font-medium">· Updating…</span>}
             </p>
+          )}
+          {!lastOverallSync && backgroundRefreshing && (
+            <p className="text-xs text-blue-500 font-medium mt-1">Updating…</p>
           )}
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -464,9 +515,9 @@ export default function AdminAdAccountsPage() {
             </button>
           )}
           {canManage && (
-            <button onClick={handleSyncSpend} disabled={syncing} className="border border-slate-200 text-slate-700 rounded-lg px-3 py-2 text-sm font-medium hover:bg-slate-50 transition disabled:opacity-50 flex items-center gap-1.5">
+            <button onClick={handleRefresh} disabled={syncing} className="border border-slate-200 text-slate-700 rounded-lg px-3 py-2 text-sm font-medium hover:bg-slate-50 transition disabled:opacity-50 flex items-center gap-1.5">
               <RefreshCw size={15} className={syncing ? "animate-spin" : ""} />
-              {syncing ? "Syncing..." : "Sync Spend"}
+              {syncing ? "Refreshing..." : "Refresh"}
             </button>
           )}
           {canAssign && (
@@ -509,7 +560,38 @@ export default function AdminAdAccountsPage() {
       </div>
 
       {loading ? (
-        <p className="text-slate-500">Loading...</p>
+        <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden" aria-busy="true" aria-label="Loading ad accounts">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="bg-slate-50 text-slate-400 text-xs font-bold uppercase tracking-wider border-b border-slate-200">
+                    <th className="py-3 px-4">Name / Account ID</th>
+                    <th className="py-3 px-4">Account Status</th>
+                    <th className="py-3 px-4">Overview</th>
+                    <th className="py-3 px-4">Prepaid Balance</th>
+                    <th className="py-3 px-4">Meta Balance</th>
+                    {isAdmin && <th className="py-3 px-4">User</th>}
+                    <th className="py-3 px-4">Sync Info</th>
+                    <th className="py-3 px-4">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {Array.from({ length: 8 }).map((_, i) => (
+                  <tr key={i} className="animate-pulse">
+                    <td className="py-3 px-4"><div className="h-4 w-44 rounded bg-slate-200" /><div className="h-3 w-28 rounded bg-slate-100 mt-1.5" /></td>
+                    <td className="py-3 px-4"><div className="h-5 w-16 rounded-full bg-slate-200" /></td>
+                    <td className="py-3 px-4"><div className="space-y-1.5"><div className="h-3 w-40 rounded bg-slate-200" /><div className="h-3 w-40 rounded bg-slate-200" /><div className="h-3 w-36 rounded bg-slate-100" /><div className="h-3 w-32 rounded bg-slate-100" /></div></td>
+                    <td className="py-3 px-4"><div className="h-4 w-20 rounded bg-slate-200" /></td>
+                    <td className="py-3 px-4"><div className="h-4 w-20 rounded bg-slate-200" /></td>
+                    {isAdmin && <td className="py-3 px-4"><div className="h-4 w-24 rounded bg-slate-200" /></td>}
+                    <td className="py-3 px-4"><div className="h-4 w-16 rounded bg-slate-100" /></td>
+                    <td className="py-3 px-4"><div className="h-7 w-20 rounded-lg bg-slate-100" /></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
       ) : paginatedAccounts.length ? (
         <>
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
@@ -520,6 +602,7 @@ export default function AdminAdAccountsPage() {
                     <th className="py-3 px-4">Name / Account ID</th>
                     <th className="py-3 px-4">Account Status</th>
                     <th className="py-3 px-4">Overview</th>
+                    <th className="py-3 px-4">Prepaid Balance</th>
                     <th className="py-3 px-4">Meta Balance</th>
                     {isAdmin && <th className="py-3 px-4">User</th>}
                     <th className="py-3 px-4">Sync Info</th>
@@ -531,7 +614,8 @@ export default function AdminAdAccountsPage() {
                   const budgetDollars = Number(acc.metaSpendCap || acc.spendCap || 0);
                   const amountSpent = Number(acc.metaAmountSpent || 0);
                   const remainingBalance = budgetDollars - amountSpent;
-                  const meta = acc._meta;
+                  const prepaidStr = formatMoneyNullable(acc.prepaidBalance);
+                  const lastTopupStr = formatTopupDate(acc.lastTopupDate);
                   return (
                     <tr key={acc._id} className="hover:bg-slate-50/40">
                       <td className="py-3 px-4 min-w-[330px] whitespace-nowrap">
@@ -541,7 +625,7 @@ export default function AdminAdAccountsPage() {
                         <p className="text-xs font-mono text-blue-600 mt-0.5">ID: {(acc.metaAccountId || acc.accountId || "").replace(/^act_/, "")}</p>
                       </td>
                       <td className="py-3 px-4">
-                        {meta ? getMetaStatusBadge(meta.accountStatus) : (
+                        {acc.metaStatus != null ? getMetaStatusBadge(acc.metaStatus) : (
                           <span className="text-xs text-slate-400 italic">No Meta data</span>
                         )}
                       </td>
@@ -553,9 +637,28 @@ export default function AdminAdAccountsPage() {
                           </div>
                           <div>
                             <span className="text-slate-500">Top-Up This Month: </span>
-                            <span className="font-semibold text-emerald-600">${formatMoney(Number(acc.currentMonthTopUp || 0))}</span>
+                            <span className="font-semibold text-emerald-600">${formatMoney(Number(acc.topupThisMonth ?? acc.currentMonthTopUp ?? 0))}</span>
+                          </div>
+                          <div>
+                            <span className="text-slate-500">Top-Up Last Month: </span>
+                            <span className="font-semibold text-slate-700">${formatMoney(Number(acc.topupLastMonth ?? 0))}</span>
+                          </div>
+                          <div>
+                            <span className="text-slate-500">Last Topup Date: </span>
+                            {lastTopupStr != null ? (
+                              <span className="font-medium text-slate-600" title={acc.lastTopupDate ? new Date(acc.lastTopupDate).toLocaleString() : ""}>{lastTopupStr}</span>
+                            ) : (
+                              <span className="text-slate-400 italic">N/A</span>
+                            )}
                           </div>
                         </div>
+                      </td>
+                      <td className="py-3 px-4 whitespace-nowrap">
+                        {prepaidStr != null ? (
+                          <span className="font-semibold text-emerald-600">${prepaidStr}</span>
+                        ) : (
+                          <span className="text-xs text-slate-400 italic" title="Prepaid Funds unavailable — needs a MANAGE-permission token or the account is not a prepay account">N/A</span>
+                        )}
                       </td>
                       <td className="py-3 px-4">
                         <span className={`font-semibold ${Number(acc.metaBalance) > 0 ? "text-emerald-600" : "text-slate-600"}`}>${formatMoney(Number(acc.metaBalance || 0))}</span>
@@ -606,6 +709,15 @@ export default function AdminAdAccountsPage() {
         </div>
         <Pagination page={page} totalPages={totalPages} onPageChange={setPage} />
         </>
+      ) : adAccountsQuery.isError ? (
+        <div className="bg-white rounded-xl border border-red-200 shadow-sm p-10 text-center">
+          <XCircle size={40} className="mx-auto text-red-400 mb-3" />
+          <p className="text-slate-700 font-medium">Failed to load ad accounts</p>
+          <p className="text-sm text-slate-500 mt-1">{adAccountsQuery.error?.message || "Unknown error"}</p>
+          <button onClick={() => adAccountsQuery.refetch()} className="mt-4 border border-slate-200 text-slate-700 rounded-lg px-4 py-2 text-sm font-medium hover:bg-slate-50 transition">
+            Retry
+          </button>
+        </div>
       ) : (
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-10 text-center">
           <Megaphone size={48} className="mx-auto text-slate-300 mb-3" />
@@ -618,17 +730,32 @@ export default function AdminAdAccountsPage() {
           <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full mx-4">
             <div className="px-6 py-5 border-b border-slate-200">
               <h2 className="text-lg font-bold text-slate-900">Import from Meta</h2>
-              <p className="text-sm text-slate-500 mt-1">Choose how to replace existing ad accounts with {metaAccounts.length} accounts from Meta.</p>
+              <p className="text-sm text-slate-500 mt-1">
+                {metaAccountsQuery.isLoading
+                  ? "Loading accounts from Meta…"
+                  : `Choose how to replace existing ad accounts with ${metaAccounts.length} accounts from Meta.`}
+              </p>
             </div>
             <div className="px-6 py-5 space-y-4">
-              <button onClick={() => runImport("all")} disabled={importing} className="w-full text-left border border-red-200 bg-red-50/50 hover:bg-red-50 rounded-xl p-4 transition disabled:opacity-50">
-                <p className="text-sm font-semibold text-red-700">Replace All</p>
-                <p className="text-xs text-red-600 mt-1">Warning: Choosing Replace All will replace all existing ad accounts, including those that are currently assigned to users. This may cause assigned ad accounts to be removed or lose their assignments.</p>
-              </button>
-              <button onClick={() => runImport("unassigned")} disabled={importing} className="w-full text-left border border-emerald-200 bg-emerald-50/50 hover:bg-emerald-50 rounded-xl p-4 transition disabled:opacity-50">
-                <p className="text-sm font-semibold text-emerald-700">Replace but Not Assigned</p>
-                <p className="text-xs text-emerald-600 mt-1">Replaces only the ad accounts that are not assigned to any user. All currently assigned ad accounts will remain intact.</p>
-              </button>
+              {metaAccountsQuery.isLoading ? (
+                <div className="space-y-3 animate-pulse" aria-busy="true" aria-label="Loading Meta accounts">
+                  <div className="h-20 rounded-xl bg-slate-100" />
+                  <div className="h-20 rounded-xl bg-slate-100" />
+                </div>
+              ) : metaAccounts.length === 0 ? (
+                <p className="text-sm text-slate-500 text-center py-4">No Meta accounts found. Fetch accounts from Meta BM first (Meta API Settings).</p>
+              ) : (
+                <>
+                  <button onClick={() => runImport("all")} disabled={importing} className="w-full text-left border border-red-200 bg-red-50/50 hover:bg-red-50 rounded-xl p-4 transition disabled:opacity-50">
+                    <p className="text-sm font-semibold text-red-700">Replace All</p>
+                    <p className="text-xs text-red-600 mt-1">Warning: Choosing Replace All will replace all existing ad accounts, including those that are currently assigned to users. This may cause assigned ad accounts to be removed or lose their assignments.</p>
+                  </button>
+                  <button onClick={() => runImport("unassigned")} disabled={importing} className="w-full text-left border border-emerald-200 bg-emerald-50/50 hover:bg-emerald-50 rounded-xl p-4 transition disabled:opacity-50">
+                    <p className="text-sm font-semibold text-emerald-700">Replace but Not Assigned</p>
+                    <p className="text-xs text-emerald-600 mt-1">Replaces only the ad accounts that are not assigned to any user. All currently assigned ad accounts will remain intact.</p>
+                  </button>
+                </>
+              )}
             </div>
             <div className="px-6 py-4 border-t border-slate-200 flex justify-end">
               <button onClick={() => setImportModal(false)} disabled={importing} className="border border-slate-200 text-slate-700 rounded-lg px-4 py-2 text-sm font-medium hover:bg-slate-50 transition disabled:opacity-50">Cancel</button>

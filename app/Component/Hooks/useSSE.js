@@ -11,6 +11,10 @@ const GRANULAR_EVENTS = [
   "ad_account.updated",
   "ad_account.deleted",
   "meta-status",
+  "ticket.created",
+  "ticket.updated",
+  "deposit.created",
+  "deposit.updated",
 ];
 
 export default function useSSE({ uid, channels = [], onEvent } = {}) {

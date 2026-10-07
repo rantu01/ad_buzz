@@ -25,27 +25,42 @@ export default function UserManagementPage() {
   const [editForm, setEditForm] = useState({});
   const [saving, setSaving] = useState(false);
   const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalUsers, setTotalUsers] = useState(0);
   const [roleOptions, setRoleOptions] = useState(Object.entries(ROLE_LABELS).map(([key, label]) => ({ key, label })));
 
-  const loadData = async () => {
-    setLoading(true);
+  const loadRoles = async () => {
     try {
-      const [usersRes, rolesRes] = await Promise.all([
-        fetch("/api/admin/users"),
-        fetch("/api/admin/roles"),
-      ]);
-      const data = await usersRes.json();
-      setUsers(data.users || []);
+      const rolesRes = await fetch("/api/admin/roles");
       const rolesData = await rolesRes.json().catch(() => ({}));
       if (Array.isArray(rolesData.roles) && rolesData.roles.length) {
         setRoleOptions(rolesData.roles.map((r) => ({ key: r.key, label: r.label || r.name || r.key })));
       }
+    } catch { /* role labels fall back to defaults */ }
+  };
+
+  const loadUsers = async (targetPage = page, q = search) => {
+    setLoading(true);
+    try {
+      const params = new URLSearchParams();
+      if ((q || "").trim()) params.set("search", q.trim());
+      params.set("page", String(targetPage));
+      params.set("limit", String(ITEMS_PER_PAGE));
+      const usersRes = await fetch(`/api/admin/users?${params}`);
+      const data = await usersRes.json();
+      setUsers(data.users || []);
+      setTotalUsers(typeof data.total === "number" ? data.total : (data.users || []).length);
+      setTotalPages(
+        typeof data.totalPages === "number"
+          ? data.totalPages
+          : Math.ceil((data.users || []).length / ITEMS_PER_PAGE)
+      );
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => { loadData(); }, []);
+  useEffect(() => { loadRoles(); }, []);
 
   const updateUser = async (uid, updateFields, silent = false) => {
     const response = await fetch("/api/admin/users", {
@@ -58,6 +73,10 @@ export default function UserManagementPage() {
       if (!silent) await Swal.fire({ icon: "error", title: "Update failed", text: result.message || "Please try again." });
       return false;
     }
+    // Patch the row in place (no full-list refetch); the server accepted it.
+    // Never keep a password in client state.
+    const { password: _pw, ...safeFields } = updateFields || {};
+    setUsers((prev) => prev.map((u) => (u.uid === uid ? { ...u, ...safeFields } : u)));
     return true;
   };
 
@@ -96,7 +115,14 @@ export default function UserManagementPage() {
       Swal.fire({ icon: "success", title: "User Created", text: `Account created for ${data.user.email}`, timer: 2000, showConfirmButton: false });
       setShowCreateModal(false);
 setCreateForm({ email: "", password: "", displayName: "", confirmPassword: "", groupName: "" });
-      loadData();
+      // Newest-first list: prepend when on page 1 with no search filter.
+      if (data.user) {
+        setUsers((prev) => (page === 1 && !search.trim() ? [data.user, ...prev].slice(0, ITEMS_PER_PAGE) : prev));
+        setTotalUsers((t) => t + 1);
+        setTotalPages((tp) => Math.max(1, Math.ceil((totalUsers + 1) / ITEMS_PER_PAGE)));
+      } else {
+        loadUsers(page, search);
+      }
     } catch (err) {
       Swal.fire("Error", err.message, "error");
     } finally {
@@ -155,7 +181,6 @@ setCreateForm({ email: "", password: "", displayName: "", confirmPassword: "", g
       if (success) {
         await Swal.fire({ icon: "success", title: "User updated", timer: 1200, showConfirmButton: false });
         setEditingUser(null);
-        loadData();
       }
     } catch (err) {
       Swal.fire("Error", err.message, "error");
@@ -189,7 +214,17 @@ setCreateForm({ email: "", password: "", displayName: "", confirmPassword: "", g
 
       await Swal.fire({ icon: "success", title: "User Deleted", timer: 1200, showConfirmButton: false });
       setEditingUser(null);
-      loadData();
+      // Removing the last row of a later page: step back instead of
+      // leaving an empty page.
+      if (users.length <= 1 && page > 1) {
+        const p = page - 1;
+        setPage(p);
+        loadUsers(p, search);
+        setTotalUsers((t) => Math.max(0, t - 1));
+      } else {
+        setUsers((prev) => prev.filter((u) => u.uid !== editingUser.uid));
+        setTotalUsers((t) => Math.max(0, t - 1));
+      }
     } catch (err) {
       Swal.fire("Error", err.message, "error");
     } finally {
@@ -203,23 +238,27 @@ setCreateForm({ email: "", password: "", displayName: "", confirmPassword: "", g
     return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   };
 
-  const filteredUsers = users.filter((u) => {
-    if (!search) return true;
-    const q = search.toLowerCase();
-    return u.email?.toLowerCase().includes(q) || u.uid?.toLowerCase().includes(q) || u.displayName?.toLowerCase().includes(q);
-  });
+  // Search runs on the server (debounced); pagination is server-side too.
+  useEffect(() => {
+    const t = setTimeout(() => { setPage(1); loadUsers(1, search); }, search ? 400 : 0);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search]);
 
-  useEffect(() => { setPage(1); }, [search]);
+  const goToPage = (p) => {
+    setPage(p);
+    loadUsers(p, search);
+  };
 
-  const totalPages = Math.ceil(filteredUsers.length / ITEMS_PER_PAGE);
-  const paginatedUsers = filteredUsers.slice((page - 1) * ITEMS_PER_PAGE, page * ITEMS_PER_PAGE);
+  const filteredUsers = users;
+  const paginatedUsers = users;
 
   return (
     <div>
       <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
         <div>
           <h1 className="text-2xl font-semibold">User Management</h1>
-          <p className="text-sm text-slate-500 mt-0.5">{users.length} total users</p>
+          <p className="text-sm text-slate-500 mt-0.5">{totalUsers.toLocaleString()} total users</p>
         </div>
         {canCreateUsers && (
           <button onClick={() => setShowCreateModal(true)}
@@ -291,7 +330,7 @@ setCreateForm({ email: "", password: "", displayName: "", confirmPassword: "", g
               </div>
             </div>
           ))}
-          <Pagination page={page} totalPages={totalPages} onPageChange={setPage} />
+          <Pagination page={page} totalPages={Math.max(1, totalPages)} onPageChange={goToPage} />
           </>
         ) : (
           <p className="text-slate-500">No users found.</p>

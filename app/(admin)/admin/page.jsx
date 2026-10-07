@@ -19,14 +19,12 @@ export default function DashboardPage() {
     async function load() {
       setLoading(true);
       try {
+        // Count-only endpoints: numbers without downloading collections.
         const calls = [];
-        if (hasPermission(role, "view_users")) calls.push(fetch("/api/admin/users").then(r => r.json()).then(d => ({ users: (d.users || []).length })).catch(() => ({})));
-        if (hasPermission(role, "view_deposits") || hasPermission(role, "approve_deposits")) calls.push(fetch("/api/admin/deposits").then(r => r.json()).then(d => {
-          const deps = d.deposits || [];
-          return { pendingDeposits: deps.filter(x => x.status === "pending").length, totalDeposits: deps.length };
-        }).catch(() => ({})));
-        if (hasPermission(role, "view_ad_accounts")) calls.push(fetch("/api/admin/ad-accounts").then(r => r.json()).then(d => ({ adAccounts: (d.adAccounts || []).length })).catch(() => ({})));
-        if (hasPermission(role, "view_tickets")) calls.push(fetch("/api/admin/support-tickets").then(r => r.json()).then(d => ({ openTickets: (d.tickets || []).filter(x => x.status !== "closed").length })).catch(() => ({})));
+        if (hasPermission(role, "view_users")) calls.push(fetch("/api/admin/users?countOnly=1").then(r => r.json()).then(d => ({ users: Number(d.total) || 0 })).catch(() => ({})));
+        if (hasPermission(role, "view_deposits") || hasPermission(role, "approve_deposits")) calls.push(fetch("/api/admin/deposits/count").then(r => r.json()).then(d => ({ pendingDeposits: Number(d.pending) || 0, totalDeposits: Number(d.total) || 0 })).catch(() => ({})));
+        if (hasPermission(role, "view_ad_accounts")) calls.push(fetch("/api/admin/ad-accounts?countOnly=1").then(r => r.json()).then(d => ({ adAccounts: Number(d.total) || 0 })).catch(() => ({})));
+        if (hasPermission(role, "view_tickets")) calls.push(fetch("/api/admin/support-tickets/count").then(r => r.json()).then(d => ({ openTickets: Number(d.pendingOpen) || 0 })).catch(() => ({})));
 
         const results = await Promise.all(calls);
         const merged = Object.assign({}, ...results);

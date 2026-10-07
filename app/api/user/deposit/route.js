@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { createDeposit, getDepositsByUid } from "@/lib/depositModel";
+import { createDeposit, getDepositsByUid, getPendingDepositState } from "@/lib/depositModel";
+import { emitToChannel } from "@/lib/sseManager";
 
 export async function POST(request) {
   try {
@@ -26,6 +27,24 @@ export async function POST(request) {
       amountBDT, account, transactionRef, creditedUSD, paymentMethod,
       screenshotBase64: screenshot,
     });
+
+    // Notify all connected staff in real time. Never fail the deposit
+    // itself because the notification fan-out failed.
+    try {
+      const state = await getPendingDepositState();
+      emitToChannel("admin:deposits", "deposit.created", {
+        deposit: {
+          _id: String(deposit._id),
+          email: deposit.email,
+          amount: deposit.amount,
+          amountBDT: deposit.amountBDT,
+          creditedUSD: deposit.creditedUSD,
+          transactionRef: deposit.transactionRef,
+          createdAt: deposit.createdAt,
+        },
+        pending: state.pending,
+      });
+    } catch { /* notification is best-effort */ }
 
     return NextResponse.json({ success: true, deposit });
   } catch (error) {

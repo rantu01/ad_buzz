@@ -38,6 +38,17 @@ export default function useAdAccountRealtime({ uid, queryClient, queryKey, chann
                 patched.spent = account.amountSpent;
               }
               if (account.balance !== undefined) patched.metaBalance = account.balance;
+              if (account.prepaidBalance !== undefined) {
+                patched.prepaidBalance = account.prepaidBalance;
+                patched.prepaidBalanceStatus = account.prepaidBalanceStatus || "available";
+              }
+              if (account.isPrepayAccount !== undefined) patched.isPrepayAccount = account.isPrepayAccount;
+              if (account.spendCap !== undefined || account.amountSpent !== undefined) {
+                const cap = account.spendCap !== undefined ? account.spendCap : patched.metaSpendCap;
+                const spent = account.amountSpent !== undefined ? account.amountSpent : patched.metaAmountSpent;
+                patched.remainingBalance = typeof cap === "number" && typeof spent === "number" ? cap - spent : patched.remainingBalance ?? null;
+                patched.remainingBalanceSource = patched.remainingBalance == null ? "unavailable" : "meta";
+              }
               if (account.accountStatus !== undefined) {
                 patched.metaStatus = account.accountStatus;
                 patched.metaStatusLabel =
@@ -63,6 +74,10 @@ export default function useAdAccountRealtime({ uid, queryClient, queryKey, chann
                 patched.spent = changes.amountSpent;
               }
               if (changes.balance !== undefined) patched.metaBalance = changes.balance;
+              if (changes.prepaidBalance !== undefined) {
+                patched.prepaidBalance = changes.prepaidBalance;
+                patched.prepaidBalanceStatus = "available";
+              }
             }
             return patched;
           });

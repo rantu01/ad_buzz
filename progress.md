@@ -113,3 +113,15 @@ data was deleted or migrated; new collections (`metaSyncState`,
 13. All displayed fields preserved (fingerprint covers all of them).
 
 See `realtime-sync.md` for architecture, env vars, and webhook setup.
+
+## 6. Deployment build fix (Turbopack panic)
+
+Production build (`npm run build`) failed on the hosting platform with a
+Turbopack internal panic: `Failed to write app endpoint /page`, caused by
+`globals.css` PostCSS processing — `node process exited before we could
+connect to it`. This is an environment limitation (Tailwind/PostCSS worker
+subprocess cannot spawn in the build sandbox), unrelated to the sync
+changes (no CSS/config/root-page files were touched). Fix: `build` script
+changed to `next build --webpack` (supported flag in Next 16.2.7).
+Verified locally: webpack build compiles cleanly, all 61 routes including
+new `/api/meta/webhook`.

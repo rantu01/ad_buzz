@@ -5,6 +5,8 @@ import { usePathname } from "next/navigation";
 import { LayoutGrid, Users, X, DollarSign, History, Megaphone, RefreshCw, MessageSquare, BarChart3, Settings, LifeBuoy, TrendingUp, CreditCard, ArrowUpCircle, ShieldCheck } from "lucide-react";
 import { useSettings } from "@/app/Component/Settings/SettingsProvider";
 import { useAdmin } from "./AdminProvider";
+import { useTicketAlerts } from "./TicketAlertProvider";
+import { useDepositAlerts } from "./DepositAlertProvider";
 import { getAllowedRoutes } from "@/lib/permissions";
 
 const ICON_MAP = {
@@ -45,6 +47,13 @@ export default function DashboardSidebar({ open, onClose }) {
   const pathname = usePathname();
   const settings = useSettings();
   const { profile, access } = useAdmin();
+  const { unread } = useTicketAlerts();
+  const { pending: pendingDeposits } = useDepositAlerts();
+  const badgeFor = (key) => {
+    if (key === "support-tickets") return unread;
+    if (key === "deposits") return pendingDeposits;
+    return 0;
+  };
   const logo = settings?.logo || "/logo.jpeg";
   const secondary = settings?.secondaryColor || "#F48E2B";
   const role = profile?.role || "customer";
@@ -117,6 +126,11 @@ export default function DashboardSidebar({ open, onClose }) {
                     <Icon size={18} />
                   </span>
                   <span>{item.label}</span>
+                  {badgeFor(item.key) > 0 && (
+                    <span className="ml-auto flex h-5 min-w-[20px] items-center justify-center rounded-full bg-red-500 px-1.5 text-[11px] font-bold text-white">
+                      {badgeFor(item.key) > 99 ? "99+" : badgeFor(item.key)}
+                    </span>
+                  )}
                 </Link>
               );
             })}

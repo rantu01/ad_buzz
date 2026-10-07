@@ -6,6 +6,8 @@ import { ShieldAlert } from "lucide-react";
 import { useAuth } from "@/app/Component/Auth/AuthProvider";
 import { isStaffRole, canAccessAdminPath, getAdminRouteKey } from "@/lib/permissions";
 import AdminProvider, { useAdmin } from "./components/AdminProvider";
+import TicketAlertProvider from "./components/TicketAlertProvider";
+import DepositAlertProvider from "./components/DepositAlertProvider";
 import DashboardSidebar from "./components/Sidebar";
 import DashboardTopbar from "./components/Topbar";
 
@@ -68,15 +70,19 @@ function DashboardLayoutInner({ children }) {
 
   return (
     <div className="min-h-screen bg-[#F8F5F1] text-slate-900">
-      <DashboardSidebar open={open} onClose={() => setOpen(false)} />
-      <div className="min-h-screen lg:pl-72">
-        <DashboardTopbar onToggle={() => setOpen((value) => !value)} />
-        <main className="px-4 py-5 sm:px-6 lg:px-8 lg:py-8">
-          <div className="mx-auto w-full max-w-7xl">
-            {allowed ? children : <AccessDenied />}
-          </div>
-        </main>
-      </div>
+      <TicketAlertProvider>
+        <DepositAlertProvider>
+        <DashboardSidebar open={open} onClose={() => setOpen(false)} />
+        <div className="min-h-screen lg:pl-72">
+          <DashboardTopbar onToggle={() => setOpen((value) => !value)} />
+          <main className="px-4 py-5 sm:px-6 lg:px-8 lg:py-8">
+            <div className="mx-auto w-full max-w-7xl">
+              {allowed ? children : <AccessDenied />}
+            </div>
+          </main>
+        </div>
+      </DepositAlertProvider>
+      </TicketAlertProvider>
     </div>
   );
 }

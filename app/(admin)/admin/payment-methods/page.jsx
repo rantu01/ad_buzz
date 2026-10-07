@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef } from "react";
 import Swal from "sweetalert2";
 import { useAdmin } from "../components/AdminProvider";
-import { Plus, X, Trash2, Edit3, Users, Check, Building2, Smartphone } from "lucide-react";
+import { Plus, X, Trash2, Edit3, Users, Check, Building2, Smartphone, Search } from "lucide-react";
 import Pagination from "@/app/Component/Pagination";
 
 const ITEMS_PER_PAGE = 20;
@@ -14,7 +14,8 @@ const ACCOUNT_TYPE_OPTIONS = ["Personal", "Merchant"];
 export default function PaymentMethodsPage() {
   const { profile } = useAdmin();
   const [methods, setMethods] = useState([]);
-  const [users, setUsers] = useState([]);
+  const [users, setUsers] = useState(null); // lazy: fetched only when assigning
+  const [usersLoading, setUsersLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showAssignModal, setShowAssignModal] = useState(null);
@@ -42,17 +43,12 @@ export default function PaymentMethodsPage() {
 
   const activeColor = "#F48E2B";
 
-  const loadData = async () => {
+  const loadMethods = async () => {
     setLoading(true);
     try {
-      const [methodsRes, usersRes] = await Promise.all([
-        fetch("/api/admin/payment-methods"),
-        fetch("/api/admin/users"),
-      ]);
+      const methodsRes = await fetch("/api/admin/payment-methods");
       const methodsData = await methodsRes.json();
-      const usersData = await usersRes.json();
       if (methodsData.success) setMethods(methodsData.methods || []);
-      if (usersData.success) setUsers(usersData.users || []);
     } catch (err) {
       console.error(err);
     } finally {
@@ -60,7 +56,25 @@ export default function PaymentMethodsPage() {
     }
   };
 
-  useEffect(() => { loadData(); }, []);
+  // Users are only needed for assignment: fetch once, on demand, so the
+  // page doesn't download the user directory on every visit/save/delete.
+  // A failed attempt leaves the cache empty so reopening retries.
+  const ensureUsers = async () => {
+    if (users !== null || usersLoading) return;
+    setUsersLoading(true);
+    try {
+      const usersRes = await fetch("/api/admin/users?limit=1000");
+      const usersData = await usersRes.json();
+      setUsers(usersData.success ? usersData.users || [] : null);
+    } catch (err) {
+      console.error(err);
+      setUsers(null);
+    } finally {
+      setUsersLoading(false);
+    }
+  };
+
+  useEffect(() => { loadMethods(); }, []);
 
   function toBase64(file) {
     return new Promise((resolve, reject) => {
@@ -121,7 +135,18 @@ export default function PaymentMethodsPage() {
       Swal.fire({ icon: "success", title: editing ? "Updated" : "Added", timer: 1500, showConfirmButton: false });
       setShowAddModal(false);
       resetForm();
-      loadData();
+      // Patch the saved row in place (POST/PUT return it); no refetch.
+      if (data.method?._id) {
+        setMethods((prev) => {
+          const id = String(data.method._id);
+          if (prev.some((m) => String(m._id) === id)) {
+            return prev.map((m) => (String(m._id) === id ? { ...m, ...data.method } : m));
+          }
+          return [data.method, ...prev];
+        });
+      } else {
+        loadMethods();
+      }
     } catch (err) {
       Swal.fire("Error", err.message, "error");
     } finally {
@@ -145,7 +170,7 @@ export default function PaymentMethodsPage() {
       const data = await res.json();
       if (!res.ok || !data.success) throw new Error(data.message || "Failed to delete.");
       Swal.fire({ icon: "success", title: "Removed", timer: 1500, showConfirmButton: false });
-      loadData();
+      setMethods((prev) => prev.filter((m) => String(m._id) !== String(id)));
     } catch (err) {
       Swal.fire("Error", err.message, "error");
     }
@@ -185,6 +210,7 @@ export default function PaymentMethodsPage() {
 
   function openAssign(method) {
     setShowAssignModal(method._id);
+    ensureUsers();
   }
 
   async function handleAssign(methodId, uids) {
@@ -198,7 +224,8 @@ export default function PaymentMethodsPage() {
       if (!res.ok || !data.success) throw new Error(data.message || "Failed to assign.");
       Swal.fire({ icon: "success", title: "Assigned", timer: 1500, showConfirmButton: false });
       setShowAssignModal(null);
-      loadData();
+      // Patch the assigned row's count in place (no user re-download).
+      setMethods((prev) => prev.map((m) => (String(m._id) === String(methodId) ? { ...m, assignedUids: uids } : m)));
     } catch (err) {
       Swal.fire("Error", err.message, "error");
     }
@@ -378,6 +405,7 @@ export default function PaymentMethodsPage() {
           methodId={showAssignModal}
           methods={methods}
           users={users}
+          usersLoading={usersLoading}
           onAssign={handleAssign}
           onClose={() => setShowAssignModal(null)}
           activeColor={activeColor}
@@ -441,10 +469,12 @@ function renderCard(method, openEdit, openAssign, handleDelete) {
   );
 }
 
-function AssignModal({ methodId, methods, users, onAssign, onClose, activeColor }) {
+function AssignModal({ methodId, methods, users, usersLoading, onAssign, onClose, activeColor }) {
   const method = methods.find((m) => m._id === methodId);
   const currentUids = method?.assignedUids || [];
   const [selectedUids, setSelectedUids] = useState([...currentUids]);
+  const [search, setSearch] = useState("");
+  const userList = Array.isArray(users) ? users : [];
 
   const isMobile = method?.type === "mobile-banking";
   const displayName = isMobile ? method?.walletName : method?.bankName;
@@ -454,6 +484,28 @@ function AssignModal({ methodId, methods, users, onAssign, onClose, activeColor 
     setSelectedUids((prev) =>
       prev.includes(uid) ? prev.filter((u) => u !== uid) : [...prev, uid]
     );
+  }
+
+  const filteredUsers = userList.filter((user) => {
+    if (!search.trim()) return true;
+    const q = search.trim().toLowerCase();
+    return (
+      user.displayName?.toLowerCase().includes(q) ||
+      user.email?.toLowerCase().includes(q) ||
+      user.uid?.toLowerCase().includes(q)
+    );
+  });
+
+  function selectAllFiltered() {
+    setSelectedUids((prev) => {
+      const next = new Set(prev);
+      filteredUsers.forEach((u) => next.add(u.uid));
+      return [...next];
+    });
+  }
+
+  function clearAll() {
+    setSelectedUids([]);
   }
 
   return (
@@ -470,8 +522,47 @@ function AssignModal({ methodId, methods, users, onAssign, onClose, activeColor 
             Assigning: <span className="font-semibold">{displayName} - {displaySub}</span>
           </p>
         )}
+        <div className="mb-3 flex items-center gap-2">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <input
+              type="text"
+              placeholder="Search by name, email, or UID..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full rounded-xl border border-slate-200 py-2.5 pl-9 pr-9 text-sm text-slate-900 placeholder-slate-400 outline-none focus:border-secondary focus:ring-2 focus:ring-secondary/30"
+            />
+            {search && (
+              <button
+                onClick={() => setSearch("")}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+                aria-label="Clear search"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
+          </div>
+        </div>
+        <div className="mb-3 flex items-center justify-between text-xs text-slate-500">
+          <span>
+            {filteredUsers.length} of {userList.length} users
+            {selectedUids.length > 0 && (
+              <span className="ml-1 font-medium text-emerald-600">• {selectedUids.length} selected</span>
+            )}
+          </span>
+          <div className="flex gap-2">
+            <button onClick={selectAllFiltered} disabled={!filteredUsers.length}
+              className="font-medium text-blue-600 hover:text-blue-700 disabled:opacity-40">
+              Select all
+            </button>
+            <button onClick={clearAll} disabled={!selectedUids.length}
+              className="font-medium text-slate-500 hover:text-slate-700 disabled:opacity-40">
+              Clear
+            </button>
+          </div>
+        </div>
         <div className="flex-1 overflow-y-auto space-y-2 mb-4">
-          {users.map((user) => (
+          {filteredUsers.length ? filteredUsers.map((user) => (
             <label
               key={user.uid}
               className={`flex items-center gap-3 rounded-xl border p-3 cursor-pointer transition-colors ${
@@ -490,7 +581,11 @@ function AssignModal({ methodId, methods, users, onAssign, onClose, activeColor 
               <input type="checkbox" className="sr-only" checked={selectedUids.includes(user.uid)}
                 onChange={() => toggleUid(user.uid)} />
             </label>
-          ))}
+          )) : (
+            <p className="py-8 text-center text-sm text-slate-400">
+              {usersLoading ? "Loading users..." : userList.length ? `No users found for "${search}"` : "No users available"}
+            </p>
+          )}
         </div>
         <div className="flex gap-3 pt-2 border-t border-slate-200">
           <button onClick={onClose} className="flex-1 rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-50">Cancel</button>

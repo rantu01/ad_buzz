@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useAdmin } from "../components/AdminProvider";
+import { useTicketAlerts } from "../components/TicketAlertProvider";
 import { hasPermission } from "@/lib/permissions";
 import Swal from "sweetalert2";
 import { Search } from "lucide-react";
@@ -28,41 +29,97 @@ export default function SupportTicketsPage() {
   const [selected, setSelected] = useState(null);
   const [replyText, setReplyText] = useState("");
   const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const { lastEventSeq, markRead } = useTicketAlerts();
+  const prevFilter = useRef(null);
 
-  const loadTickets = async () => {
+  const loadTickets = async (targetPage = page) => {
     setLoading(true);
     try {
       const params = new URLSearchParams();
       if (filter) params.set("status", filter);
       if (searchTicketId.trim()) params.set("ticketId", searchTicketId.trim());
+      params.set("page", String(targetPage));
+      params.set("limit", String(ITEMS_PER_PAGE));
       const res = await fetch(`/api/admin/support-tickets?${params}`);
       const data = await res.json();
-      if (data.success) setTickets(data.tickets || []);
+      if (data.success) {
+        const list = data.tickets || [];
+        setTickets(list);
+        setTotalPages(
+          typeof data.totalPages === "number"
+            ? data.totalPages
+            : Math.ceil(list.length / ITEMS_PER_PAGE)
+        );
+        setSelected((prev) => {
+          // Deep-link from a notification: open the referenced ticket once.
+          try {
+            const deep = window.sessionStorage.getItem("ab_open_ticket");
+            if (deep) {
+              window.sessionStorage.removeItem("ab_open_ticket");
+              const match = list.find((t) => String(t._id) === deep);
+              if (match) {
+                setReplyText("");
+                return match;
+              }
+            }
+          } catch { /* selection still refreshes below */ }
+          // Keep the open ticket in sync across live reloads.
+          if (prev) return list.find((t) => String(t._id) === String(prev._id)) || prev;
+          return prev;
+        });
+      }
     } catch { /* ignore */ }
     finally { setLoading(false); }
   };
 
-  useEffect(() => { setPage(1); }, [filter, searchTicketId]);
-  useEffect(() => { loadTickets(); }, [filter, searchTicketId]);
+  // Filter switches fetch immediately; typing in the ticket-ID search is
+  // debounced so every keystroke doesn't hit the database.
+  useEffect(() => {
+    setPage(1);
+    const immediate = prevFilter.current === null || prevFilter.current !== filter;
+    prevFilter.current = filter;
+    const t = setTimeout(() => loadTickets(1), immediate ? 0 : 400);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filter, searchTicketId]);
+  // Live update: a new ticket or a status/reply change made anywhere
+  // (user app, another staff member) refreshes the current page.
+  useEffect(() => {
+    if (lastEventSeq > 0) loadTickets(page);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lastEventSeq]);
 
-  const totalPages = Math.ceil(tickets.length / ITEMS_PER_PAGE);
-  const paginatedTickets = tickets.slice((page - 1) * ITEMS_PER_PAGE, page * ITEMS_PER_PAGE);
+  const goToPage = (p) => {
+    setPage(p);
+    loadTickets(p);
+  };
+
+  const paginatedTickets = tickets;
 
   const openTicket = async (ticket) => {
     setSelected(ticket);
     setReplyText("");
+    // Opening a ticket marks it seen for this admin (badge drops at once).
+    if (ticket?._id) markRead(String(ticket._id));
+    // Refresh the full thread (replies) on demand; the row stays instant.
+    try {
+      const res = await fetch(`/api/admin/support-tickets?id=${ticket._id}`);
+      const data = await res.json();
+      if (data.success && data.ticket) setSelected(data.ticket);
+    } catch { /* row content remains visible */ }
   };
 
   const handleStatusChange = async (ticketId, status) => {
     const res = await fetch("/api/admin/support-tickets", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ticketId, action: status }),
+      body: JSON.stringify({ ticketId, action: status, uid: profile?.uid }),
     });
     const data = await res.json();
     if (data.success) {
       setSelected(data.ticket);
-      loadTickets();
+      loadTickets(page);
     }
   };
 
@@ -72,13 +129,13 @@ export default function SupportTicketsPage() {
     const res = await fetch("/api/admin/support-tickets", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ticketId: selected._id, action: "reply", reply: replyText.trim(), staffName: profile?.displayName || profile?.email || "Staff", staffRole: profile?.role }),
+      body: JSON.stringify({ ticketId: selected._id, action: "reply", reply: replyText.trim(), staffName: profile?.displayName || profile?.email || "Staff", staffRole: profile?.role, uid: profile?.uid }),
     });
     const data = await res.json();
     if (data.success) {
       setReplyText("");
       setSelected(data.ticket);
-      loadTickets();
+      loadTickets(page);
     } else {
       Swal.fire("Error", data.message, "error");
     }
@@ -131,7 +188,7 @@ export default function SupportTicketsPage() {
               ))}
             </div>
           )}
-          <Pagination page={page} totalPages={totalPages} onPageChange={setPage} />
+          <Pagination page={page} totalPages={Math.max(1, totalPages)} onPageChange={goToPage} />
         </div>
 
         <div className="xl:col-span-2">

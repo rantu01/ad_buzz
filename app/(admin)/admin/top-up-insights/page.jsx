@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import { useAdmin } from "../components/AdminProvider";
 import { ROLES, ROLE_LABELS, PERMISSIONS, hasPermission } from "@/lib/permissions";
 import Pagination from "@/app/Component/Pagination";
-import { ChevronLeft, ChevronRight, CalendarDays, CalendarRange } from "lucide-react";
+import { ChevronLeft, ChevronRight, CalendarDays, CalendarRange, ChartColumn, Table } from "lucide-react";
 
 const ITEMS_PER_PAGE = 20;
 
@@ -24,6 +24,16 @@ function formatMoney(val) {
   const n = Number(val || 0);
   return Number.isFinite(n) ? n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "0.00";
 }
+
+function formatCompact(val) {
+  const n = Number(val || 0);
+  if (!Number.isFinite(n)) return "0";
+  if (Math.abs(n) >= 1000000) return `${(n / 1000000).toFixed(1).replace(/\.0$/, "")}M`;
+  if (Math.abs(n) >= 1000) return `${(n / 1000).toFixed(1).replace(/\.0$/, "")}k`;
+  return `${Math.round(n)}`;
+}
+
+const MONTH_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
 function parsePerformer(desc) {
   const m = desc.match(/^(.+?)\s+\(([^)]+)\)\s+topped up/);
@@ -81,8 +91,12 @@ export default function TopUpInsightsPage() {
   const [selectedMonth, setSelectedMonth] = useState(() => startOfMonth(today));
   const [tableView, setTableView] = useState("day");
   const [page, setPage] = useState(1);
+  const [datePage, setDatePage] = useState(1);
 
   const [overall, setOverall] = useState({ total: 0, totalAmount: 0 });
+  const [yearStats, setYearStats] = useState({ total: 0, totalAmount: 0 });
+  const [monthlyData, setMonthlyData] = useState([]);
+  const [monthlyLoading, setMonthlyLoading] = useState(true);
   const [dayItems, setDayItems] = useState([]);
   const [monthItems, setMonthItems] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -98,15 +112,28 @@ export default function TopUpInsightsPage() {
     }
   }, []);
 
+  // Lifetime + rolling-12-month stats come from one aggregation request
+  // (no document download); day/month tables fetch their ranges separately.
   useEffect(() => {
     if (profileLoading) return;
     if (!canView) return;
     (async () => {
-      const all = await fetchInsights({ uid: "all" });
-      setOverall({ total: all.total, totalAmount: all.totalAmount });
-      setLoading(false);
+      try {
+        const res = await fetch(`/api/admin/top-up-insights?uid=all&breakdown=monthly&months=12`);
+        const data = await res.json();
+        if (data.success) {
+          setMonthlyData(data.monthly || []);
+          setYearStats({ total: data.yearTotal || 0, totalAmount: data.yearAmount || 0 });
+          setOverall({ total: data.lifetimeTotal || 0, totalAmount: data.lifetimeAmount || 0 });
+        }
+      } catch {
+        // Keep defaults on failure; boxes still render.
+      } finally {
+        setMonthlyLoading(false);
+        setLoading(false);
+      }
     })();
-  }, [profileLoading, canView, fetchInsights]);
+  }, [profileLoading, canView]);
 
   useEffect(() => {
     if (profileLoading) return;
@@ -167,6 +194,38 @@ export default function TopUpInsightsPage() {
   const monthStats = computeStats(monthItems);
   const canNextMonth = monthStart.getTime() < startOfMonth(today).getTime();
 
+  // Date-wise breakdown of the selected month: one row per calendar day with
+  // transaction counts, total amount, and per-role top-up amounts.
+  const itemsByDayOfMonth = {};
+  for (const item of monthItems) {
+    const d = new Date(item.createdAt);
+    const day = d.getDate();
+    if (!itemsByDayOfMonth[day]) itemsByDayOfMonth[day] = [];
+    itemsByDayOfMonth[day].push(item);
+  }
+  const daysInSelectedMonth = new Date(monthStart.getFullYear(), monthStart.getMonth() + 1, 0).getDate();
+  const dateRows = [];
+  for (let day = 1; day <= daysInSelectedMonth; day++) {
+    const bucket = itemsByDayOfMonth[day] || [];
+    const stats = computeStats(bucket);
+    dateRows.push({
+      day,
+      date: new Date(monthStart.getFullYear(), monthStart.getMonth(), day),
+      count: bucket.length,
+      amount: bucket.reduce((s, i) => s + Number(i.amount || 0), 0),
+      admin: stats.admin?.amount || 0,
+      keyManager: stats.key_manager?.amount || 0,
+      accountsManager: stats.accounts_manager?.amount || 0,
+    });
+  }
+
+  const currentYear = today.getFullYear();
+  const maxMonthlyAmount = Math.max(1, ...monthlyData.map((m) => Number(m.totalAmount || 0)));
+
+  const dateTotalPages = Math.max(1, Math.ceil(dateRows.length / ITEMS_PER_PAGE));
+  const safeDatePage = Math.min(Math.max(1, datePage), dateTotalPages);
+  const paginatedDateRows = dateRows.slice((safeDatePage - 1) * ITEMS_PER_PAGE, safeDatePage * ITEMS_PER_PAGE);
+
   const tableItems = tableView === "day" ? dayItems : monthItems;
   const groupedByUser = {};
   for (const item of tableItems) {
@@ -185,9 +244,70 @@ export default function TopUpInsightsPage() {
         {isAdmin ? "All top-up transactions across all ad accounts" : "Top-up history for your assigned users' ad accounts"}
       </p>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8">
-        <StatCard label="Total Transactions" value={overall.total.toLocaleString()} />
-        <StatCard label="Total Top-Up (USD)" value={`$${formatMoney(overall.totalAmount)}`} />
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+        <StatCard label="Lifetime Total Transactions" value={overall.total.toLocaleString()} />
+        <StatCard label="Lifetime Total Topup (USD)" value={`$${formatMoney(overall.totalAmount)}`} />
+        <StatCard label="This Year Total Transactions" value={yearStats.total.toLocaleString()} sub={`${currentYear}`} />
+        <StatCard label="This Year Total Topup (USD)" value={`$${formatMoney(yearStats.totalAmount)}`} sub={`${currentYear}`} />
+      </div>
+
+      <div className="bg-white rounded-xl border border-slate-200 p-5 mb-8">
+        <div className="flex flex-wrap items-center justify-between gap-2 mb-1">
+          <h2 className="text-lg font-semibold text-slate-800 flex items-center gap-2">
+            <ChartColumn size={18} className="text-slate-400" /> Monthly Top-Up Insights
+          </h2>
+          <span className="text-xs font-medium text-slate-400 bg-slate-100 rounded-full px-3 py-1">Rolling last 12 months</span>
+        </div>
+        <p className="text-xs text-slate-400 mb-5">Top-up amount (USD) per month — hover a bar for transactions &amp; amount.</p>
+        {monthlyLoading ? (
+          <div className="flex items-end gap-2 sm:gap-3 h-64" aria-label="Loading monthly chart">
+            {Array.from({ length: 12 }).map((_, i) => (
+              <div key={i} className="flex-1 h-full flex items-end">
+                <div className="w-full rounded-t-md bg-slate-100 animate-pulse" style={{ height: `${25 + ((i * 37) % 60)}%` }} />
+              </div>
+            ))}
+          </div>
+        ) : monthlyData.length === 0 ? (
+          <p className="text-sm text-slate-400 text-center py-16">No top-up data found for the last 12 months.</p>
+        ) : (
+          <div>
+            <div className="flex items-end gap-2 sm:gap-3 h-64">
+              {monthlyData.map((m, idx) => {
+                const pct = Math.max(0, Math.min(100, (Number(m.totalAmount || 0) / maxMonthlyAmount) * 100));
+                const hasValue = Number(m.totalAmount || 0) > 0;
+                const tipAlign = idx <= 1 ? "left-0" : idx >= monthlyData.length - 2 ? "right-0" : "left-1/2 -translate-x-1/2";
+                return (
+                  <div key={m.key} className="relative flex-1 h-full flex flex-col items-center justify-end group">
+                    <div className={`absolute bottom-full mb-2 hidden group-hover:block z-10 whitespace-nowrap rounded-lg bg-slate-900 px-3 py-2 text-left shadow-lg ${tipAlign}`}>
+                      <p className="text-xs font-semibold text-white">{MONTH_SHORT[m.month - 1]} {m.year}</p>
+                      <p className="text-xs text-slate-300 mt-0.5">Total Transactions: <span className="font-semibold text-white">{Number(m.total || 0).toLocaleString()}</span></p>
+                      <p className="text-xs text-slate-300">Total Amount: <span className="font-semibold text-white">${formatMoney(m.totalAmount)}</span></p>
+                    </div>
+                    <div
+                      className={`w-full rounded-t-md transition-colors cursor-pointer ${hasValue ? "bg-emerald-500 group-hover:bg-emerald-600" : "bg-slate-100"}`}
+                      style={{ height: hasValue ? `${Math.max(pct, 3)}%` : "4px" }}
+                      title={`${MONTH_SHORT[m.month - 1]} ${m.year}: ${Number(m.total || 0)} transactions, $${formatMoney(m.totalAmount)}`}
+                    />
+                  </div>
+                );
+              })}
+            </div>
+            <div className="flex gap-2 sm:gap-3 mt-2">
+              {monthlyData.map((m) => (
+                <div key={m.key} className="flex-1 text-center min-w-0">
+                  <p className="text-[10px] sm:text-xs font-medium text-slate-500 truncate">{MONTH_SHORT[m.month - 1]}</p>
+                  <p className="text-[10px] text-slate-300">{String(m.year).slice(2)}</p>
+                </div>
+              ))}
+            </div>
+            <div className="flex items-center gap-4 mt-4 pt-3 border-t border-slate-100">
+              <span className="flex items-center gap-1.5 text-xs text-slate-500">
+                <span className="inline-block h-2.5 w-2.5 rounded-sm bg-emerald-500" /> Top-up amount (USD)
+              </span>
+              <span className="text-xs text-slate-400">Peak: ${formatMoney(maxMonthlyAmount)}</span>
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="mb-8">
@@ -225,11 +345,11 @@ export default function TopUpInsightsPage() {
             <CalendarRange size={18} className="text-slate-400" /> Month-wise Topup Insights
           </h2>
           <div className="flex items-center gap-2">
-            <button onClick={() => { setSelectedMonth((m) => addMonths(m, -1)); setPage(1); }} className="border border-slate-200 text-slate-600 rounded-lg p-2 hover:bg-slate-50 transition">
+            <button onClick={() => { setSelectedMonth((m) => addMonths(m, -1)); setPage(1); setDatePage(1); }} className="border border-slate-200 text-slate-600 rounded-lg p-2 hover:bg-slate-50 transition">
               <ChevronLeft size={16} />
             </button>
             <span className="text-sm font-medium text-slate-700 min-w-[180px] text-center">{fmtMonth(selectedMonth)}</span>
-            <button onClick={() => { if (canNextMonth) { setSelectedMonth((m) => addMonths(m, 1)); setPage(1); } }} disabled={!canNextMonth} className="border border-slate-200 text-slate-600 rounded-lg p-2 hover:bg-slate-50 transition disabled:opacity-40 disabled:cursor-not-allowed">
+            <button onClick={() => { if (canNextMonth) { setSelectedMonth((m) => addMonths(m, 1)); setPage(1); setDatePage(1); } }} disabled={!canNextMonth} className="border border-slate-200 text-slate-600 rounded-lg p-2 hover:bg-slate-50 transition disabled:opacity-40 disabled:cursor-not-allowed">
               <ChevronRight size={16} />
             </button>
           </div>
@@ -246,6 +366,57 @@ export default function TopUpInsightsPage() {
             />
           ))}
         </div>
+      </div>
+
+      <div className="mb-8">
+        <div className="mb-3">
+          <h2 className="text-lg font-semibold text-slate-800 flex items-center gap-2">
+            <Table size={18} className="text-slate-400" /> Date-wise Transaction Summary
+          </h2>
+          <p className="text-xs text-slate-400 mt-1">Day-by-day breakdown for {fmtMonth(selectedMonth)}</p>
+        </div>
+        <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-slate-50 border-b border-slate-200">
+                  <th className="text-left px-4 py-3 font-semibold text-slate-700 whitespace-nowrap">Date</th>
+                  <th className="text-right px-4 py-3 font-semibold text-slate-700 whitespace-nowrap">Total Transactions</th>
+                  <th className="text-right px-4 py-3 font-semibold text-slate-700 whitespace-nowrap">Topup Amount</th>
+                  <th className="text-right px-4 py-3 font-semibold text-slate-700 whitespace-nowrap">Topup By Admin</th>
+                  <th className="text-right px-4 py-3 font-semibold text-slate-700 whitespace-nowrap">Topup By Key Manager</th>
+                  <th className="text-right px-4 py-3 font-semibold text-slate-700 whitespace-nowrap">Topup By Account Manager</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {paginatedDateRows.map((row) => (
+                  <tr key={row.day} className="hover:bg-slate-50/50 transition-colors">
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      <div className="font-medium text-slate-800">{row.date.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}</div>
+                      <div className="text-xs text-slate-400">{row.date.toLocaleDateString(undefined, { weekday: "long" })}</div>
+                    </td>
+                    <td className="px-4 py-3 text-right text-slate-700 tabular-nums">{row.count.toLocaleString()}</td>
+                    <td className="px-4 py-3 text-right text-emerald-600 font-medium tabular-nums whitespace-nowrap">${formatMoney(row.amount)}</td>
+                    <td className="px-4 py-3 text-right text-slate-700 tabular-nums whitespace-nowrap">${formatMoney(row.admin)}</td>
+                    <td className="px-4 py-3 text-right text-slate-700 tabular-nums whitespace-nowrap">${formatMoney(row.keyManager)}</td>
+                    <td className="px-4 py-3 text-right text-slate-700 tabular-nums whitespace-nowrap">${formatMoney(row.accountsManager)}</td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr className="bg-slate-50 border-t border-slate-200 font-semibold">
+                  <td className="px-4 py-3 text-slate-800 whitespace-nowrap">Total ({fmtMonth(selectedMonth)})</td>
+                  <td className="px-4 py-3 text-right text-slate-800 tabular-nums">{monthItems.length.toLocaleString()}</td>
+                  <td className="px-4 py-3 text-right text-emerald-600 tabular-nums whitespace-nowrap">${formatMoney(monthAmount)}</td>
+                  <td className="px-4 py-3 text-right text-slate-800 tabular-nums whitespace-nowrap">${formatMoney(monthStats.admin?.amount || 0)}</td>
+                  <td className="px-4 py-3 text-right text-slate-800 tabular-nums whitespace-nowrap">${formatMoney(monthStats.key_manager?.amount || 0)}</td>
+                  <td className="px-4 py-3 text-right text-slate-800 tabular-nums whitespace-nowrap">${formatMoney(monthStats.accounts_manager?.amount || 0)}</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </div>
+        <Pagination page={safeDatePage} totalPages={dateTotalPages} onPageChange={setDatePage} />
       </div>
 
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">

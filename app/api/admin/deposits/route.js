@@ -1,19 +1,26 @@
 import { NextResponse } from "next/server";
-import { getAllDeposits, updateDepositStatus, getDepositById } from "@/lib/depositModel";
+import { getAllDeposits, updateDepositStatus, getDepositById, getPendingDepositState } from "@/lib/depositModel";
 import { creditUserBalance, getUserByUid } from "@/lib/userModel";
 import { createBalanceLog } from "@/lib/balanceLog";
 import { getWhatsAppSettings } from "@/lib/whatsappSettingsModel";
 import { sendDepositApproved, sendDepositRejected } from "@/lib/whatsappService";
 import { ROLE_LABELS } from "@/lib/permissions";
+import { emitToChannel } from "@/lib/sseManager";
 
 export async function GET(request) {
   try {
     const { searchParams } = new URL(request.url);
     const status = searchParams.get("status");
+    const page = searchParams.get("page");
+    const limit = searchParams.get("limit");
 
-    const deposits = await getAllDeposits(status);
-
-    return NextResponse.json({ success: true, deposits });
+    // Paged shape when ?page=&limit= are given (admin list);
+    // legacy full-list shape otherwise (backward compatible).
+    const result = await getAllDeposits(status, { page, limit });
+    if (result && Array.isArray(result.deposits)) {
+      return NextResponse.json({ success: true, ...result });
+    }
+    return NextResponse.json({ success: true, deposits: result });
   } catch (error) {
     return NextResponse.json(
       { success: false, message: error.message || "Failed to fetch deposits" },
@@ -85,6 +92,22 @@ export async function PATCH(request) {
     }
 
     const result = await updateDepositStatus(depositId, status, approverUid, rejectionReason);
+
+    // Approval/rejection moves the deposit out of "pending": broadcast so
+    // every staff badge/list drops it immediately (best-effort).
+    try {
+      const state = await getPendingDepositState();
+      emitToChannel("admin:deposits", "deposit.updated", {
+        deposit: {
+          _id: String(result?._id || depositId),
+          email: result?.email || deposit.email,
+          amount: result?.amount ?? deposit.amount,
+          status,
+          createdAt: result?.createdAt || deposit.createdAt,
+        },
+        pending: state.pending,
+      });
+    } catch { /* badge reconciles via polling fallback */ }
 
     const wsSettings = await getWhatsAppSettings();
     if (wsSettings?.enabled && user?.phoneNumber) {

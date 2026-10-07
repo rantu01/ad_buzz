@@ -23,10 +23,16 @@ export async function POST(request) {
       return NextResponse.json({ success: false, message: "Ad account not found" }, { status: 404 });
     }
 
+    // Independent reads once the account is known: fetch concurrently.
+    const [metaAccount, ownerDoc] = await Promise.all([
+      account.metaAccountId
+        ? db.collection("metaAdAccounts").findOne({ metaAccountId: account.metaAccountId })
+        : Promise.resolve(null),
+      account.uid
+        ? db.collection("users").findOne({ uid: account.uid }, { projection: { email: 1 } })
+        : Promise.resolve(null),
+    ]);
     const localBudgetDollars = Number(account.spendCap || 0);
-    const metaAccount = account.metaAccountId
-      ? await db.collection("metaAdAccounts").findOne({ metaAccountId: account.metaAccountId })
-      : null;
     const metaBudgetDollars = Number(metaAccount?.spendCap || 0);
     const previousBudgetDollars = metaBudgetDollars > 0 ? metaBudgetDollars : localBudgetDollars;
     const newBudgetDollars = previousBudgetDollars + topUpAmount;
@@ -65,9 +71,7 @@ export async function POST(request) {
     const performedByRoleLabel = performedByRole ? (ROLE_LABELS[performedByRole] || performedByRole) : "Admin";
     const actorLabel = `${performedByRoleLabel} (${performedByEmail || performedByName})`;
 
-    const accountOwnerEmail = account.email || (account.uid
-      ? (await db.collection("users").findOne({ uid: account.uid }, { projection: { email: 1 } }))?.email
-      : "") || "";
+    const accountOwnerEmail = account.email || ownerDoc?.email || "";
 
     const logDoc = {
       uid: account.uid || "",

@@ -8,6 +8,8 @@ export async function GET(request) {
     const period = searchParams.get("period") || "daily";
     const startDate = searchParams.get("startDate");
     const endDate = searchParams.get("endDate");
+    const page = searchParams.get("page");
+    const limit = searchParams.get("limit");
 
     let data;
     switch (type) {
@@ -18,10 +20,10 @@ export async function GET(request) {
         data = await getFinancialReport(period, startDate, endDate);
         break;
       case "users":
-        data = await getUserActivityReport(startDate, endDate);
+        data = await getUserActivityReport(startDate, endDate, { page, limit });
         break;
       case "ad-spend":
-        data = await getAdSpendReport(startDate, endDate);
+        data = await getAdSpendReport(startDate, endDate, { page, limit });
         break;
       default:
         return NextResponse.json({ success: false, message: "Invalid report type" }, { status: 400 });

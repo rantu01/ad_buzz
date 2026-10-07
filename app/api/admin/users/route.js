@@ -5,20 +5,74 @@ import { ROLES, ROLE_LABELS } from "@/lib/permissions";
 import { getRoleByKey } from "@/lib/roleModel";
 import { deleteFirebaseAuthUser, updateFirebaseUserPassword } from "@/lib/firebaseAdmin";
 import { createBalanceLog } from "@/lib/balanceLog";
+import { initializeIndexes } from "@/lib/indexes";
 
 const ALLOWED_ROLES = [ROLES.ADMIN, ROLES.KEY_MANAGER, ROLES.ACCOUNTS_MANAGER];
 
-export async function GET() {
+function escapeRegExp(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+export async function GET(request) {
   try {
+    await initializeIndexes();
+    const searchParams = request ? new URL(request.url).searchParams : null;
+    // Lightweight count for dashboard cards (no document download).
+    if (searchParams && searchParams.get("countOnly") === "1") {
+      const client = await clientPromise;
+      const db = client.db(process.env.MONGODB_DB_NAME || "ad_buzz");
+      const total = await db.collection("users").countDocuments({});
+      return NextResponse.json({ success: true, total });
+    }
     const client = await clientPromise;
     const db = client.db(process.env.MONGODB_DB_NAME || "ad_buzz");
 
+    const search = (searchParams?.get("search") || "").trim();
+    const page = Number(searchParams?.get("page")) || 0;
+    const limit = Number(searchParams?.get("limit")) || 0;
+
+    const filter = {};
+    if (search) {
+      const q = escapeRegExp(search);
+      filter.$or = [
+        { email: { $regex: q, $options: "i" } },
+        { displayName: { $regex: q, $options: "i" } },
+        { uid: { $regex: q, $options: "i" } },
+      ];
+    }
+
+    // Paged shape when ?page=&limit= are given; legacy capped list otherwise.
+    if (page > 0 && limit > 0) {
+      const safePage = Math.max(1, Math.floor(page));
+      const safeLimit = Math.min(Math.max(1, Math.floor(limit)), 200);
+      const [total, users] = await Promise.all([
+        db.collection("users").countDocuments(filter),
+        db
+          .collection("users")
+          .find(filter)
+          .project({ password: 0 })
+          .sort({ createdAt: -1 })
+          .skip((safePage - 1) * safeLimit)
+          .limit(safeLimit)
+          .toArray(),
+      ]);
+      return NextResponse.json({
+        success: true,
+        users,
+        total,
+        page: safePage,
+        limit: safeLimit,
+        totalPages: Math.max(1, Math.ceil(total / safeLimit)),
+      });
+    }
+
+    const maxAll = Math.min(Math.max(limit || 200, 1), 2000);
     const users = await db
       .collection("users")
-      .find({})
+      .find(filter)
       .project({ password: 0 })
       .sort({ createdAt: -1 })
-      .limit(200)
+      .limit(maxAll)
       .toArray();
 
     return NextResponse.json({ success: true, users });

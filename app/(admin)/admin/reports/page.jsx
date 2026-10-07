@@ -18,6 +18,8 @@ export default function ReportsPage() {
   const [dateRange, setDateRange] = useState({ start: "", end: "" });
   const [exporting, setExporting] = useState(false);
   const [page, setPage] = useState(1);
+  const [usersTotalPages, setUsersTotalPages] = useState(1);
+  const [adSpendTotalPages, setAdSpendTotalPages] = useState(1);
 
   useEffect(() => { setPage(1); }, [activeTab]);
 
@@ -39,32 +41,83 @@ export default function ReportsPage() {
     } catch {}
   }, []);
 
-  const loadUserActivity = useCallback(async (start, end) => {
+  const loadUserActivity = useCallback(async (start, end, pageNum = 1) => {
     try {
-      let url = "/api/admin/reports?type=users"; if (start) url += `&startDate=${start}`; if (end) url += `&endDate=${end}`;
-      const res = await fetch(url); const data = await res.json(); if (data.success) setUserActivity(data.data);
+      let url = `/api/admin/reports?type=users&page=${pageNum}&limit=${ITEMS_PER_PAGE}`; if (start) url += `&startDate=${start}`; if (end) url += `&endDate=${end}`;
+      const res = await fetch(url); const data = await res.json();
+      if (data.success) {
+        setUserActivity({ rows: data.data.rows || [], total: data.data.total || 0 });
+        setUsersTotalPages(data.data.totalPages || 1);
+      }
     } catch {}
   }, []);
 
-  const loadAdSpend = useCallback(async (start, end) => {
+  const loadAdSpend = useCallback(async (start, end, pageNum = 1) => {
     try {
-      let url = "/api/admin/reports?type=ad-spend"; if (start) url += `&startDate=${start}`; if (end) url += `&endDate=${end}`;
-      const res = await fetch(url); const data = await res.json(); if (data.success) setAdSpend(data.data);
+      let url = `/api/admin/reports?type=ad-spend&page=${pageNum}&limit=${ITEMS_PER_PAGE}`; if (start) url += `&startDate=${start}`; if (end) url += `&endDate=${end}`;
+      const res = await fetch(url); const data = await res.json();
+      if (data.success) {
+        setAdSpend({ rows: data.data.rows || [], summary: data.data.summary || null });
+        setAdSpendTotalPages(data.data.totalPages || 1);
+      }
     } catch {}
   }, []);
 
+  const currentRange = () => (dateRange.start && dateRange.end ? dateRange : getDefaultRange());
+
+  // Mount: overview only (default tab). Other tabs load on demand so one
+  // visit costs one request instead of four full-collection fan-outs.
   useEffect(() => {
     setLoading(true);
-    const range = getDefaultRange();
-    Promise.all([loadOverview(), loadFinancial(financialPeriod, range.start, range.end), loadUserActivity(range.start, range.end), loadAdSpend(range.start, range.end)])
-      .finally(() => setLoading(false));
-  }, [loadOverview, loadFinancial, loadUserActivity, loadAdSpend, financialPeriod]);
+    loadOverview().finally(() => setLoading(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const handleTabChange = (id) => {
+    setActiveTab(id);
+    setPage(1);
+    const range = currentRange();
+    setLoading(true);
+    const job =
+      id === "financial" ? loadFinancial(financialPeriod, range.start, range.end) :
+      id === "users" ? loadUserActivity(range.start, range.end, 1) :
+      id === "ad-spend" ? loadAdSpend(range.start, range.end, 1) :
+      loadOverview();
+    job.finally(() => setLoading(false));
+  };
+
+  // Period applies to the financial tab: reload it when visible.
+  useEffect(() => {
+    if (activeTab !== "financial") return;
+    setLoading(true);
+    const range = currentRange();
+    loadFinancial(financialPeriod, range.start, range.end).finally(() => setLoading(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [financialPeriod]);
 
   const handleRefresh = () => {
     setLoading(true);
-    const range = dateRange.start && dateRange.end ? dateRange : getDefaultRange();
-    Promise.all([loadOverview(), loadFinancial(financialPeriod, range.start, range.end), loadUserActivity(range.start, range.end), loadAdSpend(range.start, range.end)])
-      .finally(() => setLoading(false));
+    const range = currentRange();
+    const job =
+      activeTab === "financial" ? loadFinancial(financialPeriod, range.start, range.end) :
+      activeTab === "users" ? loadUserActivity(range.start, range.end, page) :
+      activeTab === "ad-spend" ? loadAdSpend(range.start, range.end, page) :
+      loadOverview();
+    job.finally(() => setLoading(false));
+  };
+
+  const goToUsersPage = (p) => {
+    setPage(p);
+    const range = currentRange();
+    setLoading(true);
+    loadUserActivity(range.start, range.end, p).finally(() => setLoading(false));
+  };
+
+  const goToAdSpendPage = (p) => {
+    setPage(p);
+    const range = currentRange();
+    setLoading(true);
+    loadAdSpend(range.start, range.end, p).finally(() => setLoading(false));
   };
 
   const handleExport = async (type, format) => {
@@ -97,10 +150,9 @@ export default function ReportsPage() {
 
   const financialTotalPages = Math.ceil(financial.rows.length / ITEMS_PER_PAGE);
   const paginatedFinancial = financial.rows.slice((page - 1) * ITEMS_PER_PAGE, page * ITEMS_PER_PAGE);
-  const userTotalPages = Math.ceil(userActivity.rows.length / ITEMS_PER_PAGE);
-  const paginatedUsers = userActivity.rows.slice((page - 1) * ITEMS_PER_PAGE, page * ITEMS_PER_PAGE);
-  const adSpendTotalPages = Math.ceil(adSpend.rows.length / ITEMS_PER_PAGE);
-  const paginatedAdSpend = adSpend.rows.slice((page - 1) * ITEMS_PER_PAGE, page * ITEMS_PER_PAGE);
+  // Users / ad-spend rows arrive pre-paged from the server (20 per page).
+  const paginatedUsers = userActivity.rows;
+  const paginatedAdSpend = adSpend.rows;
 
   const StatCard = ({ label, value, sub, icon: Icon, color }) => (
     <div className="bg-white rounded-xl border border-slate-200/90 p-5 shadow-sm">
@@ -136,7 +188,7 @@ export default function ReportsPage() {
       <div className="flex gap-1 mb-6 bg-white rounded-xl border border-slate-200 p-1 shadow-sm overflow-x-auto">
         {tabs.map((t) => {
           const Icon = t.icon;
-          return (<button key={t.id} onClick={() => setActiveTab(t.id)} className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium whitespace-nowrap transition ${activeTab === t.id ? "bg-[#E05305] text-white shadow" : "text-slate-600 hover:bg-slate-50"}`}><Icon size={16} /> {t.label}</button>);
+          return (          <button key={t.id} onClick={() => handleTabChange(t.id)} className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium whitespace-nowrap transition ${activeTab === t.id ? "bg-[#E05305] text-white shadow" : "text-slate-600 hover:bg-slate-50"}`}><Icon size={16} /> {t.label}</button>);
         })}
       </div>
 
@@ -221,7 +273,7 @@ export default function ReportsPage() {
               </table>
             </div>
           </div>
-          <Pagination page={page} totalPages={userTotalPages} onPageChange={setPage} />
+          <Pagination page={page} totalPages={Math.max(1, usersTotalPages)} onPageChange={goToUsersPage} />
         </div>
       )}
 
@@ -258,7 +310,7 @@ export default function ReportsPage() {
               </table>
             </div>
           </div>
-          <Pagination page={page} totalPages={adSpendTotalPages} onPageChange={setPage} />
+          <Pagination page={page} totalPages={Math.max(1, adSpendTotalPages)} onPageChange={goToAdSpendPage} />
         </div>
       )}
     </div>

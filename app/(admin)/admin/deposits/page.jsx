@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useAdmin } from "../components/AdminProvider";
+import { useDepositAlerts } from "../components/DepositAlertProvider";
 import { hasPermission } from "@/lib/permissions";
 import Swal from "sweetalert2";
 import Pagination from "@/app/Component/Pagination";
@@ -20,6 +21,9 @@ export default function AdminDepositsPage() {
   const [previewImg, setPreviewImg] = useState(null);
   const [processingId, setProcessingId] = useState(null);
   const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [highlightId, setHighlightId] = useState(null);
+  const { lastEventSeq } = useDepositAlerts();
 
   const formatMoney = (val) => {
     const n = Number(val || 0);
@@ -27,13 +31,34 @@ export default function AdminDepositsPage() {
     return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 });
   };
 
-  const loadDeposits = async () => {
+  const loadDeposits = async (targetPage = page) => {
     setLoading(true);
     try {
-      const query = filter ? `?status=${filter}` : "";
-      const res = await fetch(`/api/admin/deposits${query}`);
+      const params = new URLSearchParams();
+      if (filter) params.set("status", filter);
+      params.set("page", String(targetPage));
+      params.set("limit", String(ITEMS_PER_PAGE));
+      const res = await fetch(`/api/admin/deposits?${params}`);
       const data = await res.json();
-      if (data.success) setDeposits(data.deposits || []);
+      if (data.success) {
+        const list = data.deposits || [];
+        setDeposits(list);
+        setTotalPages(
+          typeof data.totalPages === "number"
+            ? data.totalPages
+            : Math.ceil(list.length / ITEMS_PER_PAGE)
+        );
+        // Deep-link from a deposit notification: show pending and highlight it.
+        try {
+          const deep = window.sessionStorage.getItem("ab_open_deposit");
+          if (deep) {
+            window.sessionStorage.removeItem("ab_open_deposit");
+            setHighlightId(deep);
+            setPage(1);
+            if (filter !== "pending") setFilter("pending");
+          }
+        } catch { /* highlight is best-effort */ }
+      }
     } catch (err) {
       console.error(err);
     } finally {
@@ -41,10 +66,23 @@ export default function AdminDepositsPage() {
     }
   };
 
-  useEffect(() => { setPage(1); loadDeposits(); }, [filter]);
+  useEffect(() => { setPage(1); loadDeposits(1); }, [filter]);
+  // Live update: a new deposit or an approve/reject made anywhere
+  // (user app, another staff member) refreshes the current page.
+  useEffect(() => {
+    if (lastEventSeq > 0) loadDeposits(page);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lastEventSeq]);
 
-  const totalPages = Math.ceil(deposits.length / ITEMS_PER_PAGE);
-  const paginatedDeposits = deposits.slice((page - 1) * ITEMS_PER_PAGE, page * ITEMS_PER_PAGE);
+  const totalPagesSafe = Math.max(1, totalPages);
+  const safePage = Math.min(Math.max(1, page), totalPagesSafe);
+  const paginatedDeposits = deposits;
+
+  const goToPage = (p) => {
+    const next = Math.min(Math.max(1, p), totalPagesSafe);
+    setPage(next);
+    loadDeposits(next);
+  };
 
   const handleApprove = async (depositId) => {
     const confirmed = await Swal.fire({
@@ -71,7 +109,9 @@ export default function AdminDepositsPage() {
         return;
       }
       await Swal.fire({ icon: "success", title: "Approved", timer: 1200, showConfirmButton: false });
-      loadDeposits();
+      // The approved row leaves the pending set: reload the current page
+      // (cheap 20-row fetch) so counts and rows stay exact.
+      loadDeposits(page);
     } finally {
       setProcessingId(null);
     }
@@ -95,7 +135,7 @@ export default function AdminDepositsPage() {
         return;
       }
       await Swal.fire({ icon: "success", title: "Rejected", timer: 1200, showConfirmButton: false });
-      loadDeposits();
+      loadDeposits(page);
     } finally {
       setProcessingId(null);
     }
@@ -123,7 +163,7 @@ export default function AdminDepositsPage() {
         {["pending", "approved", "rejected"].map((status) => (
           <button
             key={status}
-            onClick={() => setFilter(status)}
+            onClick={() => { setFilter(status); setHighlightId(null); }}
             className={`px-4 py-2 rounded-lg font-medium capitalize transition-colors text-sm ${
               filter === status
                 ? "bg-[#F59E0B] text-slate-950"
@@ -159,7 +199,7 @@ export default function AdminDepositsPage() {
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {paginatedDeposits.map((dep) => (
-                  <tr key={dep._id} className="hover:bg-slate-50/50 transition-colors">
+                  <tr key={dep._id} className={`hover:bg-slate-50/50 transition-colors ${highlightId && String(dep._id) === String(highlightId) ? "bg-amber-50/70 ring-1 ring-inset ring-amber-400/60" : ""}`}>
                     <td className="px-4 py-3 text-slate-600 whitespace-nowrap text-xs">
                       {new Date(dep.createdAt).toLocaleDateString("en-BD", { day: "2-digit", month: "short", year: "numeric" })}
                     </td>
@@ -222,7 +262,7 @@ export default function AdminDepositsPage() {
             </table>
           </div>
         </div>
-        <Pagination page={page} totalPages={totalPages} onPageChange={setPage} />
+        <Pagination page={safePage} totalPages={totalPagesSafe} onPageChange={goToPage} />
         </>
       ) : (
         <div className="bg-white rounded-xl border border-slate-200 p-8 text-center text-slate-500">

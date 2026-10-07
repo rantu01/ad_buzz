@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAdmin } from "../components/AdminProvider";
 import { useSettings } from "@/app/Component/Settings/SettingsProvider";
@@ -8,6 +8,9 @@ import Pagination from "@/app/Component/Pagination";
 import useAdAccountRealtime from "@/app/Component/Hooks/useAdAccountRealtime";
 
 const ITEMS_PER_PAGE = 20;
+
+// Stable empty ref so memoized selectors don't recompute on every render.
+const EMPTY_ARRAY = [];
 
 function timeAgo(date) {
   if (!date) return "\u2014";
@@ -52,7 +55,7 @@ export default function AdminAdAccountsTopUpPage() {
     // Realtime updates arrive via SSE row-level patches (useAdAccountRealtime).
     // No full-list polling: a single shared backend reconcile feeds all clients.
   });
-  const adAccounts = adAccountsQuery.data || [];
+  const adAccounts = adAccountsQuery.data ?? EMPTY_ARRAY;
   const isLoading = adAccountsQuery.isLoading;
   const error = adAccountsQuery.error ? (adAccountsQuery.error.message || "Failed to load data") : "";
   const lastRefreshedAt = adAccountsQuery.dataUpdatedAt ? new Date(adAccountsQuery.dataUpdatedAt) : null;
@@ -63,14 +66,16 @@ export default function AdminAdAccountsTopUpPage() {
     queryKey: ["admin", "ad-accounts", "list"],
   });
 
-  const filteredAccounts = search
-    ? adAccounts.filter((a) => {
-        const q = search.toLowerCase();
-        return (a.metaAccountName || a.name || "")?.toLowerCase().includes(q)
-            || (a.metaAccountId || a.accountId || "")?.toLowerCase().includes(q)
-            || (a.email || "")?.toLowerCase().includes(q);
-      })
-    : adAccounts;
+  // Memoized: full-list scans recompute only when data/search change.
+  const filteredAccounts = useMemo(() => {
+    if (!search) return adAccounts;
+    const q = search.toLowerCase();
+    return adAccounts.filter((a) =>
+      (a.metaAccountName || a.name || "")?.toLowerCase().includes(q)
+        || (a.metaAccountId || a.accountId || "")?.toLowerCase().includes(q)
+        || (a.email || "")?.toLowerCase().includes(q)
+    );
+  }, [adAccounts, search]);
 
   const totalPages = Math.ceil(filteredAccounts.length / ITEMS_PER_PAGE);
   const paginatedAccounts = filteredAccounts.slice((page - 1) * ITEMS_PER_PAGE, page * ITEMS_PER_PAGE);
@@ -92,11 +97,15 @@ export default function AdminAdAccountsTopUpPage() {
     );
   };
 
-  const totalBudget = adAccounts.reduce((s, a) => s + Number(a.metaSpendCap || a.spendCap || 0), 0);
-  const totalSpent = adAccounts.reduce((s, a) => {
-    const spent = a.metaStatus != null ? Number(a.metaAmountSpent || 0) : Number(a.spent || 0);
-    return s + spent;
-  }, 0);
+  const { totalBudget, totalSpent } = useMemo(() => {
+    let budget = 0;
+    let spent = 0;
+    for (const a of adAccounts) {
+      budget += Number(a.metaSpendCap || a.spendCap || 0);
+      spent += a.metaStatus != null ? Number(a.metaAmountSpent || 0) : Number(a.spent || 0);
+    }
+    return { totalBudget: budget, totalSpent: spent };
+  }, [adAccounts]);
 
   const openTopUp = (account) => {
     setTopUpModal(account);

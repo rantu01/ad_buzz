@@ -17,17 +17,20 @@ export async function POST(request) {
     }
 
     const ids = Array.isArray(accountIds) ? accountIds : [accountIds];
-    const results = [];
-    const errors = [];
 
-    for (const accountId of ids) {
+    // Independent per-account writes: run concurrently instead of serially
+    // (was: 2 sequential DB ops × N accounts). Same results/errors shape.
+    const settled = await Promise.all(ids.map(async (accountId) => {
       try {
         const result = await assignAdAccount(accountId, uid, user.email || "", assignedBy);
-        results.push(result);
+        return { ok: true, result };
       } catch (err) {
-        errors.push({ accountId, message: err.message });
+        return { ok: false, accountId, message: err.message };
       }
-    }
+    }));
+
+    const results = settled.filter((s) => s.ok).map((s) => s.result);
+    const errors = settled.filter((s) => !s.ok).map((s) => ({ accountId: s.accountId, message: s.message }));
 
     return NextResponse.json({
       success: true,
