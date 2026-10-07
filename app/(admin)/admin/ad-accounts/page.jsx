@@ -580,11 +580,11 @@ export default function AdminAdAccountsPage() {
                   <tr key={i} className="animate-pulse">
                     <td className="py-3 px-4"><div className="h-4 w-44 rounded bg-slate-200" /><div className="h-3 w-28 rounded bg-slate-100 mt-1.5" /></td>
                     <td className="py-3 px-4"><div className="h-5 w-16 rounded-full bg-slate-200" /></td>
-                    <td className="py-3 px-4"><div className="space-y-1.5"><div className="h-3 w-40 rounded bg-slate-200" /><div className="h-3 w-40 rounded bg-slate-200" /><div className="h-3 w-36 rounded bg-slate-100" /><div className="h-3 w-32 rounded bg-slate-100" /></div></td>
+                    <td className="py-3 px-4"><div className="space-y-1.5"><div className="h-3 w-56 rounded bg-slate-200" /><div className="h-3 w-56 rounded bg-slate-200" /><div className="h-3 w-52 rounded bg-slate-100" /><div className="h-3 w-48 rounded bg-slate-100" /></div></td>
                     <td className="py-3 px-4"><div className="h-4 w-20 rounded bg-slate-200" /></td>
                     <td className="py-3 px-4"><div className="h-4 w-20 rounded bg-slate-200" /></td>
-                    {isAdmin && <td className="py-3 px-4"><div className="h-4 w-24 rounded bg-slate-200" /></td>}
-                    <td className="py-3 px-4"><div className="h-4 w-16 rounded bg-slate-100" /></td>
+                    {isAdmin && <td className="py-3 px-4"><div className="h-4 w-20 rounded bg-slate-200" /></td>}
+                    <td className="py-3 px-4"><div className="h-4 w-24 rounded bg-slate-100" /></td>
                     <td className="py-3 px-4"><div className="h-7 w-20 rounded-lg bg-slate-100" /></td>
                   </tr>
                 ))}
@@ -629,7 +629,7 @@ export default function AdminAdAccountsPage() {
                           <span className="text-xs text-slate-400 italic">No Meta data</span>
                         )}
                       </td>
-                      <td className="py-3 px-4 min-w-[160px]">
+                      <td className="py-3 px-4 min-w-[200px]">
                         <div className="text-xs space-y-1">
                           <div>
                             <span className="text-slate-500">Remaining Balance: </span>
@@ -667,15 +667,15 @@ export default function AdminAdAccountsPage() {
                         <td className="py-3 px-4">
                           {acc.uid ? (
                             <div className="text-xs">
-                              <p className="text-slate-900 truncate max-w-[160px]">{acc.email || "\u2014"}</p>
-                              <p className="text-slate-400 font-mono">{acc.uid?.slice(0, 20)}...</p>
+                              <p className="text-slate-900 truncate ">{acc.email || "—"}</p>
+                              <p className="text-slate-400 font-mono">{acc.uid?.slice(0, 14)}...</p>
                             </div>
                           ) : (
                             <span className="text-xs text-slate-400 italic">Unassigned</span>
                           )}
                         </td>
                       )}
-                      <td className="py-3 px-4">
+                      <td className="py-3 px-4 ">
                         <div className="flex items-center gap-1.5">
                           {acc.syncStatus === "synced" ? <CheckCircle size={14} className="text-emerald-500" /> : acc.syncStatus === "error" ? <XCircle size={14} className="text-red-500" /> : <AlertTriangle size={14} className="text-amber-400" />}
                           <span className="text-xs text-slate-500" title={acc.lastSyncedAt ? new Date(acc.lastSyncedAt).toLocaleString() : ""}>
@@ -684,19 +684,19 @@ export default function AdminAdAccountsPage() {
                         </div>
                       </td>
                       <td className="py-3 px-4">
-                        <div className="flex items-center gap-1">
+                        <div className="flex flex-col items-stretch gap-1">
                           {canManage && (
-                            <button onClick={() => handleTopUp(acc)} className="text-emerald-600 hover:text-emerald-800 border border-emerald-200 hover:bg-emerald-50 p-1.5 rounded-lg transition text-xs font-medium flex items-center gap-1">
-                              <DollarSign size={13} /> Top-Up
+                            <button onClick={() => handleTopUp(acc)} className="text-emerald-600 hover:text-emerald-800 border border-emerald-200 hover:bg-emerald-50 p-1 rounded-md transition text-xs font-medium flex items-center justify-center gap-1">
+                              <DollarSign size={12} /> Top-Up
                             </button>
                           )}
                           {acc.uid && canAssign ? (
-                            <button onClick={() => handleUnassign(acc._id, acc.name)} className="text-amber-600 hover:text-amber-800 border border-amber-200 hover:bg-amber-50 p-1.5 rounded-lg transition text-xs font-medium flex items-center gap-1">
-                              <UserX size={13} /> Unassign
+                            <button onClick={() => handleUnassign(acc._id, acc.name)} className="text-amber-600 hover:text-amber-800 border border-amber-200 hover:bg-amber-50 p-1 rounded-md transition text-xs font-medium flex items-center justify-center gap-1">
+                              <UserX size={12} /> Unassign
                             </button>
                           ) : null}
                           {isAdmin && (
-                            <button onClick={() => deleteAccount(acc._id)} className="text-red-500 border border-red-200 hover:text-red-700 hover:bg-red-50 p-1.5 rounded-lg transition text-xs font-medium">Delete</button>
+                            <button onClick={() => deleteAccount(acc._id)} className="text-red-500 border border-red-200 hover:text-red-700 hover:bg-red-50 p-1 rounded-md transition text-xs font-medium">Delete</button>
                           )}
                         </div>
                       </td>
