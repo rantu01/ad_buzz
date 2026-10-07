@@ -4,8 +4,10 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/app/Component/Auth/AuthProvider";
 import { useSettings } from "@/app/Component/Settings/SettingsProvider";
-import { ChevronRight, DollarSign, Info, Check, ArrowLeft, Upload } from "lucide-react";
+import { ChevronRight, DollarSign, Info, Check, ArrowLeft, Upload, Copy } from "lucide-react";
 import Swal from "sweetalert2";
+
+const MIN_DEPOSIT_BDT = 1000;
 
 export default function DepositsPage() {
   const { user, loading: authLoading } = useAuth();
@@ -86,6 +88,10 @@ export default function DepositsPage() {
       Swal.fire("Required", "Please enter a valid deposit amount in BDT.", "warning");
       return;
     }
+    if (bdt < MIN_DEPOSIT_BDT) {
+      Swal.fire("Minimum Amount", `Minimum deposit amount is ${MIN_DEPOSIT_BDT.toLocaleString()} BDT. Please enter ${MIN_DEPOSIT_BDT.toLocaleString()} BDT or more.`, "warning");
+      return;
+    }
     if (!transactionRef.trim()) {
       Swal.fire("Required", "Please enter the transaction reference number.", "warning");
       return;
@@ -94,6 +100,11 @@ export default function DepositsPage() {
   }
 
   async function handleSubmit() {
+    const bdtCheck = parseFloat(amountBDT);
+    if (!bdtCheck || isNaN(bdtCheck) || bdtCheck < MIN_DEPOSIT_BDT) {
+      Swal.fire("Minimum Amount", `Minimum deposit amount is ${MIN_DEPOSIT_BDT.toLocaleString()} BDT.`, "warning");
+      return;
+    }
     setSubmitting(true);
     try {
       const screenshotBase64 = screenshot ? await toBase64(screenshot) : null;
@@ -303,6 +314,9 @@ function Step2PaymentDetails({ bank, amountBDT, setAmountBDT, creditedUSD, trans
   const logo = isMobile ? bank.walletLogo : bank.logo;
   const name = isMobile ? bank.walletName : bank.bankName;
   const detail = isMobile ? `${bank.walletNo} — ${bank.accountType}` : `${bank.accountNumber} — ${bank.branch}`;
+  const bdtValue = parseFloat(amountBDT);
+  const hasAmountInput = amountBDT !== "" && !isNaN(bdtValue);
+  const isBelowMinimum = hasAmountInput && bdtValue < MIN_DEPOSIT_BDT;
   return (
     <div>
       <div className="mb-6 flex items-center gap-4">
@@ -332,13 +346,42 @@ function Step2PaymentDetails({ bank, amountBDT, setAmountBDT, creditedUSD, trans
         </div>
       </div>
 
+      <div className="mb-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <h3 className="mb-1 text-xs font-semibold uppercase tracking-wider text-slate-500">Bank Details</h3>
+        <p className="mb-4 text-xs text-slate-500">Use these details to make your payment. Click Copy to copy the exact value.</p>
+        <div className="space-y-2.5 rounded-xl bg-slate-50 p-4">
+          {isMobile ? (
+            <>
+              <Row label="Wallet Name" value={bank.walletName} />
+              <Row label="Wallet No" value={bank.walletNo} />
+              <Row label="Account Type" value={bank.accountType} />
+              {bank.paymentInstructions && <Row label="Instructions" value={bank.paymentInstructions} />}
+              {bank.referenceId && <Row label="Reference ID" value={bank.referenceId} highlight />}
+            </>
+          ) : (
+            <>
+              <Row label="Bank Name" value={bank.bankName} />
+              <Row label="Account Name" value={bank.accountName} />
+              <Row label="Account Number" value={bank.accountNumber} />
+              <Row label="Branch" value={bank.branch} />
+              {bank.referenceId && <Row label="Reference ID" value={bank.referenceId} highlight />}
+            </>
+          )}
+        </div>
+      </div>
+
       <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
         <div className="space-y-5">
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1.5">Amount in BDT *</label>
-            <input type="number" step="0.01" min="0" required value={amountBDT} onChange={(e) => setAmountBDT(e.target.value)} placeholder="0.00"
-              className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm text-slate-900 placeholder-slate-400 outline-none focus:ring-2 focus:ring-secondary/30 focus:border-secondary" />
-            <p className="mt-1.5 text-xs text-slate-500">Credited: <span className="font-semibold text-emerald-600">${creditedUSD} USD</span></p>
+            <label className="block text-sm font-medium text-slate-700 mb-1.5">Amount in BDT * <span className="text-slate-400 font-normal">(Minimum {MIN_DEPOSIT_BDT.toLocaleString()} BDT)</span></label>
+            <input type="number" step="0.01" min={MIN_DEPOSIT_BDT} required value={amountBDT} onChange={(e) => setAmountBDT(e.target.value)} placeholder={`${MIN_DEPOSIT_BDT.toLocaleString()}.00`}
+              aria-describedby="min-bdt-hint" aria-invalid={isBelowMinimum}
+              className={`w-full rounded-xl border px-4 py-3 text-sm text-slate-900 placeholder-slate-400 outline-none focus:ring-2 focus:ring-secondary/30 focus:border-secondary ${isBelowMinimum ? "border-red-400 bg-red-50" : "border-slate-200"}`} />
+            {isBelowMinimum ? (
+              <p className="mt-1.5 text-xs font-medium text-red-600">Minimum deposit is {MIN_DEPOSIT_BDT.toLocaleString()} BDT. Please enter {MIN_DEPOSIT_BDT.toLocaleString()} BDT or more.</p>
+            ) : (
+              <p id="min-bdt-hint" className="mt-1.5 text-xs text-slate-500">Minimum: <span className="font-semibold text-slate-700">{MIN_DEPOSIT_BDT.toLocaleString()} BDT</span> | Credited: <span className="font-semibold text-emerald-600">${creditedUSD} USD</span></p>
+            )}
           </div>
 
           <div>
@@ -373,7 +416,7 @@ function Step2PaymentDetails({ bank, amountBDT, setAmountBDT, creditedUSD, trans
 
         <div className="mt-8 flex justify-end gap-3">
           <button onClick={onBack} className="rounded-xl border border-slate-200 px-6 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-50">Back</button>
-          <button onClick={onContinue} className="flex items-center gap-2 rounded-xl px-6 py-2.5 text-sm font-semibold text-white shadow-sm transition-opacity hover:opacity-90" style={{ backgroundColor: activeColor }}>
+          <button onClick={onContinue} disabled={isBelowMinimum} className="flex items-center gap-2 rounded-xl px-6 py-2.5 text-sm font-semibold text-white shadow-sm transition-opacity hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed" style={{ backgroundColor: activeColor }}>
             Continue <ChevronRight className="h-4 w-4" />
           </button>
         </div>
@@ -504,10 +547,54 @@ function BankCard({ bank, isSelected, onSelect, activeColor }) {
 }
 
 function Row({ label, value, highlight = false }) {
+  const [copied, setCopied] = useState(false);
+
+  async function handleCopy(e) {
+    e?.stopPropagation?.();
+    const text = value == null ? "" : String(value);
+    if (!text) return;
+    try {
+      if (navigator?.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+      } else {
+        const ta = document.createElement("textarea");
+        ta.value = text;
+        ta.style.position = "fixed";
+        ta.style.opacity = "0";
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand("copy");
+        document.body.removeChild(ta);
+      }
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      Swal.fire("Error", "Failed to copy. Please copy manually.", "error");
+    }
+  }
+
   return (
     <div className="flex items-center justify-between gap-2 text-sm">
       <span className="shrink-0 text-slate-500">{label}:</span>
-      <span className={`truncate font-medium ${highlight ? "text-secondary" : "text-slate-900"}`}>{value}</span>
+      <span className="flex min-w-0 items-center gap-1.5">
+        <span className={`truncate font-medium ${highlight ? "text-secondary" : "text-slate-900"}`} title={value == null ? "" : String(value)}>
+          {value}
+        </span>
+        <button
+          type="button"
+          onClick={handleCopy}
+          title={copied ? "Copied!" : `Copy ${label}`}
+          aria-label={`Copy ${label}`}
+          className={`flex shrink-0 items-center gap-1 rounded-md border px-1.5 py-1 text-[11px] font-medium transition-colors ${
+            copied
+              ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+              : "border-slate-200 bg-slate-50 text-slate-500 hover:bg-slate-100 hover:text-slate-800"
+          }`}
+        >
+          {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+          {copied ? "Copied" : "Copy"}
+        </button>
+      </span>
     </div>
   );
 }

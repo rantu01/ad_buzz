@@ -74,6 +74,19 @@ export default function BalancePage() {
   });
   const deposits = depositsQuery.data || [];
 
+  const manualLogsQuery = useQuery({
+    queryKey: ["user", "manual-logs", uid],
+    queryFn: async () => {
+      const params = new URLSearchParams({ uid, type: "admin", limit: "100" });
+      const res = await fetch(`/api/user/balance-logs?${params}`);
+      const data = await res.json();
+      if (!data.success) throw new Error("Failed to load manual deposits");
+      return data.logs || [];
+    },
+    enabled: Boolean(uid),
+  });
+  const manualLogs = manualLogsQuery.data || [];
+
   const isLoading = authLoading || (dashboardQuery.isLoading && depositsQuery.isLoading);
   const error = dashboardQuery.isError ? dashboardQuery.error.message : "";
 
@@ -83,6 +96,7 @@ export default function BalancePage() {
       if (type === "balance") {
         queryClient.invalidateQueries({ queryKey: ["user", "dashboard", uid] });
         queryClient.invalidateQueries({ queryKey: ["user", "deposits", uid] });
+        queryClient.invalidateQueries({ queryKey: ["user", "manual-logs", uid] });
       }
     },
   });
@@ -113,6 +127,20 @@ export default function BalancePage() {
 
   const approvedDeposits = deposits.filter(d => d.status === "approved").reduce((s, d) => s + Number(d.amount), 0);
 
+  const currentMonthName = new Date().toLocaleString("en-US", { month: "long" });
+  const now = new Date();
+  const currentMonthDeposit = deposits
+    .filter((d) => {
+      if (d.status !== "approved" || !d.createdAt) return false;
+      const dt = new Date(d.createdAt);
+      return dt.getMonth() === now.getMonth() && dt.getFullYear() === now.getFullYear();
+    })
+    .reduce((s, d) => s + Number(d.amount || 0), 0);
+
+  const totalManualBalancePush = manualLogs
+    .filter((l) => Number(l.amount) > 0)
+    .reduce((s, l) => s + Number(l.amount || 0), 0);
+
   return (
     <div className="max-w-7xl mx-auto px-4 py-8">
       <div className="mb-8">
@@ -136,24 +164,30 @@ export default function BalancePage() {
        
         <div className="bg-white rounded-2xl border-2 border-orange-400/30 p-6 shadow-sm relative overflow-hidden">
           <div className="absolute top-0 right-0 w-32 h-32 bg-orange-500/5 rounded-full -mr-10 -mt-10"></div>
-          <p className="text-xs text-slate-400 uppercase tracking-wider font-semibold relative z-10">Total Earned</p>
+          <p className="text-xs text-slate-400 uppercase tracking-wider font-semibold relative z-10">Current Month Deposit ({currentMonthName})</p>
           <p className="text-3xl font-bold mt-2 relative z-10 text-orange-700">
-            ${formatMoney(dashboard.totalEarned)}
+            ${formatMoney(currentMonthDeposit)}
           </p>
           <p className="text-xs mt-2 font-medium relative z-10 text-orange-600">
-            Lifetime earnings
+            Approved deposits in {currentMonthName}
           </p>
+        </div>
+
+        <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
+          <p className="text-xs text-slate-400 uppercase tracking-wider font-semibold">Total Manual Balance Push</p>
+          <p className="text-3xl font-bold text-slate-900 mt-2">${formatMoney(totalManualBalancePush)}</p>
+          <p className="text-xs text-slate-500 mt-2 font-medium">Admin added balance</p>
         </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-bold text-slate-900">Approved Deposits</h3>
+            <h3 className="text-lg font-bold text-slate-900">Deposits History</h3>
             <span onClick={() => router.push("/user-dashboard/deposits")} className="text-xs text-blue-600 font-medium cursor-pointer hover:underline">View All</span>
           </div>
           {deposits.filter(d => d.status === "approved").length === 0 ? (
-            <p className="text-slate-500 text-sm py-2">No approved deposits yet.</p>
+            <p className="text-slate-500 text-sm py-2">No deposits history yet.</p>
           ) : (
             <div className="space-y-2 max-h-[350px] overflow-y-auto">
               {deposits.filter(d => d.status === "approved").slice(0, 5).map((d) => (
@@ -169,7 +203,31 @@ export default function BalancePage() {
           )}
         </div>
 
-        
+        <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-bold text-slate-900">Manual Deposits History</h3>
+            <span onClick={() => router.push("/user-dashboard/balance-history")} className="text-xs text-blue-600 font-medium cursor-pointer hover:underline">View All</span>
+          </div>
+          {manualLogsQuery.isLoading ? (
+            <p className="text-slate-500 text-sm py-2">Loading manual deposits...</p>
+          ) : manualLogs.length === 0 ? (
+            <p className="text-slate-500 text-sm py-2">No manual deposits history yet.</p>
+          ) : (
+            <div className="space-y-2 max-h-[350px] overflow-y-auto">
+              {manualLogs.slice(0, 5).map((l) => (
+                <div key={l._id} className="flex items-center justify-between p-3 rounded-xl bg-slate-50 border border-slate-100">
+                  <div>
+                    <p className={`font-bold ${Number(l.amount) >= 0 ? "text-emerald-700" : "text-red-600"}`}>
+                      {Number(l.amount) >= 0 ? "+" : ""}${formatMoney(l.amount)}
+                    </p>
+                    <p className="text-[11px] text-slate-400">{new Date(l.createdAt).toLocaleString()}</p>
+                  </div>
+                  <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-amber-50 text-amber-700 capitalize">Manual Balance Push</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

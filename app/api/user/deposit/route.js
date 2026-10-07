@@ -22,6 +22,15 @@ export async function POST(request) {
       );
     }
 
+    const MIN_DEPOSIT_BDT = 1000;
+    const numAmountBDT = Number(amountBDT);
+    if (!Number.isFinite(numAmountBDT) || numAmountBDT < MIN_DEPOSIT_BDT) {
+      return NextResponse.json(
+        { success: false, message: `Minimum deposit amount is ${MIN_DEPOSIT_BDT} BDT` },
+        { status: 400 }
+      );
+    }
+
     const deposit = await createDeposit({
       uid, email, amount: numAmount,
       amountBDT, account, transactionRef, creditedUSD, paymentMethod,

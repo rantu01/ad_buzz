@@ -5,11 +5,15 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/app/Component/Auth/AuthProvider';
 import UserSidebar from './components/Sidebar';
 import UserTopbar from './components/Topbar';
+import { useLoginSession } from '@/app/Component/Hooks/useLoginSession';
 
 export default function ClientLayout({ children }) {
   const router = useRouter();
   const { user, loading } = useAuth();
   const [open, setOpen] = React.useState(false);
+
+  // Track this browser as an active login device (best-effort, per browser).
+  useLoginSession(user?.uid, user?.email);
 
   React.useEffect(() => {
     if (loading) return;

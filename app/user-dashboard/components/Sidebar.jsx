@@ -6,12 +6,15 @@ import { useState } from "react";
 import { Home, ListChecks, User, CreditCard, X, AppWindowMac, DollarSign, ChevronDown, LifeBuoy } from "lucide-react";
 import { useSettings } from "@/app/Component/Settings/SettingsProvider";
 
-const navigation = [
+const navTop = [
     { label: "Dashboard", href: "/user-dashboard", icon: AppWindowMac },
-    { label: "Ad Account", href: "/user-dashboard/ad-account", icon: ListChecks },
+    { label: "Ad Account Topup", href: "/user-dashboard/ad-account", icon: ListChecks },
+    // { label: "Need Help?", href: "https://wa.me/message/JPEP3WIO5LALA1", icon: LifeBuoy },
+];
+
+const navBottom = [
     { label: "Support Tickets", href: "/user-dashboard/support-tickets", icon: LifeBuoy },
     { label: "Profile", href: "/user-dashboard/profile", icon: User },
-    // { label: "Need Help?", href: "https://wa.me/message/JPEP3WIO5LALA1", icon: LifeBuoy },
 ];
 
 const paymentChildren = [
@@ -28,9 +31,9 @@ export default function UserSidebar({ open, onClose }) {
     const pathname = usePathname();
     const settings = useSettings();
     const logo = settings?.logo || "/logo.jpeg";
-    const primary = settings?.primaryColor || "#0F497D";
+    const primary = "#101829" || "#101829";
     const secondary = settings?.secondaryColor || "#F48E2B";
-    const activeBlue = "#1E6BB8";
+    const activeBlue = "#F48E2B";
 
     const [paymentsOpen, setPaymentsOpen] = useState(
         pathname.startsWith("/user-dashboard/deposits") || pathname.startsWith("/user-dashboard/Payment-History")
@@ -75,7 +78,7 @@ export default function UserSidebar({ open, onClose }) {
 
                 <nav className="flex-1 px-4 py-6">
                     <div className="space-y-1">
-                        {navigation.map((item) => {
+                        {navTop.map((item) => {
                             const active = pathname === item.href;
                             const Icon = item.icon;
                             return (
@@ -117,7 +120,7 @@ export default function UserSidebar({ open, onClose }) {
                                     className={`group flex w-full items-center gap-3 rounded-lg px-4 py-3 text-sm font-medium transition-colors ${balanceActive ? "text-white shadow" : "text-white/70 hover:bg-white/10"}`}
                                 style={balanceActive ? activeBg : {}}>
                                 <span className={`flex h-9 w-9 items-center justify-center rounded-xl ${balanceActive ? "bg-white/10" : "bg-white/5"}`}><CreditCard size={18} /></span>
-                                <span className="flex-1 text-left">Balance</span>
+                                <span className="flex-1 text-left">Balance Log</span>
                                 <ChevronDown size={16} className={`transition-transform duration-200 ${balanceOpen ? "rotate-0" : "-rotate-90"}`} />
                             </button>
                             <div className={`grid transition-all duration-200 ease-in-out ${balanceOpen ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"}`}>
@@ -134,6 +137,20 @@ export default function UserSidebar({ open, onClose }) {
                                 </div>
                             </div>
                         </div>
+
+                        {navBottom.map((item) => {
+                            const active = pathname === item.href;
+                            const Icon = item.icon;
+                            return (
+                                <Link key={item.href} href={item.href}
+                                    className={`group flex items-center gap-3 rounded-lg px-4 py-3 text-sm font-medium transition-colors ${active ? "text-white shadow" : "text-white/70 hover:bg-white/10"}`}
+                                    style={active ? { backgroundColor: activeBlue } : {}}
+                                    onClick={handleNavClick}>
+                                    <span className={`flex h-9 w-9 items-center justify-center rounded-xl ${active ? "bg-white/10" : "bg-white/5"}`}><Icon size={18} /></span>
+                                    <span>{item.label}</span>
+                                </Link>
+                            );
+                        })}
                     </div>
                 </nav>
 
