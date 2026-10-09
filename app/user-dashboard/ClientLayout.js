@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/app/Component/Auth/AuthProvider';
 import UserSidebar from './components/Sidebar';
 import UserTopbar from './components/Topbar';
+import UserAlertProvider from './components/UserAlertProvider';
 import { useLoginSession } from '@/app/Component/Hooks/useLoginSession';
 
 export default function ClientLayout({ children }) {
@@ -35,7 +36,7 @@ export default function ClientLayout({ children }) {
   }
 
   return (
-    <>
+    <UserAlertProvider>
       <UserSidebar open={open} onClose={() => setOpen(false)} />
       <div className="min-h-screen lg:pl-64">
         <UserTopbar onToggle={() => setOpen((v) => !v)} />
@@ -43,6 +44,6 @@ export default function ClientLayout({ children }) {
           <div className="mx-auto w-full max-w-7xl">{children}</div>
         </main>
       </div>
-    </>
+    </UserAlertProvider>
   );
 }

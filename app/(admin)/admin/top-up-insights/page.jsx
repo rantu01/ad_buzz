@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { useAdmin } from "../components/AdminProvider";
+import { useSettings } from "@/app/Component/Settings/SettingsProvider";
 import { ROLES, ROLE_LABELS, PERMISSIONS, hasPermission } from "@/lib/permissions";
 import Pagination from "@/app/Component/Pagination";
 import { ChevronLeft, ChevronRight, CalendarDays, CalendarRange, ChartColumn, Table } from "lucide-react";
@@ -80,6 +81,9 @@ function StatCard({ label, value, sub }) {
 
 export default function TopUpInsightsPage() {
   const { profile, access, loading: profileLoading } = useAdmin();
+  const settings = useSettings();
+  // Sidebar theme accent (active-item highlight); bars match the sidebar.
+  const accent = settings?.secondaryColor || "#F48E2B";
 
   const role = profile?.role;
   const canView = hasPermission(role, PERMISSIONS.VIEW_TOPUP_INSIGHTS, access?.permissions);
@@ -222,6 +226,11 @@ export default function TopUpInsightsPage() {
   const currentYear = today.getFullYear();
   const maxMonthlyAmount = Math.max(1, ...monthlyData.map((m) => Number(m.totalAmount || 0)));
 
+  // Average Daily Sell = month total ÷ (entry days − 1), where entry days
+  // counts only days with recorded top-ups in the selected month.
+  const entryDays = dateRows.filter((r) => r.count > 0).length;
+  const avgDailySell = entryDays > 1 ? monthAmount / (entryDays - 1) : null;
+
   const dateTotalPages = Math.max(1, Math.ceil(dateRows.length / ITEMS_PER_PAGE));
   const safeDatePage = Math.min(Math.max(1, datePage), dateTotalPages);
   const paginatedDateRows = dateRows.slice((safeDatePage - 1) * ITEMS_PER_PAGE, safeDatePage * ITEMS_PER_PAGE);
@@ -256,7 +265,7 @@ export default function TopUpInsightsPage() {
           <h2 className="text-lg font-semibold text-slate-800 flex items-center gap-2">
             <ChartColumn size={18} className="text-slate-400" /> Monthly Top-Up Insights
           </h2>
-          <span className="text-xs font-medium text-slate-400 bg-slate-100 rounded-full px-3 py-1">Rolling last 12 months</span>
+          <span className="text-xs font-semibold text-white rounded-full px-3 py-1" style={{ backgroundColor: accent }}>Rolling last 12 months</span>
         </div>
         <p className="text-xs text-slate-400 mb-5">Top-up amount (USD) per month — hover a bar for transactions &amp; amount.</p>
         {monthlyLoading ? (
@@ -284,8 +293,8 @@ export default function TopUpInsightsPage() {
                       <p className="text-xs text-slate-300">Total Amount: <span className="font-semibold text-white">${formatMoney(m.totalAmount)}</span></p>
                     </div>
                     <div
-                      className={`w-full rounded-t-md transition-colors cursor-pointer ${hasValue ? "bg-emerald-500 group-hover:bg-emerald-600" : "bg-slate-100"}`}
-                      style={{ height: hasValue ? `${Math.max(pct, 3)}%` : "4px" }}
+                      className={`w-full rounded-t-md cursor-pointer transition hover:brightness-90 ${hasValue ? "" : "bg-slate-100"}`}
+                      style={hasValue ? { backgroundColor: accent, height: `${Math.max(pct, 3)}%` } : { height: "4px" }}
                       title={`${MONTH_SHORT[m.month - 1]} ${m.year}: ${Number(m.total || 0)} transactions, $${formatMoney(m.totalAmount)}`}
                     />
                   </div>
@@ -301,10 +310,10 @@ export default function TopUpInsightsPage() {
               ))}
             </div>
             <div className="flex items-center gap-4 mt-4 pt-3 border-t border-slate-100">
-              <span className="flex items-center gap-1.5 text-xs text-slate-500">
-                <span className="inline-block h-2.5 w-2.5 rounded-sm bg-emerald-500" /> Top-up amount (USD)
+              <span className="flex items-center gap-1.5 text-xs font-semibold text-slate-700">
+                <span className="inline-block h-2.5 w-2.5 rounded-sm" style={{ backgroundColor: accent }} /> Top-up amount (USD)
               </span>
-              <span className="text-xs text-slate-400">Peak: ${formatMoney(maxMonthlyAmount)}</span>
+              <span className="text-xs font-medium text-slate-600">Peak: ${formatMoney(maxMonthlyAmount)}</span>
             </div>
           </div>
         )}
@@ -354,7 +363,7 @@ export default function TopUpInsightsPage() {
             </button>
           </div>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           <StatCard label="Total Transactions" value={monthItems.length.toLocaleString()} />
           <StatCard label="Total Amount (USD)" value={`$${formatMoney(monthAmount)}`} />
           {ROLE_METRICS.map((m) => (
@@ -365,6 +374,11 @@ export default function TopUpInsightsPage() {
               sub={`${monthStats[m.key]?.count || 0} transactions`}
             />
           ))}
+          <StatCard
+            label="Average Daily Sell"
+            value={avgDailySell === null ? "—" : `$${formatMoney(avgDailySell)}`}
+            sub={entryDays > 1 ? `${entryDays} active days` : entryDays === 1 ? "1 active day — needs 2+" : "No active days"}
+          />
         </div>
       </div>
 

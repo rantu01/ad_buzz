@@ -3,11 +3,12 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import React from "react";
-import { LayoutGrid, Users, User, X, DollarSign, History, Megaphone, RefreshCw, MessageSquare, BarChart3, Settings, LifeBuoy, TrendingUp, CreditCard, ArrowUpCircle, ShieldCheck, ChevronDown } from "lucide-react";
+import { LayoutGrid, Users, User, X, DollarSign, History, Megaphone, RefreshCw, MessageSquare, BarChart3, Settings, LifeBuoy, TrendingUp, CreditCard, ArrowUpCircle, ShieldCheck, ChevronDown, Bell } from "lucide-react";
 import { useSettings } from "@/app/Component/Settings/SettingsProvider";
 import { useAdmin } from "./AdminProvider";
 import { useTicketAlerts } from "./TicketAlertProvider";
 import { useDepositAlerts } from "./DepositAlertProvider";
+import { useNotifications } from "./NotificationProvider";
 import { getAllowedRoutes } from "@/lib/permissions";
 
 const ICON_MAP = {
@@ -26,6 +27,7 @@ const ICON_MAP = {
   settings: Settings,
   roles: ShieldCheck,
   profile: User,
+  notifications: Bell,
 };
 
 const ALL_NAV = [
@@ -54,9 +56,11 @@ export default function DashboardSidebar({ open, onClose }) {
   const { profile, access } = useAdmin();
   const { unread } = useTicketAlerts();
   const { pending: pendingDeposits } = useDepositAlerts();
+  const { unread: notifUnread } = useNotifications();
   const badgeFor = (key) => {
     if (key === "support-tickets") return unread;
     if (key === "deposits") return pendingDeposits;
+    if (key === "notifications") return notifUnread;
     return 0;
   };
   const logo = settings?.logo || "/logo.jpeg";
@@ -213,6 +217,7 @@ export default function DashboardSidebar({ open, onClose }) {
               </div>
             )}
             {extraItems.map((item) => renderNavItem(item))}
+            {renderNavItem({ label: "Notifications", href: "/admin/notifications", key: "notifications" })}
             {renderNavItem({ label: "Profile", href: "/admin/profile", key: "profile" })}
           </div>
         </nav>

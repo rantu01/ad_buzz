@@ -12,6 +12,7 @@ A full-stack web application for managing Meta (Facebook) ad account **Spend Cap
 - **Meta API Integration** — Fetch accounts from Meta BM, sync spend/insights, auto-update Spend Cap at 95% utilization
 - **Spend Cap as Budget** — The Meta Spend Cap is the single source of truth for ad account budgets
 - **Real-Time Sync** — Spend Cap changes are reflected in both the local database and the actual Meta ad account
+- **Prepaid Funds** — For prepay accounts, the admin ad-account list reads Meta's `funding_source_details` stored-balance record when the authorized token can access it. Meta's top-level `balance` remains the documented bill amount due and is not used as prepaid Funds.
 
 ---
 

@@ -9,6 +9,7 @@ import { useLoginSession } from "@/app/Component/Hooks/useLoginSession";
 import AdminProvider, { useAdmin } from "./components/AdminProvider";
 import TicketAlertProvider from "./components/TicketAlertProvider";
 import DepositAlertProvider from "./components/DepositAlertProvider";
+import NotificationProvider from "./components/NotificationProvider";
 import DashboardSidebar from "./components/Sidebar";
 import DashboardTopbar from "./components/Topbar";
 
@@ -77,6 +78,7 @@ function DashboardLayoutInner({ children }) {
     <div className="min-h-screen bg-[#F8F5F1] text-slate-900">
       <TicketAlertProvider>
         <DepositAlertProvider>
+        <NotificationProvider>
         <DashboardSidebar open={open} onClose={() => setOpen(false)} />
         <div className="min-h-screen lg:pl-72">
           <DashboardTopbar onToggle={() => setOpen((value) => !value)} />
@@ -86,6 +88,7 @@ function DashboardLayoutInner({ children }) {
             </div>
           </main>
         </div>
+        </NotificationProvider>
       </DepositAlertProvider>
       </TicketAlertProvider>
     </div>

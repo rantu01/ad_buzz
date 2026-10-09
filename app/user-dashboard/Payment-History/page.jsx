@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "@/app/Component/Auth/AuthProvider";
+import { useUserAlerts } from "../components/UserAlertProvider";
 import Pagination from "@/app/Component/Pagination";
 
 const ITEMS_PER_PAGE = 20;
@@ -15,6 +16,7 @@ function SkeletonRow() {
       <td className="px-4 py-3 text-right"><div className="h-4 w-16 bg-slate-200 rounded ml-auto" /></td>
       <td className="px-4 py-3"><div className="h-3 w-28 bg-slate-200 rounded" /></td>
       <td className="px-4 py-3"><div className="h-3 w-16 bg-slate-200 rounded" /></td>
+      <td className="px-4 py-3 text-center"><div className="h-10 w-10 bg-slate-200 rounded-md mx-auto" /></td>
       <td className="px-4 py-3 text-center"><div className="h-5 w-16 bg-slate-200 rounded-full mx-auto" /></td>
       <td className="px-4 py-3"><div className="h-3 w-20 bg-slate-200 rounded" /></td>
     </tr>
@@ -23,10 +25,12 @@ function SkeletonRow() {
 
 export default function PaymentHistoryPage() {
   const { user, loading: authLoading } = useAuth();
+  const { depositSeq } = useUserAlerts();
   const [deposits, setDeposits] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [page, setPage] = useState(1);
+  const [previewImg, setPreviewImg] = useState(null);
 
   const loadDeposits = useCallback(async () => {
     if (!user?.uid) return;
@@ -44,6 +48,13 @@ export default function PaymentHistoryPage() {
   }, [user?.uid]);
 
   useEffect(() => { loadDeposits(); }, [loadDeposits]);
+
+  // Live update: an approval/rejection pushes a notify event and the list
+  // refreshes so the new stage is visible immediately.
+  useEffect(() => {
+    if (depositSeq > 0) loadDeposits();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [depositSeq]);
 
   const totalPages = Math.ceil(deposits.length / ITEMS_PER_PAGE);
   const paginatedDeposits = deposits.slice((page - 1) * ITEMS_PER_PAGE, page * ITEMS_PER_PAGE);
@@ -69,7 +80,7 @@ export default function PaymentHistoryPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-slate-50 border-b border-slate-200">
-                  {["Date", "Account", "Amount (BDT)", "Credited (USD)", "Transaction Ref", "Payment Method", "Status", "Rejection Reason"].map((h) => (
+                  {["Date", "Account", "Amount (BDT)", "Credited (USD)", "Transaction Ref", "Payment Method", "Screenshot", "Status", "Rejection Reason"].map((h) => (
                     <th key={h} className="px-4 py-3 text-left">
                       <div className="h-3 w-16 bg-slate-200 rounded" />
                     </th>
@@ -125,6 +136,7 @@ export default function PaymentHistoryPage() {
                   <th className="text-right px-4 py-3 font-semibold text-slate-700 whitespace-nowrap">Credited (USD)</th>
                   <th className="text-left px-4 py-3 font-semibold text-slate-700 whitespace-nowrap">Transaction Ref</th>
                   <th className="text-left px-4 py-3 font-semibold text-slate-700 whitespace-nowrap">Payment Method</th>
+                  <th className="text-center px-4 py-3 font-semibold text-slate-700 whitespace-nowrap">Screenshot</th>
                   <th className="text-center px-4 py-3 font-semibold text-slate-700 whitespace-nowrap">Status</th>
                   <th className="text-left px-4 py-3 font-semibold text-slate-700 whitespace-nowrap">Rejection Reason</th>
                 </tr>
@@ -138,8 +150,34 @@ export default function PaymentHistoryPage() {
                     <td className="px-4 py-3 text-slate-800 text-right whitespace-nowrap">${formatMoney(dep.creditedUSD || dep.amount)}</td>
                     <td className="px-4 py-3 text-slate-600 whitespace-nowrap font-mono text-xs">{dep.transactionRef || "—"}</td>
                     <td className="px-4 py-3 text-slate-600 capitalize whitespace-nowrap">{(dep.paymentMethod || "").replace(/_/g, " ") || "—"}</td>
+                    <td className="px-4 py-3 text-center whitespace-nowrap">
+                      {dep.screenshot ? (
+                        <button onClick={() => setPreviewImg({ src: dep.screenshot, label: "Payment Screenshot" })} className="inline-block">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={dep.screenshot} alt="screenshot" className="w-10 h-10 rounded-md object-cover border border-slate-200 hover:ring-2 hover:ring-orange-400 transition-shadow mx-auto" />
+                        </button>
+                      ) : (
+                        <span className="text-slate-300 text-xs">—</span>
+                      )}
+                    </td>
                     <td className="px-4 py-3 text-center whitespace-nowrap">{statusBadge(dep.status)}</td>
-                    <td className="px-4 py-3 text-slate-500 text-xs max-w-[160px]">{dep.status === "rejected" ? (dep.rejectionReason || "—") : "—"}</td>
+                    <td className="px-4 py-3 text-slate-500 text-xs max-w-[160px]">
+                      {dep.status === "rejected" ? (
+                        <div className="space-y-1">
+                          <p className="break-words">{dep.rejectionReason || "—"}</p>
+                          {dep.rejectionFile && (
+                            <button
+                              onClick={() => setPreviewImg({ src: dep.rejectionFile, label: "Rejection Supporting File" })}
+                              className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[11px] font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+                            >
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img src={dep.rejectionFile} alt="rejection file" className="h-5 w-5 rounded object-cover border border-slate-200" />
+                              View file
+                            </button>
+                          )}
+                        </div>
+                      ) : "—"}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -148,6 +186,19 @@ export default function PaymentHistoryPage() {
         </div>
       )}
       <Pagination page={page} totalPages={totalPages} onPageChange={setPage} />
+
+      {previewImg && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setPreviewImg(null)}>
+          <div className="relative max-w-3xl mx-4" onClick={(e) => e.stopPropagation()}>
+            <button onClick={() => setPreviewImg(null)} className="absolute -right-3 -top-3 bg-white rounded-full w-8 h-8 flex items-center justify-center shadow-lg text-slate-700 hover:text-slate-900">&times;</button>
+            {previewImg.label && (
+              <p className="mb-2 text-center text-sm font-medium text-white">{previewImg.label}</p>
+            )}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={previewImg.src} alt={previewImg.label || "Preview"} className="max-h-[85vh] w-auto rounded-lg" />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -17,7 +17,7 @@ export default function AdminDepositsPage() {
 
   const [deposits, setDeposits] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState("pending");
+  const [filter, setFilter] = useState("all");
   const [previewImg, setPreviewImg] = useState(null);
   const [processingId, setProcessingId] = useState(null);
   const [page, setPage] = useState(1);
@@ -35,7 +35,8 @@ export default function AdminDepositsPage() {
     setLoading(true);
     try {
       const params = new URLSearchParams();
-      if (filter) params.set("status", filter);
+      // "all" sends no status: every record, latest first.
+      if (filter && filter !== "all") params.set("status", filter);
       params.set("page", String(targetPage));
       params.set("limit", String(ITEMS_PER_PAGE));
       const res = await fetch(`/api/admin/deposits?${params}`);
@@ -48,14 +49,15 @@ export default function AdminDepositsPage() {
             ? data.totalPages
             : Math.ceil(list.length / ITEMS_PER_PAGE)
         );
-        // Deep-link from a deposit notification: show pending and highlight it.
+        // Deep-link from a deposit notification: show all records (latest
+        // first) and highlight the referenced one.
         try {
           const deep = window.sessionStorage.getItem("ab_open_deposit");
           if (deep) {
             window.sessionStorage.removeItem("ab_open_deposit");
             setHighlightId(deep);
             setPage(1);
-            if (filter !== "pending") setFilter("pending");
+            if (filter !== "all") setFilter("all");
           }
         } catch { /* highlight is best-effort */ }
       }
@@ -118,20 +120,53 @@ export default function AdminDepositsPage() {
   };
 
   const handleReject = async (depositId) => {
-    const { value: reason } = await Swal.fire({
-      icon: "warning", title: "Reject Deposit", input: "text", inputLabel: "Reason for rejection",
-      inputPlaceholder: "Enter reason...", showCancelButton: true, confirmButtonText: "Reject",
+    const { value: result } = await Swal.fire({
+      icon: "warning",
+      title: "Reject Deposit",
+      html: `
+        <label style="display:block;text-align:left;font-size:13px;font-weight:500;color:#334155;margin-bottom:6px;">Reason for rejection *</label>
+        <input id="swal-reject-reason" class="swal2-input" placeholder="Enter reason..." style="margin:0 0 12px;width:100%;" />
+        <label style="display:block;text-align:left;font-size:13px;font-weight:500;color:#334155;margin-bottom:6px;">Supporting file (optional)</label>
+        <input id="swal-reject-file" type="file" accept="image/*" class="swal2-file" style="margin:0;width:100%;" />
+      `,
+      showCancelButton: true,
+      confirmButtonText: "Reject",
+      focusConfirm: false,
+      preConfirm: () => {
+        const reason = document.getElementById("swal-reject-reason")?.value?.trim();
+        if (!reason) {
+          Swal.showValidationMessage("Please enter a reason for rejection.");
+          return false;
+        }
+        const fileInput = document.getElementById("swal-reject-file");
+        const file = fileInput?.files?.[0];
+        if (!file) return { reason, rejectionFile: null };
+        if (!file.type.startsWith("image/")) {
+          Swal.showValidationMessage("Supporting file must be an image.");
+          return false;
+        }
+        if (file.size > 5 * 1024 * 1024) {
+          Swal.showValidationMessage("Supporting file must be under 5MB.");
+          return false;
+        }
+        return new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve({ reason, rejectionFile: reader.result });
+          reader.onerror = () => reject(new Error("Failed to read file."));
+          reader.readAsDataURL(file);
+        });
+      },
     });
-    if (!reason) return;
+    if (!result?.reason) return;
     setProcessingId(depositId);
     try {
       const res = await fetch("/api/admin/deposits", {
         method: "PATCH", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ depositId, status: "rejected", rejectionReason: reason }),
+        body: JSON.stringify({ depositId, status: "rejected", rejectionReason: result.reason, rejectionFile: result.rejectionFile || null }),
       });
-      const result = await res.json();
-      if (!res.ok || !result.success) {
-        await Swal.fire({ icon: "error", title: "Failed", text: result.message });
+      const rejectData = await res.json();
+      if (!res.ok || !rejectData.success) {
+        await Swal.fire({ icon: "error", title: "Failed", text: rejectData.message });
         return;
       }
       await Swal.fire({ icon: "success", title: "Rejected", timer: 1200, showConfirmButton: false });
@@ -159,18 +194,23 @@ export default function AdminDepositsPage() {
       <h1 className="text-2xl font-semibold mb-1">Deposit Verification</h1>
       <p className="text-sm text-slate-500 mb-6">Review and approve/reject deposit requests</p>
 
-      <div className="mb-6 flex gap-2">
-        {["pending", "approved", "rejected"].map((status) => (
+      <div className="mb-6 flex gap-2 flex-wrap">
+        {[
+          { key: "all", label: "All" },
+          { key: "approved", label: "Approved" },
+          { key: "pending", label: "Pending" },
+          { key: "rejected", label: "Rejected" },
+        ].map(({ key, label }) => (
           <button
-            key={status}
-            onClick={() => { setFilter(status); setHighlightId(null); }}
+            key={key}
+            onClick={() => { setFilter(key); setHighlightId(null); }}
             className={`px-4 py-2 rounded-lg font-medium capitalize transition-colors text-sm ${
-              filter === status
+              filter === key
                 ? "bg-[#F59E0B] text-slate-950"
                 : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"
             }`}
           >
-            {status}
+            {label}
           </button>
         ))}
       </div>
@@ -211,7 +251,7 @@ export default function AdminDepositsPage() {
                     <td className="px-4 py-3 text-slate-600 whitespace-nowrap font-mono text-[11px]">{dep.referenceId || "—"}</td>
                     <td className="px-4 py-3 text-center whitespace-nowrap">
                       {dep.screenshot ? (
-                        <button onClick={() => setPreviewImg(dep.screenshot)} className="inline-block">
+                        <button onClick={() => setPreviewImg({ src: dep.screenshot, label: "Payment Screenshot" })} className="inline-block">
                           {/* eslint-disable-next-line @next/next/no-img-element */}
                           <img src={dep.screenshot} alt="ss" className="w-10 h-10 rounded-md object-cover border border-slate-200 hover:ring-2 hover:ring-orange-400 transition-shadow" />
                         </button>
@@ -220,8 +260,22 @@ export default function AdminDepositsPage() {
                       )}
                     </td>
                     <td className="px-4 py-3 text-center whitespace-nowrap">{statusBadge(dep.status)}</td>
-                    <td className="px-4 py-3 text-slate-500 text-[11px] max-w-[140px]">
-                      {dep.status === "rejected" ? (dep.rejectionReason || "—") : "—"}
+                    <td className="px-4 py-3 text-slate-500 text-[11px] max-w-[160px]">
+                      {dep.status === "rejected" ? (
+                        <div className="space-y-1">
+                          <p className="break-words">{dep.rejectionReason || "—"}</p>
+                          {dep.rejectionFile && (
+                            <button
+                              onClick={() => setPreviewImg({ src: dep.rejectionFile, label: "Rejection Supporting File" })}
+                              className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[11px] font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+                            >
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img src={dep.rejectionFile} alt="rejection file" className="h-5 w-5 rounded object-cover border border-slate-200" />
+                              View file
+                            </button>
+                          )}
+                        </div>
+                      ) : "—"}
                     </td>
                     <td className="px-4 py-3 text-center whitespace-nowrap">
                       {dep.status === "pending" ? (
@@ -266,7 +320,7 @@ export default function AdminDepositsPage() {
         </>
       ) : (
         <div className="bg-white rounded-xl border border-slate-200 p-8 text-center text-slate-500">
-          No {filter} deposits found.
+          {filter === "all" ? "No deposits found." : `No ${filter} deposits found.`}
         </div>
       )}
 
@@ -274,8 +328,11 @@ export default function AdminDepositsPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setPreviewImg(null)}>
           <div className="relative max-w-3xl mx-4" onClick={(e) => e.stopPropagation()}>
             <button onClick={() => setPreviewImg(null)} className="absolute -right-3 -top-3 bg-white rounded-full w-8 h-8 flex items-center justify-center shadow-lg text-slate-700 hover:text-slate-900">&times;</button>
+            {previewImg.label && (
+              <p className="mb-2 text-center text-sm font-medium text-white">{previewImg.label}</p>
+            )}
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={previewImg} alt="Payment proof" className="max-h-[85vh] w-auto rounded-lg" />
+            <img src={previewImg.src} alt={previewImg.label || "Payment proof"} className="max-h-[85vh] w-auto rounded-lg" />
           </div>
         </div>
       )}

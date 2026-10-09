@@ -3,8 +3,9 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
-import { Home, ListChecks, User, CreditCard, X, AppWindowMac, DollarSign, ChevronDown, LifeBuoy } from "lucide-react";
+import { Home, ListChecks, User, CreditCard, X, AppWindowMac, DollarSign, ChevronDown, LifeBuoy, Bell } from "lucide-react";
 import { useSettings } from "@/app/Component/Settings/SettingsProvider";
+import { useUserAlerts } from "./UserAlertProvider";
 
 const navTop = [
     { label: "Dashboard", href: "/user-dashboard", icon: AppWindowMac },
@@ -13,7 +14,8 @@ const navTop = [
 ];
 
 const navBottom = [
-    { label: "Support Tickets", href: "/user-dashboard/support-tickets", icon: LifeBuoy },
+    { label: "Notifications", href: "/user-dashboard/notifications", icon: Bell, badgeKey: "notifs" },
+    { label: "Support Tickets", href: "/user-dashboard/support-tickets", icon: LifeBuoy, badgeKey: "tickets" },
     { label: "Profile", href: "/user-dashboard/profile", icon: User },
 ];
 
@@ -34,6 +36,12 @@ export default function UserSidebar({ open, onClose }) {
     const primary = "#101829" || "#101829";
     const secondary = settings?.secondaryColor || "#F48E2B";
     const activeBlue = "#F48E2B";
+    const { unread, ticketUnread } = useUserAlerts();
+    const badgeFor = (key) => {
+        if (key === "notifs") return unread;
+        if (key === "tickets") return ticketUnread;
+        return 0;
+    };
 
     const [paymentsOpen, setPaymentsOpen] = useState(
         pathname.startsWith("/user-dashboard/deposits") || pathname.startsWith("/user-dashboard/Payment-History")
@@ -141,6 +149,7 @@ export default function UserSidebar({ open, onClose }) {
                         {navBottom.map((item) => {
                             const active = pathname === item.href;
                             const Icon = item.icon;
+                            const badge = badgeFor(item.badgeKey);
                             return (
                                 <Link key={item.href} href={item.href}
                                     className={`group flex items-center gap-3 rounded-lg px-4 py-3 text-sm font-medium transition-colors ${active ? "text-white shadow" : "text-white/70 hover:bg-white/10"}`}
@@ -148,6 +157,11 @@ export default function UserSidebar({ open, onClose }) {
                                     onClick={handleNavClick}>
                                     <span className={`flex h-9 w-9 items-center justify-center rounded-xl ${active ? "bg-white/10" : "bg-white/5"}`}><Icon size={18} /></span>
                                     <span>{item.label}</span>
+                                    {badge > 0 && (
+                                        <span className="ml-auto flex h-5 min-w-[20px] items-center justify-center rounded-full bg-red-500 px-1.5 text-[11px] font-bold text-white">
+                                            {badge > 99 ? "99+" : badge}
+                                        </span>
+                                    )}
                                 </Link>
                             );
                         })}

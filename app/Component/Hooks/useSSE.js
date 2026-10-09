@@ -15,6 +15,7 @@ const GRANULAR_EVENTS = [
   "ticket.updated",
   "deposit.created",
   "deposit.updated",
+  "notify",
 ];
 
 export default function useSSE({ uid, channels = [], onEvent } = {}) {

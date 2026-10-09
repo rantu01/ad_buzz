@@ -3,19 +3,14 @@
 import { useEffect, useRef, useState } from "react";
 import { useAdmin } from "../components/AdminProvider";
 import { useTicketAlerts } from "../components/TicketAlertProvider";
+import { useNotifications } from "../components/NotificationProvider";
 import { hasPermission } from "@/lib/permissions";
+import { TICKET_STAGES, ticketStageLabel, ticketStageColor } from "@/lib/ticketStages";
 import Swal from "sweetalert2";
 import { Search } from "lucide-react";
 import Pagination from "@/app/Component/Pagination";
 
 const ITEMS_PER_PAGE = 20;
-
-const STATUS_COLORS = {
-  open: "bg-blue-50 text-blue-700",
-  in_progress: "bg-amber-50 text-amber-700",
-  replied: "bg-purple-50 text-purple-700",
-  closed: "bg-slate-50 text-slate-600",
-};
 
 export default function SupportTicketsPage() {
   const { profile } = useAdmin();
@@ -31,6 +26,7 @@ export default function SupportTicketsPage() {
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const { lastEventSeq, markRead } = useTicketAlerts();
+  const { markReadByRef } = useNotifications();
   const prevFilter = useRef(null);
 
   const loadTickets = async (targetPage = page) => {
@@ -41,6 +37,8 @@ export default function SupportTicketsPage() {
       if (searchTicketId.trim()) params.set("ticketId", searchTicketId.trim());
       params.set("page", String(targetPage));
       params.set("limit", String(ITEMS_PER_PAGE));
+      // Viewer uid lets the API attach per-ticket read/unread flags.
+      if (profile?.uid) params.set("uid", profile.uid);
       const res = await fetch(`/api/admin/support-tickets?${params}`);
       const data = await res.json();
       if (data.success) {
@@ -60,7 +58,11 @@ export default function SupportTicketsPage() {
               const match = list.find((t) => String(t._id) === deep);
               if (match) {
                 setReplyText("");
-                return match;
+                // The ticket is now viewed: clear its unread state at once
+                // (ticket badge) and its notification logs (bell) together.
+                markRead(String(match._id));
+                markReadByRef("ticket", String(match._id));
+                return { ...match, unread: false };
               }
             }
           } catch { /* selection still refreshes below */ }
@@ -82,7 +84,7 @@ export default function SupportTicketsPage() {
     const t = setTimeout(() => loadTickets(1), immediate ? 0 : 400);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filter, searchTicketId]);
+  }, [filter, searchTicketId, profile?.uid]);
   // Live update: a new ticket or a status/reply change made anywhere
   // (user app, another staff member) refreshes the current page.
   useEffect(() => {
@@ -100,13 +102,18 @@ export default function SupportTicketsPage() {
   const openTicket = async (ticket) => {
     setSelected(ticket);
     setReplyText("");
-    // Opening a ticket marks it seen for this admin (badge drops at once).
-    if (ticket?._id) markRead(String(ticket._id));
+    // Opening a ticket marks it seen for this admin (badge drops at once)
+    // and clears its notification logs so the bell updates immediately.
+    if (ticket?._id) {
+      markRead(String(ticket._id));
+      markReadByRef("ticket", String(ticket._id));
+    }
+    setTickets((prev) => prev.map((t) => (String(t._id) === String(ticket._id) ? { ...t, unread: false } : t)));
     // Refresh the full thread (replies) on demand; the row stays instant.
     try {
       const res = await fetch(`/api/admin/support-tickets?id=${ticket._id}`);
       const data = await res.json();
-      if (data.success && data.ticket) setSelected(data.ticket);
+      if (data.success && data.ticket) setSelected({ ...data.ticket, unread: false });
     } catch { /* row content remains visible */ }
   };
 
@@ -114,12 +121,15 @@ export default function SupportTicketsPage() {
     const res = await fetch("/api/admin/support-tickets", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ticketId, action: status, uid: profile?.uid }),
+      body: JSON.stringify({ ticketId, action: status, uid: profile?.uid, staffName: profile?.displayName || profile?.email || "Staff", staffRole: profile?.role }),
     });
     const data = await res.json();
     if (data.success) {
-      setSelected(data.ticket);
-      loadTickets(page);
+      // Acting staff has seen it: clear its unread flag locally and clear
+      // any of their notification logs for this ticket (bell sync).
+      markReadByRef("ticket", String(data.ticket._id));
+      setSelected({ ...data.ticket, unread: false });
+      setTickets((prev) => prev.map((t) => (String(t._id) === String(data.ticket._id) ? { ...data.ticket, unread: false } : t)));
     }
   };
 
@@ -134,8 +144,9 @@ export default function SupportTicketsPage() {
     const data = await res.json();
     if (data.success) {
       setReplyText("");
-      setSelected(data.ticket);
-      loadTickets(page);
+      markReadByRef("ticket", String(data.ticket._id));
+      setSelected({ ...data.ticket, unread: false });
+      setTickets((prev) => prev.map((t) => (String(t._id) === String(data.ticket._id) ? { ...data.ticket, unread: false } : t)));
     } else {
       Swal.fire("Error", data.message, "error");
     }
@@ -148,10 +159,10 @@ export default function SupportTicketsPage() {
 
       <div className="mb-6 space-y-3">
         <div className="flex gap-2 flex-wrap">
-          {["", "open", "in_progress", "replied", "closed"].map((s) => (
-            <button key={s} onClick={() => setFilter(s)}
-              className={`px-4 py-2 rounded-lg font-medium capitalize transition-colors text-sm ${filter === s ? "bg-[#F59E0B] text-slate-950" : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"}`}>
-              {s || "All"}
+          {[{ key: "", label: "All" }, ...TICKET_STAGES].map((s) => (
+            <button key={s.key} onClick={() => setFilter(s.key)}
+              className={`px-4 py-2 rounded-lg font-medium capitalize transition-colors text-sm ${filter === s.key ? "bg-[#F59E0B] text-slate-950" : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"}`}>
+              {s.label}
             </button>
           ))}
         </div>
@@ -173,9 +184,16 @@ export default function SupportTicketsPage() {
             <div className="space-y-3">
               {paginatedTickets.map((t) => (
                   <div key={t._id} onClick={() => openTicket(t)}
-                    className={`bg-white rounded-xl border p-4 cursor-pointer transition-all ${selected?._id === t._id ? "border-amber-400 ring-1 ring-amber-400/50" : "border-slate-200 hover:border-slate-300"}`}>
+                    className={`bg-white rounded-xl border p-4 cursor-pointer transition-all ${selected?._id === t._id ? "border-amber-400 ring-1 ring-amber-400/50" : t.unread ? "border-amber-300 ring-1 ring-amber-300/40 bg-amber-50/40 hover:border-amber-400" : "border-slate-200 hover:border-slate-300"}`}>
                     <div className="flex items-center justify-between mb-1.5">
-                      <span className={`inline-block px-2 py-0.5 rounded-full text-[11px] font-medium capitalize ${STATUS_COLORS[t.status] || "bg-slate-50 text-slate-600"}`}>{t.status?.replace(/_/g, " ")}</span>
+                      <span className="flex items-center gap-1.5">
+                        <span className={`inline-block px-2 py-0.5 rounded-full text-[11px] font-medium capitalize ${ticketStageColor(t.status)}`}>{ticketStageLabel(t.status)}</span>
+                        {t.unread && (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-red-500 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">
+                            <span className="h-1.5 w-1.5 rounded-full bg-white" /> New
+                          </span>
+                        )}
+                      </span>
                       <span className="text-[11px] text-slate-400">Ticket Id: {t.ticketId} &middot; {new Date(t.createdAt).toLocaleDateString("en-BD", { day: "2-digit", month: "short" })}</span>
                     </div>
                     <p className="text-sm font-semibold text-slate-900 truncate">{t.subject}</p>
@@ -201,8 +219,8 @@ export default function SupportTicketsPage() {
               <div className="p-6 border-b border-slate-200">
                 <div className="flex items-center justify-between mb-2">
                   <h2 className="text-lg font-bold text-slate-900">{selected.subject}</h2>
-                  <span className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-medium capitalize ${STATUS_COLORS[selected.status] || "bg-slate-50 text-slate-600"}`}>
-                    {selected.status?.replace(/_/g, " ")}
+                  <span className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-medium capitalize ${ticketStageColor(selected.status)}`}>
+                    {ticketStageLabel(selected.status)}
                   </span>
                 </div>
                 <p className="text-xs text-slate-500">
@@ -240,7 +258,7 @@ export default function SupportTicketsPage() {
                   <form onSubmit={handleReply} className="space-y-3">
                     <textarea value={replyText} onChange={(e) => setReplyText(e.target.value)} rows={3} placeholder="Type your reply..."
                       className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm text-slate-900 placeholder-slate-400 outline-none focus:ring-2 focus:ring-secondary/30 focus:border-secondary" />
-                    <div className="flex gap-2">
+                    <div className="flex gap-2 flex-wrap">
                       <button type="submit" disabled={!replyText.trim()}
                         className="rounded-xl bg-[#F59E0B] px-5 py-2 text-sm font-semibold text-slate-950 hover:bg-[#D9910A] transition disabled:opacity-50">
                         Send Reply
@@ -249,6 +267,10 @@ export default function SupportTicketsPage() {
                         <button type="button" onClick={() => handleStatusChange(selected._id, "in_progress")}
                           className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50">Mark In Progress</button>
                       )}
+                      {selected.status !== "hold" && (
+                        <button type="button" onClick={() => handleStatusChange(selected._id, "hold")}
+                          className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50">Hold</button>
+                      )}
                       <button type="button" onClick={() => handleStatusChange(selected._id, "closed")}
                         className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50">Close Ticket</button>
                     </div>
@@ -256,7 +278,15 @@ export default function SupportTicketsPage() {
                 </div>
               )}
 
-              {selected.status === "closed" && (
+              {canManage && selected.status === "closed" && (
+                <div className="p-6 flex items-center justify-between gap-3">
+                  <p className="text-sm text-slate-400">This ticket is closed.</p>
+                  <button type="button" onClick={() => handleStatusChange(selected._id, "open")}
+                    className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50">Reopen</button>
+                </div>
+              )}
+
+              {!canManage && selected.status === "closed" && (
                 <div className="p-6 text-center text-sm text-slate-400">This ticket is closed.</div>
               )}
             </div>

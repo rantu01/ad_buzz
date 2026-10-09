@@ -96,6 +96,10 @@ export default function DepositsPage() {
       Swal.fire("Required", "Please enter the transaction reference number.", "warning");
       return;
     }
+    if (!screenshot) {
+      Swal.fire("Required", "Please upload a payment screenshot.", "warning");
+      return;
+    }
     setCurrentStep(3);
   }
 
@@ -103,6 +107,11 @@ export default function DepositsPage() {
     const bdtCheck = parseFloat(amountBDT);
     if (!bdtCheck || isNaN(bdtCheck) || bdtCheck < MIN_DEPOSIT_BDT) {
       Swal.fire("Minimum Amount", `Minimum deposit amount is ${MIN_DEPOSIT_BDT.toLocaleString()} BDT.`, "warning");
+      return;
+    }
+    if (!screenshot) {
+      Swal.fire("Required", "Please upload a payment screenshot.", "warning");
+      setCurrentStep(2);
       return;
     }
     setSubmitting(true);
@@ -391,24 +400,46 @@ function Step2PaymentDetails({ bank, amountBDT, setAmountBDT, creditedUSD, trans
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1.5">Payment Screenshot <span className="text-slate-400">(optional)</span></label>
+            <label className="block text-sm font-medium text-slate-700 mb-1.5">Payment Screenshot *</label>
             <div className="flex items-center gap-3">
               <label className="flex cursor-pointer items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600 hover:bg-slate-50">
                 <Upload className="h-4 w-4" />
                 Choose File
-                <input type="file" accept="image/*" className="hidden" onChange={(e) => {
+                <input type="file" accept="image/*" required className="hidden" onChange={(e) => {
                   const file = e.target.files[0];
                   if (!file) return;
+                  if (!file.type.startsWith("image/")) {
+                    Swal.fire("Invalid File", "Please upload an image file.", "warning");
+                    e.target.value = "";
+                    return;
+                  }
+                  if (file.size > 5 * 1024 * 1024) {
+                    Swal.fire("File Too Large", "Screenshot must be under 5MB.", "warning");
+                    e.target.value = "";
+                    return;
+                  }
                   setScreenshot(file);
-                  setScreenshotPreview(URL.createObjectURL(file));
+                  // Use a data URL for the preview so it always renders
+                  // and exactly matches what will be submitted.
+                  const reader = new FileReader();
+                  reader.onload = () => setScreenshotPreview(reader.result);
+                  reader.onerror = () => {
+                    Swal.fire("Error", "Failed to read the selected image.", "error");
+                    setScreenshot(null);
+                    setScreenshotPreview("");
+                  };
+                  reader.readAsDataURL(file);
                 }} />
               </label>
               {screenshot && <span className="text-xs text-slate-500">{screenshot.name}</span>}
             </div>
+            {!screenshot && (
+              <p className="mt-1.5 text-xs text-slate-500">Required — upload a clear screenshot of your payment.</p>
+            )}
             {screenshotPreview && (
               <div className="mt-3 inline-block overflow-hidden rounded-xl border border-slate-200">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={screenshotPreview} alt="Preview" className="max-h-32 w-auto" />
+                <img src={screenshotPreview} alt="Payment screenshot preview" className="max-h-32 w-auto" />
               </div>
             )}
           </div>
@@ -482,13 +513,17 @@ function Step3ReviewSubmit({ bank, amountBDT, creditedUSD, transactionRef, scree
           </div>
         </div>
 
-        {screenshotPreview && (
+        {screenshotPreview ? (
           <div className="mb-6">
             <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-500">Payment Screenshot</h3>
             <div className="inline-block overflow-hidden rounded-xl border border-slate-200">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={screenshotPreview} alt="Payment proof" className="max-h-40 w-auto" />
             </div>
+          </div>
+        ) : (
+          <div className="mb-6 rounded-xl border border-red-200 bg-red-50 p-4">
+            <p className="text-sm font-medium text-red-700">Payment screenshot is required. Please go back and upload it.</p>
           </div>
         )}
 

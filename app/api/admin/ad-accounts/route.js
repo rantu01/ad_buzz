@@ -134,9 +134,11 @@ export async function GET(request) {
         // Prepaid "Funds" (Meta Payment & Billing → Funds via
         // funding_source_details). null = unavailable (permission / field
         // absent / non-prepay) — the UI renders N/A, never $0.
-        prepaidBalance: meta?.prepaidBalance ?? null,
-        prepaidBalanceStatus: meta?.prepaidBalanceStatus || "unavailable",
-        isPrepayAccount: meta?.isPrepayAccount ?? null,
+        // Prefer the latest Meta snapshot, but retain a successfully synced
+        // ad-account value if the two collections are briefly out of sync.
+        prepaidBalance: meta?.prepaidBalance ?? acc.prepaidBalance ?? null,
+        prepaidBalanceStatus: meta?.prepaidBalanceStatus || acc.prepaidBalanceStatus || "unavailable",
+        isPrepayAccount: meta?.isPrepayAccount ?? acc.isPrepayAccount ?? null,
         topupThisMonth: stats.thisMonth,
         topupLastMonth: stats.lastMonth,
         lastTopupDate: stats.lastTopupDate,
