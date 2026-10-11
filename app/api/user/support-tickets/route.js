@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createTicket, getTicketsByUid, addTicketReply, getTicketById, countAttentionTickets, clearTicketReads, markTicketsRead, attachTicketUnread, getTicketReadSet } from "@/lib/supportTicketModel";
+import { createTicket, getTicketsByUid, addTicketReply, getTicketById, countAttentionTickets, clearTicketReads, markTicketsRead, attachTicketUnread, getTicketReadSet, sortTicketsUnreadFirst } from "@/lib/supportTicketModel";
 import { createNotificationsForUids } from "@/lib/notificationModel";
 import { getStaffUids } from "@/lib/userModel";
 import { emitToChannel, emitToUser } from "@/lib/sseManager";
@@ -9,11 +9,24 @@ export async function GET(request) {
     const { searchParams } = new URL(request.url);
     const uid = searchParams.get("uid");
     if (!uid) return NextResponse.json({ success: false, message: "UID required" }, { status: 400 });
+    const id = searchParams.get("id");
+    // Single ticket for notification deep-links: the exact ticket opens
+    // even when filters/pagination would hide it from the list.
+    if (id) {
+      const { ObjectId } = await import("mongodb");
+      if (!ObjectId.isValid(id)) return NextResponse.json({ success: false, message: "Ticket not found" }, { status: 404 });
+      const ticket = await getTicketById(id);
+      if (!ticket || ticket.uid !== uid) return NextResponse.json({ success: false, message: "Ticket not found" }, { status: 404 });
+      const readSet = await getTicketReadSet(uid);
+      const [withFlag] = attachTicketUnread([ticket], readSet);
+      return NextResponse.json({ success: true, ticket: withFlag || ticket });
+    }
     const tickets = await getTicketsByUid(uid);
     // Per-ticket read/unread for this customer (staff replies and stage
-    // changes stay unread until the customer views them).
+    // changes stay unread until the customer views them). Unread rows
+    // sort first so they surface above newer read tickets.
     const readSet = await getTicketReadSet(uid);
-    return NextResponse.json({ success: true, tickets: attachTicketUnread(tickets, readSet) });
+    return NextResponse.json({ success: true, tickets: sortTicketsUnreadFirst(attachTicketUnread(tickets, readSet)) });
   } catch (error) {
     return NextResponse.json({ success: false, message: error.message }, { status: 500 });
   }

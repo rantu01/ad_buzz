@@ -3,6 +3,8 @@ import {
   markTicketsRead,
   markAllTicketsRead,
   getUnreadTicketState,
+  getUnreadCountsByStage,
+  getTicketStageTotals,
 } from "@/lib/supportTicketModel";
 
 // Mark tickets as seen for one staff member.
@@ -23,7 +25,9 @@ export async function POST(request) {
       await markTicketsRead(uid, ticketIds);
     }
     const state = await getUnreadTicketState(uid);
-    return NextResponse.json({ success: true, ...state });
+    const counts = await getUnreadCountsByStage(uid);
+    const totals = await getTicketStageTotals();
+    return NextResponse.json({ success: true, ...state, byStage: counts.byStage || {}, totalUnread: counts.total ?? state.unread ?? 0, stageTotals: totals.byStage || {}, totalTickets: totals.total || 0 });
   } catch (error) {
     return NextResponse.json({ success: false, message: error.message }, { status: 500 });
   }

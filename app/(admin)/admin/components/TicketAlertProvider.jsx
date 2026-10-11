@@ -16,7 +16,12 @@ const TicketAlertContext = createContext({
   unread: 0,
   items: [],
   pendingOpen: 0,
+  byStage: {},
+  totalUnread: 0,
+  stageTotals: {},
+  totalTickets: 0,
   lastEventSeq: 0,
+  lastTicketId: null,
   markAllRead: async () => {},
   markRead: async () => {},
   refresh: async () => {},
@@ -39,13 +44,20 @@ export default function TicketAlertProvider({ children }) {
   const [unread, setUnread] = useState(0);
   const [items, setItems] = useState([]);
   const [pendingOpen, setPendingOpen] = useState(0);
+  const [byStage, setByStage] = useState({});
+  const [stageTotals, setStageTotals] = useState({});
+  const [totalTickets, setTotalTickets] = useState(0);
   const [lastEventSeq, setLastEventSeq] = useState(0);
+  const [lastTicketId, setLastTicketId] = useState(null);
 
   const applyState = useCallback((data) => {
     if (!data || data.success === false) return;
     if (typeof data.unread === "number") setUnread(data.unread);
     if (Array.isArray(data.items)) setItems(data.items);
     if (typeof data.pendingOpen === "number") setPendingOpen(data.pendingOpen);
+    if (data.byStage && typeof data.byStage === "object") setByStage(data.byStage);
+    if (data.stageTotals && typeof data.stageTotals === "object") setStageTotals(data.stageTotals);
+    if (typeof data.totalTickets === "number") setTotalTickets(data.totalTickets);
   }, []);
 
   // Authoritative refresh: badge = server-computed unread for this admin.
@@ -84,7 +96,11 @@ export default function TicketAlertProvider({ children }) {
       if (type !== "ticket.created" && type !== "ticket.updated") return;
       // Reconcile with the server instead of trusting the payload:
       // the payload count is global, but the badge is per-admin.
+      // The ticket id IS trusted for thread refresh (which refetches
+      // the authoritative history via GET ?id=, never using the payload).
       refresh();
+      const tid = data?.ticket?._id ? String(data.ticket._id) : null;
+      if (tid) setLastTicketId(tid);
       setLastEventSeq((s) => s + 1);
     },
   });
@@ -129,7 +145,7 @@ export default function TicketAlertProvider({ children }) {
 
   return (
     <TicketAlertContext.Provider
-      value={{ canView, unread, items, pendingOpen, lastEventSeq, markAllRead, markRead, refresh }}
+      value={{ canView, unread, items, pendingOpen, byStage, totalUnread: unread, stageTotals, totalTickets, lastEventSeq, lastTicketId, markAllRead, markRead, refresh }}
     >
       {children}
     </TicketAlertContext.Provider>

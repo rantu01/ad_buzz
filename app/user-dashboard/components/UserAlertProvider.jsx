@@ -17,6 +17,7 @@ const UserAlertContext = createContext({
   total: 0,
   ticketUnread: 0,
   ticketSeq: 0,
+  lastTicketId: null,
   depositSeq: 0,
   notifSeq: 0,
   refresh: async () => {},
@@ -46,6 +47,7 @@ export default function UserAlertProvider({ children }) {
   const [total, setTotal] = useState(0);
   const [ticketUnread, setTicketUnread] = useState(0);
   const [ticketSeq, setTicketSeq] = useState(0);
+  const [lastTicketId, setLastTicketId] = useState(null);
   const [depositSeq, setDepositSeq] = useState(0);
   const [notifSeq, setNotifSeq] = useState(0);
   const { soundOn, toggleSound, playFor } = useNotificationSound();
@@ -105,8 +107,13 @@ export default function UserAlertProvider({ children }) {
       refresh();
       setNotifSeq((s) => s + 1);
       const refType = data?.notification?.refType;
+      // The refId is only used to refetch the authoritative thread via
+      // GET ?id= (never to render payload data), so it cannot cause
+      // duplicates or ordering issues.
+      const refId = data?.notification?.refId ? String(data.notification.refId) : null;
       if (refType === "ticket") {
         refreshTickets();
+        if (refId) setLastTicketId(refId);
         setTicketSeq((s) => s + 1);
       } else if (refType === "deposit") {
         setDepositSeq((s) => s + 1);
@@ -233,7 +240,7 @@ export default function UserAlertProvider({ children }) {
 
   return (
     <UserAlertContext.Provider
-      value={{ unread, items, total, ticketUnread, ticketSeq, depositSeq, notifSeq, refresh, refreshTickets, markRead, markAllRead, markReadByRef, markReadByTypes, markTicketRead, soundOn, toggleSound }}
+      value={{ unread, items, total, ticketUnread, ticketSeq, lastTicketId, depositSeq, notifSeq, refresh, refreshTickets, markRead, markAllRead, markReadByRef, markReadByTypes, markTicketRead, soundOn, toggleSound }}
     >
       {children}
     </UserAlertContext.Provider>

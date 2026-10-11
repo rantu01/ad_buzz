@@ -10,7 +10,7 @@ import Swal from "sweetalert2";
 import { Search } from "lucide-react";
 import Pagination from "@/app/Component/Pagination";
 
-const ITEMS_PER_PAGE = 20;
+const ITEMS_PER_PAGE = 5;
 
 export default function SupportTicketsPage() {
   const { profile } = useAdmin();
@@ -25,20 +25,70 @@ export default function SupportTicketsPage() {
   const [replyText, setReplyText] = useState("");
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
-  const { lastEventSeq, markRead } = useTicketAlerts();
+  const { lastEventSeq, lastTicketId, markRead, unread: totalUnread, stageTotals, refresh: refreshCounts } = useTicketAlerts();
   const { markReadByRef } = useNotifications();
   const prevFilter = useRef(null);
+  // Live refs so SSE-driven thread refreshes never act on stale state.
+  const selectedRef = useRef(null);
+  selectedRef.current = selected;
+  const profileUidRef = useRef(null);
+  profileUidRef.current = profile?.uid || null;
 
-  const loadTickets = async (targetPage = page) => {
+  // Fetch the authoritative full thread (message + ordered replies) for
+  // one ticket. The server is the single source of truth: the returned
+  // replies array replaces local state wholesale, so duplicates, gaps,
+  // and ordering bugs are impossible.
+  const fetchThread = async (ticketId) => {
+    if (!ticketId) return null;
+    try {
+      const params = new URLSearchParams({ id: String(ticketId) });
+      if (profileUidRef.current) params.set("uid", profileUidRef.current);
+      const res = await fetch(`/api/admin/support-tickets?${params}`, { cache: "no-store" });
+      const data = await res.json();
+      if (data.success && data.ticket) return data.ticket;
+    } catch { /* caller keeps previous state */ }
+    return null;
+  };
+
+  // Open the exact ticket referenced by a notification, even when it is
+  // not on the current list page/filter. ALWAYS fetches the full thread
+  // via GET ?id= — list rows exclude `replies` (projection), so using a
+  // list row directly would show an empty conversation.
+  const openDeepLinkedTicket = async (deepId) => {
+    if (!deepId) return false;
+    const full = await fetchThread(deepId);
+    if (full) {
+      setReplyText("");
+      markRead(String(full._id));
+      markReadByRef("ticket", String(full._id));
+      setSelected({ ...full, unread: false });
+      setTickets((prev) => {
+        // List rows carry no replies; keep the row but never overwrite
+        // the open thread with the reply-less row.
+        const exists = prev.some((t) => String(t._id) === String(full._id));
+        if (exists) return prev.map((t) => (String(t._id) === String(full._id) ? { ...t, unread: false } : t));
+        const { replies: _omit, ...row } = full;
+        return [{ ...row, unread: false }, ...prev];
+      });
+      return true;
+    }
+    return false;
+  };
+
+  const loadTickets = async (targetPage = page, overrideFilter) => {
     setLoading(true);
     try {
+      const activeFilter = typeof overrideFilter === "string" ? overrideFilter : filter;
       const params = new URLSearchParams();
-      if (filter) params.set("status", filter);
+      if (activeFilter) params.set("status", activeFilter);
       if (searchTicketId.trim()) params.set("ticketId", searchTicketId.trim());
       params.set("page", String(targetPage));
       params.set("limit", String(ITEMS_PER_PAGE));
       // Viewer uid lets the API attach per-ticket read/unread flags.
       if (profile?.uid) params.set("uid", profile.uid);
+      // Only the "Unread Messages" tab (no status filter) is unread-only.
+      // Every status tab shows ALL tickets of that stage, read or unread.
+      if (!activeFilter) params.set("unreadOnly", "1");
       const res = await fetch(`/api/admin/support-tickets?${params}`);
       const data = await res.json();
       if (data.success) {
@@ -49,27 +99,39 @@ export default function SupportTicketsPage() {
             ? data.totalPages
             : Math.ceil(list.length / ITEMS_PER_PAGE)
         );
-        setSelected((prev) => {
-          // Deep-link from a notification: open the referenced ticket once.
-          try {
-            const deep = window.sessionStorage.getItem("ab_open_ticket");
-            if (deep) {
-              window.sessionStorage.removeItem("ab_open_ticket");
-              const match = list.find((t) => String(t._id) === deep);
-              if (match) {
-                setReplyText("");
-                // The ticket is now viewed: clear its unread state at once
-                // (ticket badge) and its notification logs (bell) together.
-                markRead(String(match._id));
-                markReadByRef("ticket", String(match._id));
-                return { ...match, unread: false };
+        // Deep-link from a notification: open the referenced ticket once.
+        // Always via full-thread fetch so the complete conversation
+        // history loads even when the ticket sits on another page/filter
+        // (list rows exclude `replies` and must never seed the thread).
+        try {
+          const deep = window.sessionStorage.getItem("ab_open_ticket");
+          if (deep) {
+            window.sessionStorage.removeItem("ab_open_ticket");
+            await openDeepLinkedTicket(deep);
+            if (refreshCounts) refreshCounts();
+          } else {
+            setSelected((prev) => {
+              // Keep the open ticket's header/summary in sync across list
+              // reloads WITHOUT clobbering its loaded replies: list rows
+              // carry no `replies`, so preserve the thread's replies.
+              if (prev) {
+                const row = list.find((t) => String(t._id) === String(prev._id));
+                if (row) return { ...row, replies: prev.replies, unread: row.unread };
+                return prev;
               }
+              return prev;
+            });
+          }
+        } catch {
+          setSelected((prev) => {
+            if (prev) {
+              const row = list.find((t) => String(t._id) === String(prev._id));
+              if (row) return { ...row, replies: prev.replies, unread: row.unread };
+              return prev;
             }
-          } catch { /* selection still refreshes below */ }
-          // Keep the open ticket in sync across live reloads.
-          if (prev) return list.find((t) => String(t._id) === String(prev._id)) || prev;
-          return prev;
-        });
+            return prev;
+          });
+        }
       }
     } catch { /* ignore */ }
     finally { setLoading(false); }
@@ -85,10 +147,37 @@ export default function SupportTicketsPage() {
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filter, searchTicketId, profile?.uid]);
-  // Live update: a new ticket or a status/reply change made anywhere
-  // (user app, another staff member) refreshes the current page.
+  // Live update (SSE-first, poll/focus as fallback): a new ticket or a
+  // status/reply change made anywhere (user app, another staff member)
+  // refreshes the current page AND the open conversation thread, so new
+  // messages appear without a page refresh.
   useEffect(() => {
-    if (lastEventSeq > 0) loadTickets(page);
+    if (lastEventSeq === 0) return;
+    loadTickets(page);
+    const openId = selectedRef.current?._id ? String(selectedRef.current._id) : null;
+    // Refresh the open thread when its ticket changed (or when the event
+    // carries no id, e.g. legacy payloads — a single GET is cheap and
+    // keeps the conversation authoritative).
+    const targetId = lastTicketId && (!openId || String(lastTicketId) === openId) ? String(lastTicketId) : openId;
+    if (targetId) {
+      (async () => {
+        const full = await fetchThread(targetId);
+        // Only apply if the user hasn't switched tickets mid-flight.
+        if (full && String(selectedRef.current?._id || "") === String(full._id)) {
+          setSelected((prev) => {
+            const prevCount = prev?.replies?.length || 0;
+            const nextCount = full.replies?.length || 0;
+            // New arrivals while viewing count as seen: clear unread at once.
+            if (nextCount > prevCount) {
+              markRead(String(full._id));
+              markReadByRef("ticket", String(full._id));
+            }
+            return { ...full, unread: false };
+          });
+          setTickets((prev) => prev.map((t) => (String(t._id) === String(full._id) ? { ...t, unread: false } : t)));
+        }
+      })();
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lastEventSeq]);
 
@@ -97,10 +186,23 @@ export default function SupportTicketsPage() {
     loadTickets(p);
   };
 
-  const paginatedTickets = tickets;
+  // Unread rows stay on top even after opening one locally (it turns
+  // read until the next refresh), followed by newest first.
+  const paginatedTickets = (tickets || []).slice().sort((a, b) => {
+    const au = a?.unread ? 1 : 0;
+    const bu = b?.unread ? 1 : 0;
+    if (au !== bu) return bu - au;
+    return new Date(b?.createdAt || 0) - new Date(a?.createdAt || 0);
+  });
 
   const openTicket = async (ticket) => {
-    setSelected(ticket);
+    // Show the row instantly, then replace with the authoritative full
+    // thread (list rows exclude `replies`). Preserve any already-loaded
+    // replies until the fetch resolves so history never flashes empty.
+    setSelected((prev) => {
+      const prevReplies = prev && String(prev._id) === String(ticket?._id) ? prev.replies : undefined;
+      return { ...ticket, replies: ticket?.replies ?? prevReplies, unread: false };
+    });
     setReplyText("");
     // Opening a ticket marks it seen for this admin (badge drops at once)
     // and clears its notification logs so the bell updates immediately.
@@ -110,11 +212,11 @@ export default function SupportTicketsPage() {
     }
     setTickets((prev) => prev.map((t) => (String(t._id) === String(ticket._id) ? { ...t, unread: false } : t)));
     // Refresh the full thread (replies) on demand; the row stays instant.
-    try {
-      const res = await fetch(`/api/admin/support-tickets?id=${ticket._id}`);
-      const data = await res.json();
-      if (data.success && data.ticket) setSelected({ ...data.ticket, unread: false });
-    } catch { /* row content remains visible */ }
+    const full = await fetchThread(ticket?._id);
+    // Only apply if the user hasn't switched tickets mid-flight.
+    if (full && String(selectedRef.current?._id || "") === String(full._id)) {
+      setSelected({ ...full, unread: false });
+    }
   };
 
   const handleStatusChange = async (ticketId, status) => {
@@ -128,8 +230,10 @@ export default function SupportTicketsPage() {
       // Acting staff has seen it: clear its unread flag locally and clear
       // any of their notification logs for this ticket (bell sync).
       markReadByRef("ticket", String(data.ticket._id));
+      markRead(String(data.ticket._id));
       setSelected({ ...data.ticket, unread: false });
       setTickets((prev) => prev.map((t) => (String(t._id) === String(data.ticket._id) ? { ...data.ticket, unread: false } : t)));
+      if (refreshCounts) refreshCounts();
     }
   };
 
@@ -145,8 +249,10 @@ export default function SupportTicketsPage() {
     if (data.success) {
       setReplyText("");
       markReadByRef("ticket", String(data.ticket._id));
+      markRead(String(data.ticket._id));
       setSelected({ ...data.ticket, unread: false });
       setTickets((prev) => prev.map((t) => (String(t._id) === String(data.ticket._id) ? { ...data.ticket, unread: false } : t)));
+      if (refreshCounts) refreshCounts();
     } else {
       Swal.fire("Error", data.message, "error");
     }
@@ -159,12 +265,18 @@ export default function SupportTicketsPage() {
 
       <div className="mb-6 space-y-3">
         <div className="flex gap-2 flex-wrap">
-          {[{ key: "", label: "All" }, ...TICKET_STAGES].map((s) => (
-            <button key={s.key} onClick={() => setFilter(s.key)}
-              className={`px-4 py-2 rounded-lg font-medium capitalize transition-colors text-sm ${filter === s.key ? "bg-[#F59E0B] text-slate-950" : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"}`}>
-              {s.label}
-            </button>
-          ))}
+          {[{ key: "", label: "Unread Messages" }, ...TICKET_STAGES].map((s) => {
+            // "Unread Messages" shows the total unread count; each status
+            // tab shows the TOTAL tickets in that stage (read + unread) so
+            // the badge matches the rows the tab displays.
+            const count = s.key === "" ? (totalUnread || 0) : ((stageTotals || {})[s.key] || 0);
+            return (
+              <button key={s.key || "unread"} onClick={() => setFilter(s.key)}
+                className={`px-4 py-2 rounded-lg font-medium capitalize transition-colors text-sm ${filter === s.key ? "bg-[#F59E0B] text-slate-950" : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"}`}>
+                {s.label} ({count})
+              </button>
+            );
+          })}
         </div>
         <div className="relative max-w-xs">
           <input type="text" value={searchTicketId} onChange={(e) => setSearchTicketId(e.target.value)}

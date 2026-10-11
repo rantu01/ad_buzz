@@ -31,9 +31,18 @@ export default function DashboardTopbar({ onToggle }) {
     };
 
     const goToTicket = (n) => {
-        const ticketDbId = n?.refType === "ticket" ? n?.refId : (n?.ticketDbId || n?._id);
-        markNotifRead(String(n._id), ticketDbId ? { ticketDbId: String(ticketDbId) } : undefined);
-        if (!ticketDbId) return;
+        // The exact ticket is always addressed by its notification refId
+        // (the ticket's _id). Never fall back to the notification _id —
+        // that would open the wrong ticket.
+        const ticketDbId = n?.refType === "ticket" ? n?.refId : n?.ticketDbId;
+        if (!ticketDbId) {
+            if (n?.link) {
+                markNotifRead(String(n._id));
+                router.push(n.link);
+            }
+            return;
+        }
+        markNotifRead(String(n._id), { ticketDbId: String(ticketDbId) });
         try {
             if (typeof window !== "undefined") {
                 window.sessionStorage.setItem("ab_open_ticket", String(ticketDbId));

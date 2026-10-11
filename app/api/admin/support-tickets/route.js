@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
-import { getAllTickets, getTicketById, updateTicketStatus, addTicketReply, countAttentionTickets, markTicketsRead, clearTicketReadsForUid, attachTicketUnread, getTicketReadSet } from "@/lib/supportTicketModel";
+import { getAllTickets, getTicketById, updateTicketStatus, addTicketReply, countAttentionTickets, markTicketsRead, clearTicketReadsForUid, attachTicketUnread, getTicketReadSet, sortTicketsUnreadFirst, isTicketUnreadFor } from "@/lib/supportTicketModel";
 import { createNotificationsForUids, createNotification } from "@/lib/notificationModel";
 import { getStaffUids } from "@/lib/userModel";
 import { emitToChannel, emitToUser } from "@/lib/sseManager";
@@ -74,20 +74,46 @@ export async function GET(request) {
     const limit = searchParams.get("limit");
     const id = searchParams.get("id");
     const uid = searchParams.get("uid");
+    const unreadOnly = searchParams.get("unreadOnly") === "1" || searchParams.get("unreadOnly") === "true";
     // Single full ticket for the detail pane (replies included).
+    // Used for notification deep-links so the exact ticket opens even
+    // when it is not on the current list page/filter.
     if (id) {
       if (!ObjectId.isValid(id)) return NextResponse.json({ success: false, message: "Ticket not found" }, { status: 404 });
       const ticket = await getTicketById(id);
       if (!ticket) return NextResponse.json({ success: false, message: "Ticket not found" }, { status: 404 });
+      if (uid) {
+        const readSet = await getTicketReadSet(uid);
+        const [withFlag] = attachTicketUnread([ticket], readSet);
+        return NextResponse.json({ success: true, ticket: withFlag || ticket });
+      }
       return NextResponse.json({ success: true, ticket });
+    }
+    // When the viewer is known and unread filtering/sorting is needed,
+    // paginate in memory after attaching unread flags so totalPages
+    // reflects the filtered set (DB pagination would count read rows).
+    if (uid && (unreadOnly || page || limit)) {
+      const readSet = await getTicketReadSet(uid);
+      const all = await getAllTickets(status || null, ticketId || null);
+      let flagged = attachTicketUnread(Array.isArray(all) ? all : all.tickets || [], readSet);
+      if (unreadOnly) flagged = flagged.filter((t) => t.unread);
+      flagged = sortTicketsUnreadFirst(flagged);
+      const safeLimit = Number.isFinite(Number(limit)) && Number(limit) > 0 ? Math.min(Math.floor(Number(limit)), 200) : 20;
+      const safePage = Number.isFinite(Number(page)) && Number(page) > 0 ? Math.floor(Number(page)) : 1;
+      const total = flagged.length;
+      const totalPages = Math.max(1, Math.ceil(total / safeLimit));
+      const clampedPage = Math.min(Math.max(1, safePage), totalPages);
+      const tickets = flagged.slice((clampedPage - 1) * safeLimit, clampedPage * safeLimit);
+      return NextResponse.json({ success: true, tickets, total, page: clampedPage, limit: safeLimit, totalPages });
     }
     const result = await getAllTickets(status || null, ticketId || null, { page, limit });
     // Attach per-admin read/unread flags when the viewer is known, so
     // unread tickets render distinctly without extra round-trips.
+    // Unread rows always sort first, then newest first.
     const withUnread = async (tickets) => {
       if (!uid || !Array.isArray(tickets)) return tickets;
       const readSet = await getTicketReadSet(uid);
-      return attachTicketUnread(tickets, readSet);
+      return sortTicketsUnreadFirst(attachTicketUnread(tickets, readSet));
     };
     // Paged shape when ?page=&limit= are given; legacy array otherwise.
     if (result && Array.isArray(result.tickets)) {

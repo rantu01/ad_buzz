@@ -58,6 +58,8 @@ export default function UserTopbar({ onToggle }) {
               onOpen={refresh}
               onSelect={(n) => {
                 if (!n) return;
+                // Ticket notifications always open the exact ticket, even
+                // when it sits on another page/filter of the ticket list.
                 if (n.refType === "ticket" && n.refId) {
                   markRead(String(n._id), { ticketDbId: String(n.refId) });
                   try {
@@ -66,6 +68,13 @@ export default function UserTopbar({ onToggle }) {
                     }
                   } catch { /* navigation still works */ }
                   router.push("/user-dashboard/support-tickets");
+                  return;
+                }
+                // Deposit + every other type opens its relevant page via
+                // the stored link (deposits -> Payment-History).
+                if (n.refType === "deposit") {
+                  markRead(String(n._id));
+                  router.push(n.link || "/user-dashboard/Payment-History");
                   return;
                 }
                 markRead(String(n._id));

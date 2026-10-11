@@ -74,6 +74,8 @@ export default function CustomerNotificationsPage() {
     if (n.refType === "ticket" && n.refId) {
       try { window.sessionStorage.setItem("ab_highlight_ticket", String(n.refId)); } catch {}
       router.push("/user-dashboard/support-tickets");
+    } else if (n.refType === "deposit") {
+      router.push(n.link || "/user-dashboard/Payment-History");
     } else if (n.link) {
       router.push(n.link);
     } else {
