@@ -102,6 +102,28 @@ fall back to React Query invalidation. Query `staleTime` 30s / `gcTime`
 `metaSettings` may also hold `appSecret` (set via Meta API Settings page;
 only `hasAppSecret` is ever returned to clients).
 
+## Hostinger deployment requirements
+
+- Run the production app with `npm run build` followed by `npm run start`.
+- Keep the Node.js app process running; do not serve the `.next` output as
+  static files.
+- The `/api/events` route must be proxied as an unbuffered, long-lived
+  response. The route sends `Content-Type: text/event-stream`,
+  `Cache-Control: no-store, no-transform`, `Connection: keep-alive`, and
+  `X-Accel-Buffering: no`.
+- The app now sends `Cache-Control: no-store` for API responses and
+  authenticated HTML entry points. Static `/_next/static` assets remain
+  cacheable.
+- SSE client connections are shared per browser user/channel set, cleaned up
+  on navigation, and reconnected with bounded exponential backoff plus jitter.
+- `sseManager` keeps connections in process memory. Use one Node process for
+  SSE, or replace it with a shared pub/sub transport before enabling multiple
+  independent app processes.
+- After deployment, verify `https://<host>/` and
+  `https://<host>/api/events?uid=<test-uid>` return promptly. A TCP timeout
+  before receiving HTTP headers indicates a Hostinger DNS, firewall, proxy, or
+  stopped-process problem rather than an application/browser cache problem.
+
 ## Webhook setup (Meta App Dashboard → Webhooks → ad_account)
 
 1. Callback URL: `https://<your-domain>/api/meta/webhook` (must be HTTPS).

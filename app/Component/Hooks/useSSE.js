@@ -18,6 +18,73 @@ const GRANULAR_EVENTS = [
   "notify",
 ];
 
+const SERVER_RETRY_MS = 15000;
+const connections = new Map();
+
+function getConnectionKey(uid, channels) {
+  return `${uid}\n${[...channels].sort().join(",")}`;
+}
+
+function createConnection(uid, channels) {
+  const listeners = new Set();
+  const params = new URLSearchParams({ uid });
+  for (const channel of channels) params.append("channel", channel);
+
+  let eventSource = null;
+  let closed = false;
+  let reconnectTimer = null;
+  let retryMs = SERVER_RETRY_MS;
+
+  const notify = (type, event) => {
+    try {
+      const data = JSON.parse(event.data);
+      if (type !== "message") retryMs = SERVER_RETRY_MS;
+      for (const listener of listeners) listener(type, data);
+    } catch {
+      // Ignore malformed individual events without taking down the stream.
+    }
+  };
+
+  const connect = () => {
+    if (closed) return;
+    eventSource = new EventSource(`/api/events?${params.toString()}`);
+    eventSource.onmessage = (event) => notify("message", event);
+    for (const type of GRANULAR_EVENTS) {
+      eventSource.addEventListener(type, (event) => notify(type, event));
+    }
+    eventSource.onerror = () => {
+      if (closed) return;
+      eventSource?.close();
+      eventSource = null;
+      const jitter = Math.floor(Math.random() * Math.max(1000, retryMs * 0.25));
+      const delay = Math.min(retryMs + jitter, 30000);
+      retryMs = Math.min(retryMs * 2, 30000);
+      reconnectTimer = setTimeout(connect, delay);
+    };
+  };
+
+  const connection = {
+    subscribe(listener) {
+      listeners.add(listener);
+      if (listeners.size === 1) connect();
+      return () => {
+        listeners.delete(listener);
+        if (listeners.size === 0) connection.close();
+      };
+    },
+    close() {
+      if (closed) return;
+      closed = true;
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+      eventSource?.close();
+      eventSource = null;
+      connections.delete(getConnectionKey(uid, channels));
+    },
+  };
+
+  return connection;
+}
+
 export default function useSSE({ uid, channels = [], onEvent } = {}) {
   const onEventRef = useRef(onEvent);
   useEffect(() => {
@@ -27,53 +94,15 @@ export default function useSSE({ uid, channels = [], onEvent } = {}) {
   useEffect(() => {
     if (!uid) return;
 
-    const params = new URLSearchParams({ uid });
-    if (channels.length > 0) {
-      for (const c of channels) params.append("channel", c);
+    const normalizedChannels = [...new Set(channels)].sort();
+    const key = getConnectionKey(uid, normalizedChannels);
+    let connection = connections.get(key);
+    if (!connection) {
+      connection = createConnection(uid, normalizedChannels);
+      connections.set(key, connection);
     }
 
-    let es = null;
-    let closed = false;
-    let retryMs = 3000;
-
-    const connect = () => {
-      if (closed) return;
-      es = new EventSource(`/api/events?${params.toString()}`);
-
-      es.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data);
-          onEventRef.current?.("message", data);
-        } catch {}
-      };
-
-      for (const type of GRANULAR_EVENTS) {
-        es.addEventListener(type, (event) => {
-          try {
-            const data = JSON.parse(event.data);
-            retryMs = 3000; // successful event resets backoff
-            onEventRef.current?.(type, data);
-          } catch {}
-        });
-      }
-
-      es.onerror = () => {
-        // EventSource auto-retries, but if the stream dies hard, reconnect
-        // with backoff so network interruptions recover.
-        try { es?.close(); } catch {}
-        if (closed) return;
-        const delay = Math.min(retryMs, 30000);
-        retryMs = Math.min(retryMs * 2, 30000);
-        setTimeout(connect, delay);
-      };
-    };
-
-    connect();
-
-    return () => {
-      closed = true;
-      try { es?.close(); } catch {}
-    };
+    return connection.subscribe((type, data) => onEventRef.current?.(type, data));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [uid, channels.join(",")]);
 
