@@ -158,3 +158,11 @@ only `hasAppSecret` is ever returned to clients).
   the fastest Meta's API allows without wasteful high-frequency polling.
 - `balance`/`spend_cap` are cent-precision integers in the API (÷100 locally).
 - Insights (`spend/impressions/…`) remain on the separate spend-sync path.
+- `Remaining balance` in the website is intentionally `spend_cap -
+  amount_spent`. Meta's top-level `balance` is a different billing concept
+  (amount due), so it must not be used as the remaining spend-cap value.
+  Meta can also lag Business Manager briefly; the website timestamp now
+  reflects the latest successful Graph API response, not page-cache time.
+- The API cannot guarantee a push when Meta has not yet published a newer
+  value. Webhooks do not include spend-cap or amount-spent changes, so the
+  bounded reconciliation interval is the practical freshness limit.

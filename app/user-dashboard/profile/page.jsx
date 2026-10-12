@@ -12,6 +12,7 @@ import {
 import { Eye, EyeOff, Lock, Monitor, Smartphone, MoreVertical, MapPin, Globe, Clock, RefreshCw, LogOut } from "lucide-react";
 import { getStoredSessionId } from "@/app/Component/Hooks/useLoginSession";
 import Swal from "sweetalert2";
+import { formatDate, formatDateTime } from "@/lib/dateFormat";
 
 function SkeletonProfile() {
   return (
@@ -392,7 +393,7 @@ function ActiveDevicesCard({ uid }) {
                   <p className="flex items-center justify-between gap-2">
                     <span className="flex items-center gap-1"><Clock className="h-3 w-3" /> Last login</span>
                     <span className="font-medium text-slate-700 text-right">
-                      {s.lastActiveAt ? new Date(s.lastActiveAt).toLocaleString() : "Unknown"}
+                      {s.lastActiveAt ? formatDateTime(s.lastActiveAt) : "Unknown"}
                     </span>
                   </p>
                 </div>
@@ -517,11 +518,11 @@ export default function ProfilePage() {
             <div className="space-y-3 text-sm">
               <div className="flex justify-between">
                 <span className="text-slate-500">Joined</span>
-                <span className="font-medium text-slate-700">{profile?.createdAt ? new Date(profile.createdAt).toLocaleDateString() : 'N/A'}</span>
+                <span className="font-medium text-slate-700">{profile?.createdAt ? formatDate(profile.createdAt) : 'N/A'}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-slate-500">Last Login</span>
-                <span className="font-medium text-slate-700">{profile?.lastLoginAt ? new Date(profile.lastLoginAt).toLocaleDateString() : 'N/A'}</span>
+                <span className="font-medium text-slate-700">{profile?.lastLoginAt ? formatDate(profile.lastLoginAt) : 'N/A'}</span>
               </div>
               {profile?.availableBalance !== undefined && (
                 <div className="flex justify-between">

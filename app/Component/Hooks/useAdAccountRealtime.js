@@ -1,15 +1,23 @@
 "use client";
 
+import { useState } from "react";
 import useSSE from "./useSSE";
 
 // Applies granular ad_account.* SSE events directly into a React Query list
 // cache (row-level update — no full list refetch, pagination/search/filter
 // state preserved). Falls back to invalidate on generic sync/meta events.
 export default function useAdAccountRealtime({ uid, queryClient, queryKey, channels = [] }) {
+  const [syncing, setSyncing] = useState(false);
+  const [syncError, setSyncError] = useState("");
+
   useSSE({
     uid,
     channels,
     onEvent: (type, data) => {
+      if (type === "meta-status") {
+        setSyncing(data?.state === "syncing");
+        setSyncError(data?.state === "error" ? data?.lastError || "Meta synchronization failed" : "");
+      }
       if (!queryClient || !queryKey) return;
 
       if (type === "ad_account.updated") {
@@ -78,6 +86,10 @@ export default function useAdAccountRealtime({ uid, queryClient, queryKey, chann
                 patched.prepaidBalance = changes.prepaidBalance;
                 patched.prepaidBalanceStatus = "available";
               }
+              const cap = changes.spendCap !== undefined ? changes.spendCap : patched.metaSpendCap;
+              const spent = changes.amountSpent !== undefined ? changes.amountSpent : patched.metaAmountSpent;
+              patched.remainingBalance = typeof cap === "number" && typeof spent === "number" ? cap - spent : null;
+              patched.remainingBalanceSource = patched.remainingBalance == null ? "unavailable" : "meta";
             }
             return patched;
           });
@@ -96,7 +108,19 @@ export default function useAdAccountRealtime({ uid, queryClient, queryKey, chann
           const id = account.metaAccountId || data?.adAccountId;
           if (old.some((r) => (r?.metaAccountId || r?.accountId) === id)) return old;
           // Prepend; existing sort/pagination slices re-derive automatically.
-          return [{ ...account, _id: account.metaAccountId || `meta-${Date.now()}`, lastSyncedAt: data?.syncedAt || new Date().toISOString() }, ...old];
+          const remainingBalance =
+            typeof account.spendCap === "number" && typeof account.amountSpent === "number"
+              ? account.spendCap - account.amountSpent
+              : null;
+          return [{
+            ...account,
+            _id: account.metaAccountId || `meta-${Date.now()}`,
+            metaSpendCap: account.spendCap,
+            metaAmountSpent: account.amountSpent,
+            remainingBalance,
+            remainingBalanceSource: remainingBalance == null ? "unavailable" : "meta",
+            lastSyncedAt: data?.syncedAt || new Date().toISOString(),
+          }, ...old];
         });
         return;
       }
@@ -123,5 +147,5 @@ export default function useAdAccountRealtime({ uid, queryClient, queryKey, chann
     },
   });
 
-  return null;
+  return { syncing, syncError };
 }

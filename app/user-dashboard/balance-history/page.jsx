@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "@/app/Component/Auth/AuthProvider";
+import { formatDateTime } from "@/lib/dateFormat";
 
 function SkeletonRow() {
   return (
@@ -93,7 +94,7 @@ export default function BalanceHistoryPage() {
                 <tr><td colSpan={5} className="px-4 py-8 text-center text-slate-500">No balance logs found.</td></tr>
               ) : logs.map((log) => (
                 <tr key={log._id} className="hover:bg-slate-50/50 transition">
-                  <td className="px-4 py-3 text-xs text-slate-500 whitespace-nowrap">{new Date(log.createdAt).toLocaleString()}</td>
+                  <td className="px-4 py-3 text-xs text-slate-500 whitespace-nowrap">{formatDateTime(log.createdAt)}</td>
                   <td className="px-4 py-3">
                     <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium capitalize ${log.type === 'deposit' ? 'bg-emerald-50 text-emerald-700' : log.type === 'withdrawal' ? 'bg-red-50 text-red-700' : log.type === 'payment' ? 'bg-blue-50 text-blue-700' : 'bg-slate-50 text-slate-600'}`}>{log.type}</span>
                   </td>

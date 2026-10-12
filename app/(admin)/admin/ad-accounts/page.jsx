@@ -8,6 +8,7 @@ import { useAdmin } from "../components/AdminProvider";
 import { hasPermission, ROLES } from "@/lib/permissions";
 import Pagination from "@/app/Component/Pagination";
 import useAdAccountRealtime from "@/app/Component/Hooks/useAdAccountRealtime";
+import { formatDate, formatDateTime } from "@/lib/dateFormat";
 
 const ITEMS_PER_PAGE = 20;
 
@@ -102,7 +103,7 @@ export default function AdminAdAccountsPage() {
   const loading = adAccountsQuery.isLoading;
   const backgroundRefreshing = adAccountsQuery.isFetching && !adAccountsQuery.isLoading;
 
-  useAdAccountRealtime({
+  const { syncing: metaSyncing, syncError: metaSyncError } = useAdAccountRealtime({
     uid: profile?.uid || undefined,
     queryClient,
     queryKey: ["admin", "ad-accounts", "list"],
@@ -407,9 +408,7 @@ export default function AdminAdAccountsPage() {
 
   const formatTopupDate = (iso) => {
     if (!iso) return null;
-    const d = new Date(iso);
-    if (Number.isNaN(d.getTime())) return null;
-    return d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
+    return formatDate(iso) || null;
   };
 
   const getMetaStatusLabel = (accountStatus) => {
@@ -495,6 +494,8 @@ export default function AdminAdAccountsPage() {
       <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
         <div>
           <h1 className="text-2xl font-semibold">Ad Account Management</h1>
+          {metaSyncing && <span className="text-xs text-blue-600">Syncing Meta data...</span>}
+          {!metaSyncing && metaSyncError && <span className="text-xs text-amber-700">Showing the last successful Meta sync.</span>}
           <p className="text-sm text-slate-500 mt-0.5">
             {adAccounts.length} total accounts &middot; ${formatMoney(totalBudget)} total budget &middot; ${formatMoney(totalSpent)} total spent
           </p>
@@ -611,9 +612,7 @@ export default function AdminAdAccountsPage() {
               </thead>
               <tbody className="divide-y divide-slate-100 text-sm">
                 {paginatedAccounts.map((acc) => {
-                  const budgetDollars = Number(acc.metaSpendCap || acc.spendCap || 0);
-                  const amountSpent = Number(acc.metaAmountSpent || 0);
-                  const remainingBalance = budgetDollars - amountSpent;
+                  const remainingBalance = acc.remainingBalance;
                   const prepaidStr = formatMoneyNullable(acc.prepaidBalance);
                   const lastTopupStr = formatTopupDate(acc.lastTopupDate);
                   return (
@@ -633,7 +632,7 @@ export default function AdminAdAccountsPage() {
                         <div className="text-xs space-y-1">
                           <div>
                             <span className="text-slate-500">Remaining Balance: </span>
-                            <span className="font-semibold text-slate-800">${formatMoney(Math.max(remainingBalance, 0))}</span>
+                            <span className="font-semibold text-slate-800">{remainingBalance == null ? "N/A" : `$${formatMoney(remainingBalance)}`}</span>
                           </div>
                           <div>
                             <span className="text-slate-500">Top-Up This Month: </span>
@@ -646,7 +645,7 @@ export default function AdminAdAccountsPage() {
                           <div>
                             <span className="text-slate-500">Last Topup Date: </span>
                             {lastTopupStr != null ? (
-                              <span className="font-medium text-slate-600" title={acc.lastTopupDate ? new Date(acc.lastTopupDate).toLocaleString() : ""}>{lastTopupStr}</span>
+                              <span className="font-medium text-slate-600" title={acc.lastTopupDate ? formatDateTime(acc.lastTopupDate) : ""}>{lastTopupStr}</span>
                             ) : (
                               <span className="text-slate-400 italic">N/A</span>
                             )}
@@ -678,7 +677,7 @@ export default function AdminAdAccountsPage() {
                       <td className="py-3 px-4 ">
                         <div className="flex items-center gap-1.5">
                           {acc.syncStatus === "synced" ? <CheckCircle size={14} className="text-emerald-500" /> : acc.syncStatus === "error" ? <XCircle size={14} className="text-red-500" /> : <AlertTriangle size={14} className="text-amber-400" />}
-                          <span className="text-xs text-slate-500" title={acc.lastSyncedAt ? new Date(acc.lastSyncedAt).toLocaleString() : ""}>
+                          <span className="text-xs text-slate-500" title={acc.lastSyncedAt ? formatDateTime(acc.lastSyncedAt) : ""}>
                             {acc.lastSyncedAt ? timeAgo(acc.lastSyncedAt) : "\u2014"}
                           </span>
                         </div>

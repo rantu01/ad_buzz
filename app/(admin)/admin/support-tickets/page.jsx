@@ -9,6 +9,7 @@ import { TICKET_STAGES, ticketStageLabel, ticketStageColor } from "@/lib/ticketS
 import Swal from "sweetalert2";
 import { Search } from "lucide-react";
 import Pagination from "@/app/Component/Pagination";
+import { formatDate, formatDateTime } from "@/lib/dateFormat";
 
 const ITEMS_PER_PAGE = 5;
 
@@ -19,13 +20,13 @@ export default function SupportTicketsPage() {
 
   const [tickets, setTickets] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState("");
+  const [filter, setFilter] = useState("all");
   const [searchTicketId, setSearchTicketId] = useState("");
   const [selected, setSelected] = useState(null);
   const [replyText, setReplyText] = useState("");
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
-  const { lastEventSeq, lastTicketId, markRead, unread: totalUnread, stageTotals, refresh: refreshCounts } = useTicketAlerts();
+  const { lastEventSeq, lastTicketId, markRead, unread: totalUnread, totalTickets, stageTotals, refresh: refreshCounts } = useTicketAlerts();
   const { markReadByRef } = useNotifications();
   const prevFilter = useRef(null);
   // Live refs so SSE-driven thread refreshes never act on stale state.
@@ -80,15 +81,17 @@ export default function SupportTicketsPage() {
     try {
       const activeFilter = typeof overrideFilter === "string" ? overrideFilter : filter;
       const params = new URLSearchParams();
-      if (activeFilter) params.set("status", activeFilter);
+      // "all" -> every ticket; "unread" -> unread-only; any other key is a
+      // ticket stage showing ALL tickets of that stage, read or unread.
+      if (activeFilter && activeFilter !== "all" && activeFilter !== "unread") params.set("status", activeFilter);
       if (searchTicketId.trim()) params.set("ticketId", searchTicketId.trim());
       params.set("page", String(targetPage));
       params.set("limit", String(ITEMS_PER_PAGE));
       // Viewer uid lets the API attach per-ticket read/unread flags.
       if (profile?.uid) params.set("uid", profile.uid);
-      // Only the "Unread Messages" tab (no status filter) is unread-only.
-      // Every status tab shows ALL tickets of that stage, read or unread.
-      if (!activeFilter) params.set("unreadOnly", "1");
+      // Only the "Unread Messages" tab is unread-only. The "All" tab and
+      // every status tab show ALL matching tickets, read or unread.
+      if (activeFilter === "unread") params.set("unreadOnly", "1");
       const res = await fetch(`/api/admin/support-tickets?${params}`);
       const data = await res.json();
       if (data.success) {
@@ -210,7 +213,11 @@ export default function SupportTicketsPage() {
       markRead(String(ticket._id));
       markReadByRef("ticket", String(ticket._id));
     }
-    setTickets((prev) => prev.map((t) => (String(t._id) === String(ticket._id) ? { ...t, unread: false } : t)));
+    setTickets((prev) =>
+      filter === "unread"
+        ? prev.filter((t) => String(t._id) !== String(ticket._id))
+        : prev.map((t) => (String(t._id) === String(ticket._id) ? { ...t, unread: false } : t))
+    );
     // Refresh the full thread (replies) on demand; the row stays instant.
     const full = await fetchThread(ticket?._id);
     // Only apply if the user hasn't switched tickets mid-flight.
@@ -232,7 +239,11 @@ export default function SupportTicketsPage() {
       markReadByRef("ticket", String(data.ticket._id));
       markRead(String(data.ticket._id));
       setSelected({ ...data.ticket, unread: false });
-      setTickets((prev) => prev.map((t) => (String(t._id) === String(data.ticket._id) ? { ...data.ticket, unread: false } : t)));
+      setTickets((prev) =>
+        filter === "unread"
+          ? prev.filter((t) => String(t._id) !== String(data.ticket._id))
+          : prev.map((t) => (String(t._id) === String(data.ticket._id) ? { ...data.ticket, unread: false } : t))
+      );
       if (refreshCounts) refreshCounts();
     }
   };
@@ -251,7 +262,11 @@ export default function SupportTicketsPage() {
       markReadByRef("ticket", String(data.ticket._id));
       markRead(String(data.ticket._id));
       setSelected({ ...data.ticket, unread: false });
-      setTickets((prev) => prev.map((t) => (String(t._id) === String(data.ticket._id) ? { ...data.ticket, unread: false } : t)));
+      setTickets((prev) =>
+        filter === "unread"
+          ? prev.filter((t) => String(t._id) !== String(data.ticket._id))
+          : prev.map((t) => (String(t._id) === String(data.ticket._id) ? { ...data.ticket, unread: false } : t))
+      );
       if (refreshCounts) refreshCounts();
     } else {
       Swal.fire("Error", data.message, "error");
@@ -265,13 +280,14 @@ export default function SupportTicketsPage() {
 
       <div className="mb-6 space-y-3">
         <div className="flex gap-2 flex-wrap">
-          {[{ key: "", label: "Unread Messages" }, ...TICKET_STAGES].map((s) => {
-            // "Unread Messages" shows the total unread count; each status
-            // tab shows the TOTAL tickets in that stage (read + unread) so
-            // the badge matches the rows the tab displays.
-            const count = s.key === "" ? (totalUnread || 0) : ((stageTotals || {})[s.key] || 0);
+          {[{ key: "all", label: "All" }, { key: "unread", label: "Unread Messages" }, ...TICKET_STAGES].map((s) => {
+            // "All" shows the total ticket count; "Unread Messages" shows
+            // the total unread count; each status tab shows the TOTAL
+            // tickets in that stage (read + unread) so the badge matches
+            // the rows the tab displays.
+            const count = s.key === "all" ? (totalTickets || 0) : s.key === "unread" ? (totalUnread || 0) : ((stageTotals || {})[s.key] || 0);
             return (
-              <button key={s.key || "unread"} onClick={() => setFilter(s.key)}
+              <button key={s.key} onClick={() => setFilter(s.key)}
                 className={`px-4 py-2 rounded-lg font-medium capitalize transition-colors text-sm ${filter === s.key ? "bg-[#F59E0B] text-slate-950" : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"}`}>
                 {s.label} ({count})
               </button>
@@ -306,7 +322,7 @@ export default function SupportTicketsPage() {
                           </span>
                         )}
                       </span>
-                      <span className="text-[11px] text-slate-400">Ticket Id: {t.ticketId} &middot; {new Date(t.createdAt).toLocaleDateString("en-BD", { day: "2-digit", month: "short" })}</span>
+                      <span className="text-[11px] text-slate-400">Ticket Id: {t.ticketId} &middot; {formatDate(t.createdAt)}</span>
                     </div>
                     <p className="text-sm font-semibold text-slate-900 truncate">{t.subject}</p>
                     <p className="text-xs text-slate-500 truncate mt-0.5">{t.email}</p>
@@ -336,7 +352,7 @@ export default function SupportTicketsPage() {
                   </span>
                 </div>
                 <p className="text-xs text-slate-500">
-                    Ticket Id: {selected.ticketId} &middot; From: {selected.email} &middot; {new Date(selected.createdAt).toLocaleString("en-BD")}
+                    Ticket Id: {selected.ticketId} &middot; From: {selected.email} &middot; {formatDateTime(selected.createdAt)}
                   </p>
                   {selected.adAccountName && (
                     <p className="text-xs text-amber-600 mt-1.5 font-medium">
@@ -356,7 +372,7 @@ export default function SupportTicketsPage() {
                       <div key={i} className="rounded-xl bg-slate-50 p-4">
                         <div className="flex items-center justify-between mb-1">
                           <span className="text-xs font-semibold text-slate-700">{r.by} <span className="text-slate-400 font-normal">({r.role})</span></span>
-                          <span className="text-[11px] text-slate-400">{new Date(r.createdAt).toLocaleString("en-BD")}</span>
+                          <span className="text-[11px] text-slate-400">{formatDateTime(r.createdAt)}</span>
                         </div>
                         <p className="text-sm text-slate-600">{r.text}</p>
                       </div>

@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import Swal from "sweetalert2";
 import { BarChart3, TrendingUp, DollarSign, Users, Download, Calendar, FileText, RefreshCw, Target, Wallet } from "lucide-react";
 import Pagination from "@/app/Component/Pagination";
+import { formatDate } from "@/lib/dateFormat";
 
 const ITEMS_PER_PAGE = 20;
 
@@ -234,7 +235,7 @@ export default function ReportsPage() {
                 <tbody className="divide-y divide-slate-100 text-sm">
                   {financial.rows.length > 0 ? paginatedFinancial.map((r, i) => (
                     <tr key={r.date || i} className="hover:bg-slate-50/40">
-                      <td className="py-3 px-4 font-medium">{r.date}</td>
+                      <td className="py-3 px-4 font-medium">{formatDate(r.date)}</td>
                       <td className="py-3 px-4 text-emerald-600 font-medium">${formatMoney(r.deposits)}</td>
                       <td className="py-3 px-4">{r.depositCount}</td>
                     </tr>
@@ -303,7 +304,7 @@ export default function ReportsPage() {
                       <td className="py-3 px-4">${formatMoney(a.spent)}</td>
                       <td className="py-3 px-4"><div className="flex items-center gap-2"><div className="w-16 bg-slate-100 h-1.5 rounded-full overflow-hidden"><div className={`h-full rounded-full ${util > 90 ? "bg-red-500" : util > 70 ? "bg-amber-500" : "bg-emerald-500"}`} style={{ width: `${Math.min(util, 100)}%` }} /></div><span className={`text-xs font-medium ${util > 90 ? "text-red-600" : util > 70 ? "text-amber-600" : "text-emerald-600"}`}>{util.toFixed(1)}%</span></div></td>
                       <td className="py-3 px-4 text-xs text-slate-500 truncate max-w-[140px]">{a.email || "-"}</td>
-                      <td className="py-3 px-4 text-xs text-slate-400">{a.lastSyncedAt ? new Date(a.lastSyncedAt).toLocaleDateString() : "-"}</td>
+                      <td className="py-3 px-4 text-xs text-slate-400">{a.lastSyncedAt ? formatDate(a.lastSyncedAt) : "-"}</td>
                     </tr>);
                   }) : <tr><td colSpan={7} className="py-8 text-center text-slate-400">No ad spend data in this period</td></tr>}
                 </tbody>

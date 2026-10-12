@@ -5,8 +5,13 @@ import { ObjectId } from "mongodb";
 import { updateSpendCap } from "@/lib/metaApiService";
 import { META_AD_ACCOUNT_PROJECTION } from "@/lib/projections";
 import { initializeIndexes } from "@/lib/indexes";
+import { startAutoMetaFetch } from "@/lib/autoMetaFetch";
 
 const DB_NAME = process.env.MONGODB_DB_NAME || "ad_buzz";
+
+// Keep the shared reconciler alive on the persistent Node process even when
+// the external cron endpoint has not been hit yet.
+startAutoMetaFetch();
 
 export async function GET(request) {
   try {
@@ -131,6 +136,7 @@ export async function GET(request) {
         metaStatusLabel: meta?.accountStatus === 1 ? "Active" : meta?.accountStatus === 2 ? "Disabled" : meta?.accountStatus === 3 ? "Inactive" : null,
         remainingBalance,
         remainingBalanceSource: remainingBalance == null ? "unavailable" : "meta",
+        lastSyncedAt: meta?.importedAt || acc.lastSyncedAt || null,
         // Prepaid "Funds" (Meta Payment & Billing → Funds via
         // funding_source_details). null = unavailable (permission / field
         // absent / non-prepay) — the UI renders N/A, never $0.

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "@/app/Component/Auth/AuthProvider";
 import { useUserAlerts } from "../components/UserAlertProvider";
 import Pagination from "@/app/Component/Pagination";
+import { formatDate } from "@/lib/dateFormat";
 
 const ITEMS_PER_PAGE = 20;
 
@@ -144,7 +145,7 @@ export default function PaymentHistoryPage() {
               <tbody className="divide-y divide-slate-100">
                 {paginatedDeposits.map((dep) => (
                   <tr key={dep._id} className="hover:bg-slate-50/50 transition-colors">
-                    <td className="px-4 py-3 text-slate-600 whitespace-nowrap">{new Date(dep.createdAt).toLocaleDateString("en-BD", { day: "2-digit", month: "short", year: "numeric" })}</td>
+                    <td className="px-4 py-3 text-slate-600 whitespace-nowrap">{formatDate(dep.createdAt)}</td>
                     <td className="px-4 py-3 text-slate-800 font-medium whitespace-nowrap">{dep.account || "—"}</td>
                     <td className="px-4 py-3 text-slate-800 text-right whitespace-nowrap">{dep.amountBDT ? `${formatMoney(dep.amountBDT)}` : "—"}</td>
                     <td className="px-4 py-3 text-slate-800 text-right whitespace-nowrap">${formatMoney(dep.creditedUSD || dep.amount)}</td>

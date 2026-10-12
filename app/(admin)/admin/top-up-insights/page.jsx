@@ -5,6 +5,7 @@ import { useAdmin } from "../components/AdminProvider";
 import { useSettings } from "@/app/Component/Settings/SettingsProvider";
 import { ROLES, ROLE_LABELS, PERMISSIONS, hasPermission } from "@/lib/permissions";
 import Pagination from "@/app/Component/Pagination";
+import { formatDate, formatDateTime, formatTime, formatMonthYear, formatWeekdayDate } from "@/lib/dateFormat";
 import { ChevronLeft, ChevronRight, CalendarDays, CalendarRange, ChartColumn, Table } from "lucide-react";
 
 const ITEMS_PER_PAGE = 20;
@@ -34,8 +35,6 @@ function formatCompact(val) {
   return `${Math.round(n)}`;
 }
 
-const MONTH_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-
 function parsePerformer(desc) {
   const m = desc.match(/^(.+?)\s+\(([^)]+)\)\s+topped up/);
   return m ? { label: m[1], email: m[2] } : null;
@@ -62,11 +61,11 @@ function addMonths(d, n) {
 }
 
 function fmtDay(d) {
-  return d.toLocaleDateString(undefined, { weekday: "long", year: "numeric", month: "long", day: "numeric" });
+  return formatWeekdayDate(d);
 }
 
 function fmtMonth(d) {
-  return d.toLocaleDateString(undefined, { month: "long", year: "numeric" });
+  return formatMonthYear(d.getFullYear(), d.getMonth() + 1);
 }
 
 function StatCard({ label, value, sub }) {
@@ -288,14 +287,14 @@ export default function TopUpInsightsPage() {
                 return (
                   <div key={m.key} className="relative flex-1 h-full flex flex-col items-center justify-end group">
                     <div className={`absolute bottom-full mb-2 hidden group-hover:block z-10 whitespace-nowrap rounded-lg bg-slate-900 px-3 py-2 text-left shadow-lg ${tipAlign}`}>
-                      <p className="text-xs font-semibold text-white">{MONTH_SHORT[m.month - 1]} {m.year}</p>
+                      <p className="text-xs font-semibold text-white">{formatMonthYear(m.year, m.month)}</p>
                       <p className="text-xs text-slate-300 mt-0.5">Total Transactions: <span className="font-semibold text-white">{Number(m.total || 0).toLocaleString()}</span></p>
                       <p className="text-xs text-slate-300">Total Amount: <span className="font-semibold text-white">${formatMoney(m.totalAmount)}</span></p>
                     </div>
                     <div
                       className={`w-full rounded-t-md cursor-pointer transition hover:brightness-90 ${hasValue ? "" : "bg-slate-100"}`}
                       style={hasValue ? { backgroundColor: accent, height: `${Math.max(pct, 3)}%` } : { height: "4px" }}
-                      title={`${MONTH_SHORT[m.month - 1]} ${m.year}: ${Number(m.total || 0)} transactions, $${formatMoney(m.totalAmount)}`}
+                      title={`${formatMonthYear(m.year, m.month)}: ${Number(m.total || 0)} transactions, $${formatMoney(m.totalAmount)}`}
                     />
                   </div>
                 );
@@ -304,7 +303,7 @@ export default function TopUpInsightsPage() {
             <div className="flex gap-2 sm:gap-3 mt-2">
               {monthlyData.map((m) => (
                 <div key={m.key} className="flex-1 text-center min-w-0">
-                  <p className="text-[10px] sm:text-xs font-medium text-slate-500 truncate">{MONTH_SHORT[m.month - 1]}</p>
+                  <p className="text-[10px] sm:text-xs font-medium text-slate-500 truncate">{String(m.month).padStart(2, "0")}</p>
                   <p className="text-[10px] text-slate-300">{String(m.year).slice(2)}</p>
                 </div>
               ))}
@@ -406,7 +405,7 @@ export default function TopUpInsightsPage() {
                 {paginatedDateRows.map((row) => (
                   <tr key={row.day} className="hover:bg-slate-50/50 transition-colors">
                     <td className="px-4 py-3 whitespace-nowrap">
-                      <div className="font-medium text-slate-800">{row.date.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}</div>
+                      <div className="font-medium text-slate-800">{formatDate(row.date)}</div>
                       <div className="text-xs text-slate-400">{row.date.toLocaleDateString(undefined, { weekday: "long" })}</div>
                     </td>
                     <td className="px-4 py-3 text-right text-slate-700 tabular-nums">{row.count.toLocaleString()}</td>
@@ -475,8 +474,8 @@ export default function TopUpInsightsPage() {
                         <div className="text-xs text-slate-400 font-mono">ID: {(item.adAccountId || "").replace(/^act_/, "")}</div>
                       </td>
                       <td className="px-4 py-3 text-xs text-slate-500 align-top whitespace-nowrap">
-                        <div>{new Date(item.createdAt).toLocaleDateString()}</div>
-                        <div className="text-slate-300">{new Date(item.createdAt).toLocaleTimeString()}</div>
+                        <div>{formatDate(item.createdAt)}</div>
+                        <div className="text-slate-300">{formatTime(item.createdAt)}</div>
                       </td>
                       <td className="px-4 py-3 text-right text-emerald-600 font-medium align-top whitespace-nowrap">${formatMoney(item.amount)}</td>
                       <td className="px-4 py-3 text-xs text-slate-600 align-top whitespace-nowrap">{getUsername(parsePerformer(item.description)?.email || item.performedBy) || "Unknown"}</td>
@@ -511,7 +510,7 @@ export default function TopUpInsightsPage() {
                   <tbody className="divide-y divide-slate-100">
                     {items.map((item) => (
                       <tr key={item._id} className="hover:bg-slate-50/50 transition-colors">
-                        <td className="px-4 py-3 text-xs text-slate-500 whitespace-nowrap">{new Date(item.createdAt).toLocaleString()}</td>
+                        <td className="px-4 py-3 text-xs text-slate-500 whitespace-nowrap">{formatDateTime(item.createdAt)}</td>
                         <td className="px-4 py-3">
                           <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-blue-50 text-blue-700">Ad Account Topup</span>
                         </td>

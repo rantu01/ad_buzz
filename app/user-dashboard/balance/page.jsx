@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/app/Component/Auth/AuthProvider";
 import useSSE from "@/app/Component/Hooks/useSSE";
+import { formatDateTime } from "@/lib/dateFormat";
 
 function SkeletonCard() {
   return (
@@ -194,7 +195,7 @@ export default function BalancePage() {
                 <div key={d._id} className="flex items-center justify-between p-3 rounded-xl bg-slate-50 border border-slate-100">
                   <div>
                     <p className="font-bold text-emerald-700">+${formatMoney(d.amount)}</p>
-                    <p className="text-[11px] text-slate-400">{new Date(d.createdAt).toLocaleString()}</p>
+                    <p className="text-[11px] text-slate-400">{formatDateTime(d.createdAt)}</p>
                   </div>
                   <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700 capitalize">{d.paymentMethod || 'bank_transfer'}</span>
                 </div>
@@ -220,7 +221,7 @@ export default function BalancePage() {
                     <p className={`font-bold ${Number(l.amount) >= 0 ? "text-emerald-700" : "text-red-600"}`}>
                       {Number(l.amount) >= 0 ? "+" : ""}${formatMoney(l.amount)}
                     </p>
-                    <p className="text-[11px] text-slate-400">{new Date(l.createdAt).toLocaleString()}</p>
+                    <p className="text-[11px] text-slate-400">{formatDateTime(l.createdAt)}</p>
                   </div>
                   <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-amber-50 text-amber-700 capitalize">Manual Balance Push</span>
                 </div>

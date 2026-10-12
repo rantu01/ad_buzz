@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import clientPromise from "@/lib/mongodb";
 import { syncAllAdAccounts } from "@/lib/metaApiService";
-import { getMetaSettings, createSyncLog } from "@/lib/metaSettingsModel";
+import { getMetaSettings } from "@/lib/metaSettingsModel";
 import { initializeIndexes } from "@/lib/indexes";
 
 const DB_NAME = process.env.MONGODB_DB_NAME || "ad_buzz";
@@ -18,14 +18,12 @@ export async function POST(request) {
 
     const { type } = await request.json().catch(() => ({ type: "full" }));
     const startTime = Date.now();
-
     const settings = await getMetaSettings();
     if (!settings?.autoSyncEnabled) {
       return NextResponse.json({ success: false, message: "Auto sync is disabled in settings" });
     }
 
     const result = await syncAllAdAccounts();
-
     const duration = Date.now() - startTime;
     if (result.locked) {
       return NextResponse.json({ success: false, message: result.message || "Sync already running", locked: true });
@@ -52,25 +50,16 @@ export async function GET(request) {
 
     const client = await clientPromise;
     const db = client.db(DB_NAME);
-
     const settings = await getMetaSettings();
-    const lastSyncLog = await db.collection("syncLogs")
-      .find({})
-      .sort({ createdAt: -1 })
-      .limit(1)
-      .toArray();
-
-    const staleLocks = await db.collection("syncLocks").findOne({
-      name: "meta_sync",
-      locked: true,
-    });
+    const lastSyncLog = await db.collection("syncLogs").find({}).sort({ createdAt: -1 }).limit(1).toArray();
+    const lock = await db.collection("syncLocks").findOne({ name: "meta_sync", locked: true });
 
     return NextResponse.json({
       success: true,
       autoSyncEnabled: settings?.autoSyncEnabled || false,
       lastSync: lastSyncLog[0] || null,
-      lockHeld: staleLocks?.locked || false,
-      lockExpiresAt: staleLocks?.expiresAt || null,
+      lockHeld: lock?.locked || false,
+      lockExpiresAt: lock?.expiresAt || null,
     });
   } catch (error) {
     return NextResponse.json({ success: false, message: error.message }, { status: 500 });

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Bell, LifeBuoy, Banknote, CheckCheck } from "lucide-react";
 import Pagination from "@/app/Component/Pagination";
+import { formatDateTime } from "@/lib/dateFormat";
 
 const ITEMS_PER_PAGE = 20;
 
@@ -134,7 +135,7 @@ export default function NotificationHistory({
                     </div>
                     {n.body && <p className="mt-1 text-sm text-slate-600">{n.body}</p>}
                     <p className="mt-1 text-[11px] text-slate-400">
-                      {n.createdAt ? new Date(n.createdAt).toLocaleString() : ""}
+                      {n.createdAt ? formatDateTime(n.createdAt) : ""}
                     </p>
                   </div>
                   {onSelect && (n.link || n.refId) && (

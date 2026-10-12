@@ -41,7 +41,7 @@ const ALL_NAV = [
   { label: "Balance Logs", href: "/admin/balance-logs", key: "balance-logs" },
   { label: "User Management", href: "/admin/user-management", key: "user-management" },
   { label: "Roles & Permissions", href: "/admin/roles", key: "roles" },
-  { label: "Reports", href: "/admin/reports", key: "reports" },
+  // { label: "Reports", href: "/admin/reports", key: "reports" },
 ];
 
 const SETTINGS_CHILDREN = [
@@ -153,7 +153,7 @@ export default function DashboardSidebar({ open, onClose }) {
                 title="Current Level"
                 aria-current="page"
               >
-                Level 1
+                Portal
               </button>
 
               {/* Level 2 */}
@@ -164,7 +164,7 @@ export default function DashboardSidebar({ open, onClose }) {
                 className="flex-1 py-2 rounded-lg text-xs font-bold text-slate-400 hover:text-white hover:bg-slate-700 transition-all duration-200 cursor-pointer"
                 title="Go to Level 2"
               >
-                Level 2
+                ERP
               </button>
             </div>
           </div>

@@ -17,6 +17,7 @@ import {
 import { useAuth } from "@/app/Component/Auth/AuthProvider";
 import { useLoginSession, getStoredSessionId } from "@/app/Component/Hooks/useLoginSession";
 import { ROLE_LABELS } from "@/lib/permissions";
+import { formatDate, formatDateTime } from "@/lib/dateFormat";
 
 function SkeletonCard() {
   return (
@@ -67,7 +68,10 @@ function EditProfileCard({ uid, initialName, initialPhone }) {
       });
       const data = await res.json();
       if (!res.ok || !data.success) throw new Error(data.message || "Failed to update profile.");
-      queryClient.invalidateQueries({ queryKey: ["admin", "profile", uid] });
+      // Pull the freshly saved record so every card shows exactly what the
+      // database stored (invalidate marks stale; refetch awaits the reload).
+      await queryClient.invalidateQueries({ queryKey: ["admin", "profile", uid] });
+      await queryClient.refetchQueries({ queryKey: ["admin", "profile", uid] });
       Swal.fire({ icon: "success", title: "Saved", text: "Your profile has been updated.", timer: 1500, showConfirmButton: false });
     } catch (err) {
       Swal.fire("Error", err.message, "error");
@@ -335,13 +339,13 @@ function LoginActivityCard({ uid }) {
                   <p className="flex items-center justify-between gap-2">
                     <span className="flex items-center gap-1"><Clock className="h-3 w-3" /> First login</span>
                     <span className="font-medium text-slate-700 text-right">
-                      {s.createdAt ? new Date(s.createdAt).toLocaleString() : "Unknown"}
+                      {s.createdAt ? formatDateTime(s.createdAt) : "Unknown"}
                     </span>
                   </p>
                   <p className="flex items-center justify-between gap-2">
                     <span className="flex items-center gap-1"><Clock className="h-3 w-3" /> Last active</span>
                     <span className="font-medium text-slate-700 text-right">
-                      {s.lastActiveAt ? new Date(s.lastActiveAt).toLocaleString() : "Unknown"}
+                      {s.lastActiveAt ? formatDateTime(s.lastActiveAt) : "Unknown"}
                     </span>
                   </p>
                 </div>
@@ -374,6 +378,17 @@ export default function AdminProfilePage() {
   });
   const profile = profileQuery.data;
   const photoURL = user?.photoURL || "";
+  const refreshingProfile = profileQuery.isFetching && !profileQuery.isLoading;
+
+  async function handleRefreshProfile() {
+    // Disabled while a fetch is already in flight, so repeated clicks can
+    // never stack duplicate requests.
+    if (!uid || profileQuery.isFetching) return;
+    const result = await profileQuery.refetch();
+    if (result.isError) {
+      Swal.fire("Error", result.error?.message || "Failed to refresh profile.", "error");
+    }
+  }
 
   if (authLoading || (profileQuery.isLoading && !profile)) {
     return (
@@ -404,8 +419,22 @@ export default function AdminProfilePage() {
 
   return (
     <div>
-      <h1 className="text-2xl font-semibold mb-1">Profile</h1>
-      <p className="text-sm text-slate-500 mb-6">Your account details and login activity.</p>
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
+        <div>
+          <h1 className="text-2xl font-semibold mb-1">Profile</h1>
+          <p className="text-sm text-slate-500">Your account details and login activity.</p>
+        </div>
+        <button
+          type="button"
+          onClick={handleRefreshProfile}
+          disabled={!uid || profileQuery.isFetching}
+          aria-label="Refresh profile"
+          className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-500 shadow-sm hover:text-slate-800 disabled:opacity-50"
+        >
+          <RefreshCw className={`h-3.5 w-3.5 ${profileQuery.isFetching ? "animate-spin" : ""}`} />
+          {refreshingProfile ? "Refreshing..." : "Refresh"}
+        </button>
+      </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
@@ -465,18 +494,18 @@ export default function AdminProfilePage() {
             )}
             <div className="flex justify-between gap-3">
               <span className="text-slate-500">Joined</span>
-              <span className="font-medium text-slate-700">{profile.createdAt ? new Date(profile.createdAt).toLocaleDateString() : "N/A"}</span>
+              <span className="font-medium text-slate-700">{profile.createdAt ? formatDate(profile.createdAt) : "N/A"}</span>
             </div>
             <div className="flex justify-between gap-3">
               <span className="text-slate-500">Last Login</span>
-              <span className="font-medium text-slate-700">{profile.lastLoginAt ? new Date(profile.lastLoginAt).toLocaleString() : "N/A"}</span>
+              <span className="font-medium text-slate-700">{profile.lastLoginAt ? formatDateTime(profile.lastLoginAt) : "N/A"}</span>
             </div>
           </div>
         </div>
 
         <div className="lg:col-span-2">
           <EditProfileCard
-            key={profile._id || uid}
+            key={`${profile._id || uid}-${profile.displayName || ""}-${profile.phoneNumber || ""}`}
             uid={uid}
             initialName={profile.displayName || ""}
             initialPhone={profile.phoneNumber || ""}

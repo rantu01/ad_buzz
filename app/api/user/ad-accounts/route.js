@@ -2,8 +2,11 @@ import { NextResponse } from "next/server";
 import { getAdAccountsByUid, createAdAccount } from "@/lib/adAccountModel";
 import clientPromise from "@/lib/mongodb";
 import { META_AD_ACCOUNT_PROJECTION } from "@/lib/projections";
+import { startAutoMetaFetch } from "@/lib/autoMetaFetch";
 
 const DB_NAME = process.env.MONGODB_DB_NAME || "ad_buzz";
+
+startAutoMetaFetch();
 
 function mapMetaStatus(accountStatus) {
   switch (accountStatus) {
@@ -66,24 +69,34 @@ export async function GET(request) {
           metaStatus: meta.accountStatus,
           metaStatusLabel: getMetaStatusLabel(meta.accountStatus),
           status: mapMetaStatus(meta.accountStatus),
-          metaBalance: meta.balance || 0,
-          metaSpendCap: meta.spendCap || 0,
-          metaAmountSpent: meta.amountSpent || 0,
-          spent: typeof meta.amountSpent === "number" && meta.amountSpent > 0 ? meta.amountSpent : (typeof acc.spent === "number" && acc.spent > 0 ? acc.spent : 0),
+          metaBalance: meta.balance ?? null,
+          metaSpendCap: meta.spendCap ?? null,
+          metaAmountSpent: meta.amountSpent ?? null,
+          remainingBalance: typeof meta.spendCap === "number" && typeof meta.amountSpent === "number"
+            ? meta.spendCap - meta.amountSpent
+            : null,
+          remainingBalanceSource: typeof meta.spendCap === "number" && typeof meta.amountSpent === "number" ? "meta" : "unavailable",
+          prepaidBalance: meta.prepaidBalance ?? acc.prepaidBalance ?? null,
+          prepaidBalanceStatus: meta.prepaidBalanceStatus || acc.prepaidBalanceStatus || "unavailable",
+          isPrepayAccount: meta.isPrepayAccount ?? acc.isPrepayAccount ?? null,
+          lastSyncedAt: meta.importedAt || acc.lastSyncedAt || null,
+          spent: typeof meta.amountSpent === "number" ? meta.amountSpent : acc.spent,
         };
       }
       return {
         ...acc,
         metaStatus: null,
         metaStatusLabel: null,
-        metaBalance: 0,
-        metaSpendCap: 0,
-        metaAmountSpent: 0,
+        metaBalance: null,
+        metaSpendCap: null,
+        metaAmountSpent: null,
+        remainingBalance: null,
+        remainingBalanceSource: "unavailable",
       };
     });
 
-    const totalBudget = enriched.reduce((s, a) => s + Number(a.spendCap || 0), 0);
-    const totalSpent = enriched.reduce((s, a) => s + Number(a.spent || 0), 0);
+    const totalBudget = enriched.reduce((s, a) => s + Number(a.metaSpendCap ?? a.spendCap ?? 0), 0);
+    const totalSpent = enriched.reduce((s, a) => s + Number(a.metaAmountSpent ?? a.spent ?? 0), 0);
     const activeCount = enriched.filter((a) => a.status === "active").length;
 
     return NextResponse.json({
@@ -94,7 +107,7 @@ export async function GET(request) {
         active: activeCount,
         totalBudget,
         totalSpent,
-        remainingBudget: totalBudget - totalSpent,
+        remainingBudget: enriched.every((a) => a.remainingBalance != null) ? totalBudget - totalSpent : null,
       },
     });
   } catch (error) {

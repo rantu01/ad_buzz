@@ -6,6 +6,7 @@ import { useAuth } from "@/app/Component/Auth/AuthProvider";
 import { useSettings } from "@/app/Component/Settings/SettingsProvider";
 import useSSE from "@/app/Component/Hooks/useSSE";
 import useAdAccountRealtime from "@/app/Component/Hooks/useAdAccountRealtime";
+import { formatDateTime } from "@/lib/dateFormat";
 
 function timeAgo(date) {
   if (!date) return "\u2014";
@@ -67,7 +68,7 @@ export default function AdAccountPage() {
   const userDollarRate = dashboard?.dollarRate || null;
   const effectiveRate = userDollarRate || defaultDollarRate;
 
-  useAdAccountRealtime({
+  const { syncing: metaSyncing, syncError: metaSyncError } = useAdAccountRealtime({
     uid,
     queryClient,
     queryKey: ["user", "ad-accounts", uid],
@@ -222,6 +223,8 @@ export default function AdAccountPage() {
       <div className="mb-8">
         <p className="text-sm text-slate-500 font-medium uppercase tracking-wider">Ad Accounts</p>
         <h1 className="text-3xl font-bold text-slate-900 mt-0.5">Your Ad Accounts</h1>
+        {metaSyncing && <p className="text-xs text-blue-600 mt-2">Syncing the latest Meta account data...</p>}
+        {!metaSyncing && metaSyncError && <p className="text-xs text-amber-700 mt-2">Meta sync could not complete. Showing the last successful sync.</p>}
         <p className="text-sm text-slate-600 mt-1">Manage and top up your Meta ad accounts.</p>
       </div>
       {error && <div className="bg-red-50 text-red-600 px-4 py-2 rounded-lg border border-red-200 text-sm mb-4">{error}</div>}
@@ -313,8 +316,9 @@ export default function AdAccountPage() {
             </thead>
             <tbody className="divide-y divide-slate-100 text-sm text-slate-700">
               {adAccounts.map((acc) => {
-                const budgetNum = Number(acc.metaSpendCap || acc.spendCap || 0);
-                const spentNum = acc.metaStatus != null ? Number(acc.metaAmountSpent || 0) : Number(acc.spent || 0);
+                const budgetNum = Number(acc.metaSpendCap ?? acc.spendCap ?? 0);
+                const spentNum = acc.metaStatus != null ? Number(acc.metaAmountSpent ?? 0) : Number(acc.spent || 0);
+                const remaining = acc.remainingBalance;
                 const spendPct = budgetNum > 0 ? Math.min((spentNum / budgetNum) * 100, 100) : 0;
                 const metaBalanceDollars = Number(acc.metaBalance || 0);
                 return (
@@ -325,7 +329,7 @@ export default function AdAccountPage() {
                       {getStatusBadge(acc.status, acc.metaStatusLabel)}
                     </td>
                     <td className="py-4 pr-4">
-                      <div className="text-sm font-semibold text-slate-900">{acc.currency || "USD"} ${formatMoney(budgetNum - spentNum)} </div>
+                      <div className="text-sm font-semibold text-slate-900">{remaining == null ? "N/A" : `${acc.currency || "USD"} $${formatMoney(remaining)}`} </div>
                       <div className="flex items-center gap-2 mt-1.5">
                         <div className="w-16 h-1.5 bg-slate-100 rounded-full overflow-hidden">
                           <div className={`h-full rounded-full ${spendPct > 90 ? "bg-red-500" : spendPct > 70 ? "bg-amber-500" : "bg-emerald-500"}`} style={{ width: `${spendPct}%` }}></div>
@@ -335,9 +339,9 @@ export default function AdAccountPage() {
                     </td>
                     {/* <td className="py-4 pr-4 text-sm">${formatMoney(spentNum)}</td> */}
                     {/* <td className="py-4 pr-4 text-sm font-medium text-slate-900">${formatMoney(metaBalanceDollars)}</td> */}
-                    <td className="py-4 pr-4 text-xs text-slate-400" title={acc.lastSyncedAt ? new Date(acc.lastSyncedAt).toLocaleString() : ""}>
+                    <td className="py-4 pr-4 text-xs text-slate-400" title={acc.lastSyncedAt ? formatDateTime(acc.lastSyncedAt) : ""}>
                       <span className="flex items-center gap-1">
-                        {acc.lastSyncedAt ? timeAgo(acc.lastSyncedAt) : (adAccountsQuery.dataUpdatedAt ? "Cached" : "Loading...")}
+                        {metaSyncing ? "Syncing..." : acc.lastSyncedAt ? timeAgo(acc.lastSyncedAt) : (adAccountsQuery.dataUpdatedAt ? "Cached" : "Loading...")}
                       </span>
                     </td>
                     <td className="py-4 text-right whitespace-nowrap">
@@ -511,7 +515,7 @@ export default function AdAccountPage() {
                           <td className="py-3 pr-4">${formatMoney(h.previousBudget)}</td>
                           <td className="py-3 pr-4 text-emerald-600 font-medium">+${formatMoney(h.topUpAmount)}</td>
                           <td className="py-3 pr-4 font-medium">${formatMoney(h.newBudget)}</td>
-                          <td className="py-3 pr-4 text-xs text-slate-500">{new Date(h.date).toLocaleString()}</td>
+                          <td className="py-3 pr-4 text-xs text-slate-500">{formatDateTime(h.date)}</td>
                           <td className="py-3 pr-4 text-xs font-mono text-slate-400">{String(h.transactionId).slice(-8)}</td>
                           <td className="py-3 pr-4">
                             <span className="px-2 py-0.5 text-xs font-medium bg-emerald-50 text-emerald-700 rounded-full">Success</span>

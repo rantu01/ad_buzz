@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getFinancialReport, getUserActivityReport, getAdSpendReport, generateCSV, generatePDFHtml } from "@/lib/reportService";
+import { formatDate } from "@/lib/dateFormat";
 
 export async function GET(request) {
   try {
@@ -17,7 +18,7 @@ export async function GET(request) {
         data = await getFinancialReport(period, startDate, endDate);
         title = `Financial Report (${period})`;
         columns = [
-          { label: "Date", key: "date" },
+          { label: "Date", accessor: (r) => formatDate(r.date) },
           { label: "Deposits", accessor: (r) => `$${Number(r.deposits).toFixed(2)}` },
           { label: "Deposit Count", key: "depositCount" },
         ];
@@ -54,7 +55,7 @@ export async function GET(request) {
           { label: "Spent", accessor: (r) => `$${Number(r.spent).toFixed(2)}` },
           { label: "Utilization", accessor: (r) => { const b = Number(r.spendCap || 0); return `${b > 0 ? ((r.spent / b) * 100).toFixed(1) : 0}%`; } },
           { label: "User", key: "email" },
-          { label: "Last Synced", accessor: (r) => r.lastSyncedAt ? new Date(r.lastSyncedAt).toLocaleDateString() : "-" },
+          { label: "Last Synced", accessor: (r) => r.lastSyncedAt ? formatDate(r.lastSyncedAt) : "-" },
         ];
         summary = {
           "Total Accounts": data.summary.totalAccounts,

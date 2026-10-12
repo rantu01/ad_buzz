@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { formatDate, formatTime } from "@/lib/dateFormat";
 
 const TYPE_LABELS = {
   ad_account_topup: "Ad Account Topup",
@@ -102,8 +103,8 @@ export default function AdminBalanceLogsPage() {
               ) : logs.length > 0 ? logs.map((log, i) => (
                 <tr key={log._id || i} className="hover:bg-slate-50/40">
                   <td className="py-3 px-4 text-xs text-slate-400 align-top whitespace-nowrap">
-                    <div>{new Date(log.createdAt).toLocaleDateString()}</div>
-                    <div className="text-slate-300">{new Date(log.createdAt).toLocaleTimeString()}</div>
+                    <div>{formatDate(log.createdAt)}</div>
+                    <div className="text-slate-300">{formatTime(log.createdAt)}</div>
                   </td>
                   <td className="py-3 px-4 text-xs text-slate-700 align-top whitespace-nowrap">{getUsername(log.email)}</td>
                   <td className="py-3 px-4 align-top">

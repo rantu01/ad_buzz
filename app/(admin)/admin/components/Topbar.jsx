@@ -9,6 +9,7 @@ import { useTicketAlerts } from "./TicketAlertProvider";
 import { useDepositAlerts } from "./DepositAlertProvider";
 import { useNotifications } from "./NotificationProvider";
 import NotificationBell from "@/app/Component/Notifications/NotificationBell";
+import { formatDateTime } from "@/lib/dateFormat";
 
 export default function DashboardTopbar({ onToggle }) {
     const router = useRouter();
@@ -147,7 +148,7 @@ export default function DashboardTopbar({ onToggle }) {
                                                             <span className="ml-1 font-normal text-slate-500">from {d.email || "user"}</span>
                                                         </span>
                                                         <span className="block truncate text-xs text-slate-500">
-                                                            {d.transactionRef ? `Trx: ${d.transactionRef} · ` : ""}{new Date(d.createdAt).toLocaleString()}
+                                                            {d.transactionRef ? `Trx: ${d.transactionRef} · ` : ""}{formatDateTime(d.createdAt)}
                                                         </span>
                                                     </span>
                                                     <span className="mt-1 shrink-0 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-700">

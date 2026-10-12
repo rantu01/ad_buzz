@@ -1,8 +1,6 @@
 import { NextResponse } from "next/server";
-import { fetchAdAccountsFromBM } from "@/lib/metaApiService";
-import { saveMetaAdAccounts, createSyncLog, getMetaSettings } from "@/lib/metaSettingsModel";
-import { ensureAdAccountsForMeta } from "@/lib/adAccountModel";
-import { startAutoMetaFetch } from "@/lib/autoMetaFetch";
+import { getMetaSettings } from "@/lib/metaSettingsModel";
+import { startAutoMetaFetch, runFullReconcile } from "@/lib/autoMetaFetch";
 import { initializeIndexes } from "@/lib/indexes";
 
 const CRON_SECRET = process.env.CRON_SECRET || "";
@@ -30,17 +28,18 @@ export async function POST(request) {
       });
     }
 
-    const accounts = await fetchAdAccountsFromBM();
-    await saveMetaAdAccounts(accounts);
-    // Materialize brand-new Meta accounts as adAccounts so they appear on
-    // /admin/ad-accounts-topup without a manual re-import.
-    const created = await ensureAdAccountsForMeta(accounts);
-    await createSyncLog({
-      type: "info",
-      message: `[Auto-fetch] Fetched ${accounts.length} ad accounts from Meta BM${created > 0 ? `, created ${created} new ad accounts` : ""}`,
-    });
+    const result = await runFullReconcile("cron");
+    if (result.skipped) {
+      return NextResponse.json({ success: false, ...result }, { status: result.reason === "locked" ? 429 : 200 });
+    }
 
-    return NextResponse.json({ success: true, count: accounts.length, created });
+    return NextResponse.json({
+      success: true,
+      count: result.accountCount || 0,
+      created: result.created?.length || 0,
+      updated: result.updated?.length || 0,
+      deleted: result.deleted?.length || 0,
+    });
   } catch (error) {
     return NextResponse.json({ success: false, message: error.message }, { status: 500 });
   }

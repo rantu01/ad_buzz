@@ -6,6 +6,7 @@ import { useDepositAlerts } from "../components/DepositAlertProvider";
 import { hasPermission } from "@/lib/permissions";
 import Swal from "sweetalert2";
 import Pagination from "@/app/Component/Pagination";
+import { formatDate } from "@/lib/dateFormat";
 
 const ITEMS_PER_PAGE = 20;
 
@@ -241,7 +242,7 @@ export default function AdminDepositsPage() {
                 {paginatedDeposits.map((dep) => (
                   <tr key={dep._id} className={`hover:bg-slate-50/50 transition-colors ${highlightId && String(dep._id) === String(highlightId) ? "bg-amber-50/70 ring-1 ring-inset ring-amber-400/60" : ""}`}>
                     <td className="px-4 py-3 text-slate-600 whitespace-nowrap text-xs">
-                      {new Date(dep.createdAt).toLocaleDateString("en-BD", { day: "2-digit", month: "short", year: "numeric" })}
+                      {formatDate(dep.createdAt)}
                     </td>
                     <td className="px-4 py-3 text-slate-800 font-medium whitespace-nowrap text-xs">{dep.email || dep.uid}</td>
                     <td className="px-4 py-3 text-slate-600 whitespace-nowrap text-xs">{dep.account || "—"}</td>

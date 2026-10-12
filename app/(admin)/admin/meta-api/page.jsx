@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import Swal from "sweetalert2";
 import { RefreshCw, CheckCircle, XCircle, Clock, Database, AlertTriangle, Settings } from "lucide-react";
 import Pagination from "@/app/Component/Pagination";
+import { formatDateTime } from "@/lib/dateFormat";
 
 const ITEMS_PER_PAGE = 20;
 
@@ -167,7 +168,7 @@ export default function MetaApiSettingsPage() {
     }
   };
 
-  const formatTime = (d) => d ? new Date(d).toLocaleString() : "\u2014";
+  const formatTime = (d) => d ? formatDateTime(d) : "\u2014";
 
   if (loading) return <p className="text-slate-500">Loading Meta API Settings...</p>;
 

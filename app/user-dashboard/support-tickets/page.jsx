@@ -7,6 +7,7 @@ import { useUserAlerts } from "../components/UserAlertProvider";
 import Swal from "sweetalert2";
 import { Search } from "lucide-react";
 import Pagination from "@/app/Component/Pagination";
+import { formatDate, formatDateTime } from "@/lib/dateFormat";
 
 const ITEMS_PER_PAGE = 5;
 
@@ -387,7 +388,7 @@ export default function SupportTicketsPage() {
                           </span>
                         )}
                       </span>
-                      <span className="text-[11px] text-slate-400">Ticket Id: {t.ticketId} &middot; {new Date(t.createdAt).toLocaleDateString("en-BD", { day: "2-digit", month: "short" })}</span>
+                      <span className="text-[11px] text-slate-400">Ticket Id: {t.ticketId} &middot; {formatDate(t.createdAt)}</span>
                     </div>
                     <p className="text-sm font-semibold text-slate-900 truncate">{t.subject}</p>
                     <p className="text-xs text-slate-500 truncate mt-0.5">{t.email}</p>
@@ -417,7 +418,7 @@ export default function SupportTicketsPage() {
                   </span>
                 </div>
                 <p className="text-xs text-slate-500">
-                    Ticket Id: {selected.ticketId} &middot; From: {selected.email} &middot; {new Date(selected.createdAt).toLocaleString("en-BD")}
+                    Ticket Id: {selected.ticketId} &middot; From: {selected.email} &middot; {formatDateTime(selected.createdAt)}
                   </p>
                   {selected.adAccountName && (
                     <p className="text-xs text-amber-600 mt-1.5 font-medium">
@@ -437,7 +438,7 @@ export default function SupportTicketsPage() {
                       <div key={i} className="rounded-xl bg-slate-50 p-4">
                         <div className="flex items-center justify-between mb-1">
                           <span className="text-xs font-semibold text-slate-700">{r.by} <span className="text-slate-400 font-normal">({r.role})</span></span>
-                          <span className="text-[11px] text-slate-400">{new Date(r.createdAt).toLocaleString("en-BD")}</span>
+                          <span className="text-[11px] text-slate-400">{formatDateTime(r.createdAt)}</span>
                         </div>
                         <p className="text-sm text-slate-600">{r.text}</p>
                       </div>

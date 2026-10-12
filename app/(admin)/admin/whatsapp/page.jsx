@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import Swal from "sweetalert2";
 import { MessageSquare, Send, CheckCircle, XCircle, Clock, Settings, Phone, Bell, AlertTriangle } from "lucide-react";
+import { formatDateTime } from "@/lib/dateFormat";
 
 export default function WhatsAppSettingsPage() {
   const [settings, setSettings] = useState(null);
@@ -52,7 +53,7 @@ export default function WhatsAppSettingsPage() {
     } catch (err) { await Swal.fire({ icon: "error", title: "Error", text: err.message }); }
   };
 
-  const formatTime = (d) => (d ? new Date(d).toLocaleString() : "\u2014");
+  const formatTime = (d) => (d ? formatDateTime(d) : "\u2014");
 
   if (loading) return <p className="text-slate-500">Loading WhatsApp Settings...</p>;
 

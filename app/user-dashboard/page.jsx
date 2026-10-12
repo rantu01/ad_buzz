@@ -5,6 +5,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/app/Component/Auth/AuthProvider";
 import { useSettings } from "@/app/Component/Settings/SettingsProvider";
 import useSSE from "@/app/Component/Hooks/useSSE";
+import { formatDate } from "@/lib/dateFormat";
 
 function SkeletonCard() {
   return (
@@ -119,7 +120,7 @@ export default function UserDashboardPage() {
       if (type === "balance") {
         queryClient.invalidateQueries({ queryKey: ["user", "dashboard", uid] });
       }
-      if (type === "ad-account" || type === "sync") {
+      if (type === "ad-account" || type === "sync" || type === "ad_account.updated" || type === "ad_account.created" || type === "ad_account.deleted") {
         queryClient.invalidateQueries({ queryKey: ["user", "ad-accounts", uid] });
       }
       if (type === "balance" || type === "deposit") {
@@ -257,7 +258,7 @@ export default function UserDashboardPage() {
                 <tbody className="divide-y divide-slate-50">
                   {deposits.slice(0, 5).map((deposit) => (
                     <tr key={deposit._id} className="hover:bg-slate-50/50 transition-colors">
-                      <td className="py-2.5 pr-3 text-xs text-slate-500 whitespace-nowrap">{new Date(deposit.createdAt).toLocaleDateString()}</td>
+                      <td className="py-2.5 pr-3 text-xs text-slate-500 whitespace-nowrap">{formatDate(deposit.createdAt)}</td>
                       <td className="py-2.5 pr-3 text-right font-semibold text-slate-900 whitespace-nowrap">${formatMoney(deposit.amount)}</td>
                       <td className="py-2.5 pr-3 text-xs text-slate-600 capitalize whitespace-nowrap">{(deposit.paymentMethod || "bank_transfer").replace(/_/g, " ")}</td>
                       <td className="py-2.5">{statusBadge(deposit.status)}</td>

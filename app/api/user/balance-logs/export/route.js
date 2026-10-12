@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getBalanceLogs } from "@/lib/balanceLog";
 import { generateCSV as generateCsv } from "@/lib/reportService";
+import { formatDateTime } from "@/lib/dateFormat";
 
 export async function GET(request) {
   try {
@@ -17,7 +18,7 @@ export async function GET(request) {
     const { logs } = await getBalanceLogs({ uid, type, startDate, endDate, page: 1, limit: 10000 });
 
     const columns = [
-      { label: "Date", accessor: (r) => new Date(r.createdAt).toLocaleString() },
+      { label: "Date", accessor: (r) => formatDateTime(r.createdAt) },
       { label: "Type", key: "type" },
       { label: "Amount", accessor: (r) => `$${Number(r.amount).toFixed(2)}` },
       { label: "Balance Before", accessor: (r) => `$${Number(r.balanceBefore).toFixed(2)}` },

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Bell, CheckCheck, Volume2, VolumeX } from "lucide-react";
+import { formatDateTime } from "@/lib/dateFormat";
 
 // Shared notification bell + dropdown used identically by the admin and
 // customer topbars. Unread rows render highlighted with a dot; read rows
@@ -109,7 +110,7 @@ export default function NotificationBell({
                         </span>
                       )}
                       <span className="block text-[11px] text-slate-400">
-                        {n.createdAt ? new Date(n.createdAt).toLocaleString() : ""}
+                        {n.createdAt ? formatDateTime(n.createdAt) : ""}
                       </span>
                     </span>
                     {isUnread ? (

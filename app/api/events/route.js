@@ -1,7 +1,10 @@
 import { registerClient, subscribeChannel, sendHeartbeat } from "@/lib/sseManager";
+import { startAutoMetaFetch } from "@/lib/autoMetaFetch";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
+
+startAutoMetaFetch();
 
 export async function GET(request) {
   const { searchParams } = new URL(request.url);
