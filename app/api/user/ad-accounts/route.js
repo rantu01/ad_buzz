@@ -3,6 +3,7 @@ import { getAdAccountsByUid, createAdAccount } from "@/lib/adAccountModel";
 import clientPromise from "@/lib/mongodb";
 import { META_AD_ACCOUNT_PROJECTION } from "@/lib/projections";
 import { startAutoMetaFetch } from "@/lib/autoMetaFetch";
+import { computeRemainingBalance, remainingBalanceSource } from "@/lib/accountMath";
 
 const DB_NAME = process.env.MONGODB_DB_NAME || "ad_buzz";
 
@@ -62,6 +63,7 @@ export async function GET(request) {
     const enriched = adAccounts.map((acc) => {
       const meta = acc.metaAccountId ? metaByAccountId[acc.metaAccountId] : null;
       if (meta) {
+        const remainingBalance = computeRemainingBalance(meta.spendCap, meta.amountSpent);
         return {
           ...acc,
           metaAccountName: meta.name || acc.metaAccountName || acc.name,
@@ -72,10 +74,8 @@ export async function GET(request) {
           metaBalance: meta.balance ?? null,
           metaSpendCap: meta.spendCap ?? null,
           metaAmountSpent: meta.amountSpent ?? null,
-          remainingBalance: typeof meta.spendCap === "number" && typeof meta.amountSpent === "number"
-            ? meta.spendCap - meta.amountSpent
-            : null,
-          remainingBalanceSource: typeof meta.spendCap === "number" && typeof meta.amountSpent === "number" ? "meta" : "unavailable",
+          remainingBalance,
+          remainingBalanceSource: remainingBalanceSource(remainingBalance),
           prepaidBalance: meta.prepaidBalance ?? acc.prepaidBalance ?? null,
           prepaidBalanceStatus: meta.prepaidBalanceStatus || acc.prepaidBalanceStatus || "unavailable",
           isPrepayAccount: meta.isPrepayAccount ?? acc.isPrepayAccount ?? null,

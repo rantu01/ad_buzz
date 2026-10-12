@@ -125,3 +125,119 @@ changes (no CSS/config/root-page files were touched). Fix: `build` script
 changed to `next build --webpack` (supported flag in Next 16.2.7).
 Verified locally: webpack build compiles cleanly, all 61 routes including
 new `/api/meta/webhook`.
+
+## 7. Follow-up hardening (2026-10-12)
+
+Three gaps found against the production-safe requirements and fixed with the
+smallest safe set (no UI redesign, no response-field renames, no data
+migration; all additive):
+
+1. **SSE account-data scoping.** `emitToAll` broadcast every
+   `ad_account.*` payload (names, caps, spend) to *every* connected browser,
+   including customers who own none of those accounts. Fix:
+   **NEW `lib/metaEvents.js`** — `emitMetaAccountEvent(s)` delivers to the
+   `admin:meta` channel (staff) plus `emitToUser(uid)` for the assigned
+   owner only (one indexed `adAccounts` lookup per emit batch; fail closed
+   for customer delivery). `app/api/events/route.js` now auto-subscribes
+   **staff uids only** to `admin:meta` (role lookup on `users`, one query
+   per long-lived connection; explicit `?channel=` still honored; DB-error
+   fail-open preserves admin UI). Status-only events (`meta-status`) remain
+   broadcast — they carry no account data. No page changes needed: user
+   pages already listen on their shared connection and apply row patches.
+2. **Failure-timestamp fix.** `syncAllAdAccounts` set `lastSyncedAt: now`
+   even on per-account *failure*, so stale data rendered as freshly synced.
+   Fix: error path now writes `syncStatus: "error"` + `syncError` +
+   **NEW `lastAttemptedSyncAt`** and leaves `lastSyncedAt` untouched;
+   success path writes both. `lastSyncedAt` therefore means last
+   *successful* sync everywhere the UI renders "Last Refreshed".
+3. **Health endpoint.** `GET /api/admin/meta-api/sync?type=status` returns
+   auto-fetch state, last reconcile/sync timestamps, usage %, `backoffUntil`,
+   and SSE connection/subscriber counts. Metadata only — no tokens or
+   account data. (Back-compat: existing `meta-accounts`/`logs` types and all
+   POST actions unchanged.)
+4. **Testability extraction (no behavior change).** Pure logic moved to
+   dependency-free modules with re-exports preserving every existing import
+   contract: `lib/syncMath.js` (fingerprint/diff/usage/backoff/rate-error),
+   `lib/prepaid.js` (`parsePrepaidBalance`), `lib/accountMath.js`
+   (`computeRemainingBalance`, now used by both admin + user list routes),
+   `lib/webhookAuth.js` (HMAC verify + challenge check, now used by the
+   webhook route). **NEW `tests/`** — 27 `node --test` unit tests, `npm test`
+   script. No new dependencies.
+5. **Docs.** NEW `api-status.md` (endpoint/field/freshness contract +
+   verification log), NEW `todo.md` (ordered follow-ups).
+
+Verified 2026-10-12: `npm test` 27/27 pass; `npx eslint` clean on all
+touched files; `npm run build` compiles, 72 routes. Live BM rename/webhook
+propagation still needs staging verification (checklist in
+`realtime-sync.md` → Testing, results in `api-status.md`).
+
+## 8. Stuck-page root cause: SSE connection starvation (2026-10-12)
+
+Symptom: page intermittently "completely stuck", sidebar `<Link>` clicks do
+nothing. Audit (all providers, layouts, pages, hooks) found no render loop,
+no per-render `QueryClient`, no uncleared interval, no navigation blocker —
+but confirmed every admin tab held **3 permanent `EventSource` streams**
+(`admin:tickets`, `admin:deposits`, default channel pool in `useSSE.js`).
+Browsers cap persistent connections per origin (6 on HTTP/1.1), so two tabs
+— or one tab plus a long-held Meta request (Sync Spend has per-account
+insights calls with 60 s retries; Fetch-from-BM awaits a full reconcile) —
+exhausts the pool and every later `fetch()` queues forever, including the
+RSC payload fetch behind client-side navigation. Main thread is idle; the
+app just never hears back. Matches "sometimes" (depends on tab count and
+in-flight long requests).
+
+Fix: `app/Component/Hooks/useSSE.js` rewritten to multiplex all subscribers
+onto **one `EventSource` per uid per tab** carrying the union of requested
+channels (single reconnect with backoff, listener-error isolation, grow-only
+union so reconnects never drop subscriptions). No consumer changes: every
+provider already filters by event type, and the server already accepts
+multiple `?channel=` params. Verified: `eslint` clean, `npm test` 27/27,
+`npm run build` 72 routes OK.
+
+## 9. Stale Remaining Balance: scheduler could die + fetch could hang
+forever (2026-10-12)
+
+Reported symptom: Remaining Balance USD $99.94, "Last Refreshed: 21h 48m
+ago" — far beyond the 5-min base reconcile interval, meaning the worker
+had effectively stopped refreshing in the running process.
+
+Two code-level defects found by tracing the full flow
+(Meta Graph → reconciler → MongoDB → `/api/user/ad-accounts` +
+`/api/admin/ad-accounts` join → SSE → row patch):
+
+1. **Scheduler chain dies on a single escaped rejection.**
+   `startAutoMetaFetch` (`lib/autoMetaFetch.js`) chained
+   `await runFullReconcile(); schedule();` — anything that threw
+   outside the inner try (e.g. `getBackoffRemainingMs`/Mongo read in
+   the backoff check, `acquireSyncLock`, `releaseSyncLock` in `finally`)
+   rejected the `setTimeout` callback, so `schedule()` never ran again.
+   The worker silently stopped for the life of the process: exactly the
+   observed "frozen for 21h" timestamp with no error in the UI.
+   Fix: all work lives inside one try/catch/finally (lock released only
+   if acquired), and the loop is driven by `runWithReschedule(pass,
+   schedule)` from `lib/syncMath.js`, which **always** reschedules in a
+   `finally`. A scheduled pass that somehow throws is caught, counted in
+   `consecutiveFailures` (→ backoff), logged, and returned as
+   `{skipped, reason:"error"}`.
+2. **No timeout on any Meta fetch.** `fetchPaginated`,
+   `fetchSingleAdAccountFromMeta`, `fetchAdAccountInsights`,
+   `updateSpendCap`, `testConnection` used bare `fetch()` with no
+   `AbortSignal`. One hung TCP socket wedges the reconcile pass forever
+   (the next pass only starts after the current one completes), freezing
+   freshness with zero errors. Fix: **NEW `lib/httpUtil.js`** —
+   `fetchWithTimeout` (default 30s, `META_FETCH_TIMEOUT_MS` env override,
+   clamped ≤300s, aborts with a descriptive error, propagates caller
+   aborts); all five Meta call sites now use it. Timeouts surface as
+   normal transient errors → existing retry/backoff handles them.
+
+Freshness contract (unchanged, now actually guaranteed): a successful
+reconcile updates `metaSyncState.lastSyncedAt` + per-account
+`adAccounts.lastSyncedAt`/`metaAdAccounts.importedAt` even when values
+are unchanged; failures never advance `lastSyncedAt`. Remaining Balance
+stays `spend_cap − amount_spent` (`lib/accountMath.js`), unchanged.
+
+Verified: `npm test` 33/33 (new: hung-request abort test, timeout
+config test, `runWithReschedule` reschedule-on-throw test); `eslint`
+clean; `npm run build` 72 routes OK. **Not verified here: live Meta
+API responses and the production DB** (no network/credential access in
+this environment) — see the report for the required staging checks.

@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
 import { syncAllAdAccounts, checkManualThrottle } from "@/lib/metaApiService";
 import { getMetaAdAccounts, getSyncLogs, createSyncLog } from "@/lib/metaSettingsModel";
-import { runFullReconcile, requestPrioritySync } from "@/lib/autoMetaFetch";
+import { runFullReconcile, requestPrioritySync, getAutoFetchStatus } from "@/lib/autoMetaFetch";
+import { getSyncState } from "@/lib/metaSyncState";
+import { getClientCount, getChannelSubscriberCount } from "@/lib/sseManager";
 
 // Manual refresh throttle window: collapses rapid clicks (one or many
 // clients) into a single Meta sync. Client keeps its own 5-min guard too.
@@ -77,6 +79,32 @@ export async function GET(request) {
     if (type === "logs") {
       const logs = await getSyncLogs();
       return NextResponse.json({ success: true, logs });
+    }
+
+    if (type === "status") {
+      // Operational health snapshot. Contains only sync metadata (counts,
+      // timestamps, usage %, backoff state) — never tokens or account data.
+      const [autoFetch, syncState] = await Promise.all([
+        Promise.resolve(getAutoFetchStatus()),
+        getSyncState("bm_ad_accounts").catch(() => null),
+      ]);
+      return NextResponse.json({
+        success: true,
+        status: {
+          autoFetch,
+          lastFullReconcileAt: syncState?.lastFullReconcileAt || null,
+          lastSyncedAt: syncState?.lastSyncedAt || null,
+          lastAccountCount: syncState?.lastAccountCount ?? null,
+          lastUsagePct: syncState?.lastUsagePct ?? null,
+          backoffUntil: syncState?.backoffUntil || null,
+          lastRateLimitAt: syncState?.lastRateLimitAt || null,
+          sse: {
+            connections: getClientCount(),
+            adminMetaSubscribers: getChannelSubscriberCount("admin:meta"),
+          },
+          checkedAt: new Date().toISOString(),
+        },
+      });
     }
 
     return NextResponse.json({ success: false, message: "Invalid type parameter" }, { status: 400 });

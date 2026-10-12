@@ -19,12 +19,21 @@ Full reconciler (adaptive 2.5–20 min) ──► incremental diff (fingerprint)
         │  rate limiter (x-app-usage, backoffUntil, locks, throttle)
         ▼
 MongoDB (metaAdAccounts + adAccounts — latest synced Meta state)
-        │  granular change events
+        │  granular change events (scoped: admin:meta channel + owner targeting)
         ▼
-SSE (/api/events — channels: admin:meta + per-event names)
+SSE (/api/events — ONE multiplexed stream per uid per tab; union of channels)
         ▼
 Next.js UI (row-level setQueryData patches, no full refetch)
 ```
+
+One stream per tab is load-bearing, not cosmetic: browsers cap persistent
+connections per origin (6 on HTTP/1.1). The previous per-channel pooling held
+3 permanent SSE streams per admin tab; two tabs — or one tab plus a
+long-held Meta request (Sync Spend / Fetch-from-BM can run minutes) — starved
+fetch(), including the RSC fetches behind `<Link>` navigation, freezing the
+page with a dead sidebar. `app/Component/Hooks/useSSE.js` multiplexes all
+providers onto a single `EventSource` with a channel union; every consumer
+filters by event type as before.
 
 ## Meta API endpoints used
 
@@ -70,6 +79,25 @@ by incremental reconciliation + fingerprint diff.
 - `ad_account.created` — `{event, adAccountId, account, syncedAt}`
 - `ad_account.deleted` — `{event, adAccountId, syncedAt}`
 - Legacy `sync` / `meta` / `ad-account` / `meta-status` kept for back-compat.
+- Delivery is scoped (`lib/metaEvents.js`): every account event goes to the
+  `admin:meta` channel (staff dashboards) plus targeted `emitToUser(uid)` for
+  the assigned owner. `/api/events` auto-subscribes staff uids only (role
+  checked on `users` once per connection); customers are never passively
+  subscribed to other customers' account payloads. Status-only `meta-status`
+  events remain broadcast (no account data).
+
+## Freshness semantics
+
+- `adAccounts.lastSyncedAt` = last **successful** sync. The spend-sync error
+  path records `syncStatus: "error"` + `syncError` + `lastAttemptedSyncAt`
+  and never advances `lastSyncedAt`, so a failed refresh cannot masquerade
+  as fresh data in the "Last Refreshed" column.
+- `GET /api/admin/meta-api/sync?type=status` exposes the operational snapshot
+  (auto-fetch state incl. `lastRunAt`/`lastError`, last reconcile, usage %,
+  `backoffUntil`, SSE counts) — use it to confirm the worker is alive.
+- Environment: `META_FETCH_TIMEOUT_MS` (default 30000) bounds every Meta
+  fetch; a hung socket now surfaces as a normal transient error and the
+  scheduler keeps running.
 
 ## Rate-limit protection
 
@@ -142,6 +170,16 @@ only `hasAppSecret` is ever returned to clients).
   30s throttle, targeted single-account fetch.
 
 ## Testing
+
+Automated (`npm test`, 27 tests, no DB needed): remaining-balance math
+(`computeRemainingBalance` null-vs-zero), fingerprint/diff change detection
+(rename/status/cap/spent, prepaid-null guard, sub-cent tolerance),
+rate-limit helpers (usage parse, exponential backoff bounds, 613/80004
+detection), prepaid parser (cents→dollars, type-20 display strings, VISA
+guard), webhook HMAC + challenge verification. Results logged in
+`api-status.md`.
+
+Manual (needs staging BM + webhook subscription):
 
 1. Rename an account in BM → row updates live, no reload.
 2. Add an account in BM → appears at next reconcile (≤5 min) without reload.

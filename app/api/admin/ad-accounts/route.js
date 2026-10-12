@@ -6,6 +6,7 @@ import { updateSpendCap } from "@/lib/metaApiService";
 import { META_AD_ACCOUNT_PROJECTION } from "@/lib/projections";
 import { initializeIndexes } from "@/lib/indexes";
 import { startAutoMetaFetch } from "@/lib/autoMetaFetch";
+import { computeRemainingBalance, remainingBalanceSource } from "@/lib/accountMath";
 
 const DB_NAME = process.env.MONGODB_DB_NAME || "ad_buzz";
 
@@ -124,9 +125,9 @@ export async function GET(request) {
       // Remaining Balance keeps its existing business meaning:
       // Meta spend_cap minus Meta amount_spent. null when Meta state is
       // missing (rendered as N/A, never confused with $0).
-      const hasMetaSpend = meta != null && typeof meta.spendCap === "number";
-      const hasMetaSpent = meta != null && typeof meta.amountSpent === "number";
-      const remainingBalance = hasMetaSpend && hasMetaSpent ? meta.spendCap - meta.amountSpent : null;
+      const remainingBalance = meta != null
+        ? computeRemainingBalance(meta.spendCap, meta.amountSpent)
+        : null;
       return {
         ...acc,
         metaSpendCap: meta?.spendCap ?? acc.spendCap ?? 0,
@@ -135,7 +136,7 @@ export async function GET(request) {
         metaStatus: meta?.accountStatus ?? null,
         metaStatusLabel: meta?.accountStatus === 1 ? "Active" : meta?.accountStatus === 2 ? "Disabled" : meta?.accountStatus === 3 ? "Inactive" : null,
         remainingBalance,
-        remainingBalanceSource: remainingBalance == null ? "unavailable" : "meta",
+        remainingBalanceSource: remainingBalanceSource(remainingBalance),
         lastSyncedAt: meta?.importedAt || acc.lastSyncedAt || null,
         // Prepaid "Funds" (Meta Payment & Billing → Funds via
         // funding_source_details). null = unavailable (permission / field

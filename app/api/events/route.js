@@ -1,15 +1,42 @@
 import { registerClient, subscribeChannel, sendHeartbeat } from "@/lib/sseManager";
 import { startAutoMetaFetch } from "@/lib/autoMetaFetch";
+import clientPromise from "@/lib/mongodb";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 startAutoMetaFetch();
 
+const DB_NAME = process.env.MONGODB_DB_NAME || "ad_buzz";
+
+// Staff roles are anything that is not a plain customer (admin,
+// technical_manager, key_manager, accounts_manager, support_executive, ...).
+async function isStaffUid(uid) {
+  if (!uid) return false;
+  try {
+    const client = await clientPromise;
+    const db = client.db(DB_NAME);
+    const user = await db.collection("users").findOne({ uid }, { projection: { role: 1 } });
+    // Unknown uid (lookup miss): treat as non-staff so account payloads are
+    // only delivered to verified owners. Staff pages always have a users doc.
+    return Boolean(user) && user.role !== "customer";
+  } catch (err) {
+    // DB outage must not break the admin UI: fail open to the previous
+    // behavior (subscribe) and log. Account-data scoping in metaEvents.js
+    // still limits customer delivery to assigned owners.
+    console.error("[sse] Staff lookup failed, subscribing to admin:meta:", err.message);
+    return true;
+  }
+}
+
 export async function GET(request) {
   const { searchParams } = new URL(request.url);
   const uid = searchParams.get("uid") || null;
   const channels = searchParams.getAll("channel");
+  // Resolve staff membership once per (long-lived) connection so only staff
+  // dashboards auto-receive the admin:meta account feed. Customers receive
+  // only their own assigned accounts via targeted emitToUser delivery.
+  const staff = await isStaffUid(uid);
 
   const encoder = new TextEncoder();
   let streamCleanup = null;
@@ -33,8 +60,12 @@ export async function GET(request) {
         try { subscribeChannel(clientId, c); } catch {}
       }
       // Admin dashboard pages listen on admin:meta for sync/meta events.
-      // Auto-subscribe so ?channel= is optional and reconnects keep working.
-      try { subscribeChannel(clientId, "admin:meta"); } catch {}
+      // Auto-subscribe staff only, so customer browsers do not passively
+      // receive other customers' account payloads. Explicit ?channel=
+      // requests are still honored (existing behavior).
+      if (staff) {
+        try { subscribeChannel(clientId, "admin:meta"); } catch {}
+      }
 
       heartbeat = setInterval(() => {
         try { sendHeartbeat(clientId); } catch {}
