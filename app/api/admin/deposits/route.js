@@ -14,6 +14,15 @@ export async function GET(request) {
     const status = searchParams.get("status");
     const page = searchParams.get("page");
     const limit = searchParams.get("limit");
+    const id = searchParams.get("id");
+
+    if (id) {
+      const deposit = await getDepositById(id);
+      if (!deposit) {
+        return NextResponse.json({ success: false, message: "Deposit not found" }, { status: 404 });
+      }
+      return NextResponse.json({ success: true, deposit });
+    }
 
     // Paged shape when ?page=&limit= are given (admin list);
     // legacy full-list shape otherwise (backward compatible).

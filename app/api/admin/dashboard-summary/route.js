@@ -27,8 +27,24 @@ function normalizeRole(raw) {
   return "other";
 }
 
+// TTL cache for the dashboard summary. The dashboard runs 10+ parallel
+// aggregations over large collections — caching for 30s avoids re-scanning
+// on every page navigation, search keystroke, and refetch.
+const DASHBOARD_TTL_MS = 30_000;
+let dashboardCache = null;
+let dashboardCachedAt = 0;
+let dashboardInflight = null;
+
 export async function GET() {
-  try {
+  // Return fresh cached data immediately if available
+  if (dashboardCache && Date.now() - dashboardCachedAt < DASHBOARD_TTL_MS) {
+    return NextResponse.json(dashboardCache);
+  }
+  // Deduplicate concurrent requests
+  if (dashboardInflight) return dashboardInflight;
+
+  dashboardInflight = (async () => {
+    try {
     await initializeIndexes();
     const client = await clientPromise;
     const db = client.db(DB_NAME);
@@ -323,7 +339,7 @@ export async function GET() {
       count: depositsApprovedAgg?.length ? Number(depositsApprovedAgg[0].count || 0) : 0,
     };
 
-    return NextResponse.json({
+    const result = {
       success: true,
       summary: {
         totalClients: Number(totalClients || 0),
@@ -347,11 +363,20 @@ export async function GET() {
       monthly,
       topLifetime: lifetimeTop.map(mapTopRow),
       topLastMonth: lastMonthTop.map(mapTopRow),
-    });
-  } catch (error) {
-    return NextResponse.json(
-      { success: false, message: error.message || "Failed to load dashboard summary" },
-      { status: 500 }
-    );
-  }
+    };
+
+    dashboardCache = result;
+    dashboardCachedAt = Date.now();
+    return NextResponse.json(result);
+    } catch (error) {
+      return NextResponse.json(
+        { success: false, message: error.message || "Failed to load dashboard summary" },
+        { status: 500 }
+      );
+    } finally {
+      dashboardInflight = null;
+    }
+  })();
+
+  return dashboardInflight;
 }

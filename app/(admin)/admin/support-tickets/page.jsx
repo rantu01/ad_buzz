@@ -154,9 +154,9 @@ export default function SupportTicketsPage() {
   // status/reply change made anywhere (user app, another staff member)
   // refreshes the current page AND the open conversation thread, so new
   // messages appear without a page refresh.
+  // Uses targeted row updates instead of full page reload when possible.
   useEffect(() => {
     if (lastEventSeq === 0) return;
-    loadTickets(page);
     const openId = selectedRef.current?._id ? String(selectedRef.current._id) : null;
     // Refresh the open thread when its ticket changed (or when the event
     // carries no id, e.g. legacy payloads — a single GET is cheap and
@@ -180,6 +180,11 @@ export default function SupportTicketsPage() {
           setTickets((prev) => prev.map((t) => (String(t._id) === String(full._id) ? { ...t, unread: false } : t)));
         }
       })();
+    }
+    // For non-open tickets, do a lightweight list refresh only when the
+    // event carries a ticket ID that's NOT the currently open one.
+    if (lastTicketId && String(lastTicketId) !== openId) {
+      loadTickets(page);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lastEventSeq]);

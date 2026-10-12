@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useAdmin } from "../components/AdminProvider";
 import { useDepositAlerts } from "../components/DepositAlertProvider";
 import { hasPermission } from "@/lib/permissions";
@@ -24,7 +24,13 @@ export default function AdminDepositsPage() {
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [highlightId, setHighlightId] = useState(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
   const { lastEventSeq } = useDepositAlerts();
+
+  // Request deduplication: prevents duplicate in-flight fetches when
+  // multiple effects trigger simultaneously (e.g., filter change + SSE event).
+  const inflightRef = useRef(null);
+  const requestSeqRef = useRef(0);
 
   const formatMoney = (val) => {
     const n = Number(val || 0);
@@ -33,6 +39,12 @@ export default function AdminDepositsPage() {
   };
 
   const loadDeposits = async (targetPage = page) => {
+    // Deduplicate concurrent requests for the same page+filter combo
+    const key = `${filter}:${targetPage}`;
+    if (inflightRef.current?.key === key) {
+      return inflightRef.current.promise;
+    }
+    const requestSeq = ++requestSeqRef.current;
     setLoading(true);
     try {
       const params = new URLSearchParams();
@@ -40,9 +52,10 @@ export default function AdminDepositsPage() {
       if (filter && filter !== "all") params.set("status", filter);
       params.set("page", String(targetPage));
       params.set("limit", String(ITEMS_PER_PAGE));
-      const res = await fetch(`/api/admin/deposits?${params}`);
-      const data = await res.json();
-      if (data.success) {
+      const promise = fetch(`/api/admin/deposits?${params}`).then((res) => res.json());
+      inflightRef.current = { key, promise };
+      const data = await promise;
+      if (data.success && requestSeqRef.current === requestSeq) {
         const list = data.deposits || [];
         setDeposits(list);
         setTotalPages(
@@ -65,15 +78,27 @@ export default function AdminDepositsPage() {
     } catch (err) {
       console.error(err);
     } finally {
-      setLoading(false);
+      if (inflightRef.current?.key === key) {
+        inflightRef.current = null;
+      }
+      if (requestSeqRef.current === requestSeq) setLoading(false);
     }
   };
 
-  useEffect(() => { setPage(1); loadDeposits(1); }, [filter]);
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setPage(1);
+      loadDeposits(1);
+    }, 0);
+    return () => window.clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filter]);
   // Live update: a new deposit or an approve/reject made anywhere
   // (user app, another staff member) refreshes the current page.
   useEffect(() => {
-    if (lastEventSeq > 0) loadDeposits(page);
+    if (lastEventSeq === 0) return undefined;
+    const timer = window.setTimeout(() => loadDeposits(page), 0);
+    return () => window.clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lastEventSeq]);
 
@@ -85,6 +110,24 @@ export default function AdminDepositsPage() {
     const next = Math.min(Math.max(1, p), totalPagesSafe);
     setPage(next);
     loadDeposits(next);
+  };
+
+  const openDepositFile = async (deposit, field, label) => {
+    setPreviewLoading(true);
+    setPreviewImg({ src: null, label });
+    try {
+      const res = await fetch(`/api/admin/deposits?id=${encodeURIComponent(deposit._id)}`);
+      const data = await res.json();
+      if (!res.ok || !data.success || !data.deposit?.[field]) {
+        throw new Error("The file is no longer available.");
+      }
+      setPreviewImg({ src: data.deposit[field], label });
+    } catch (error) {
+      setPreviewImg(null);
+      await Swal.fire({ icon: "error", title: "Unable to load file", text: error.message });
+    } finally {
+      setPreviewLoading(false);
+    }
   };
 
   const handleApprove = async (depositId) => {
@@ -112,9 +155,13 @@ export default function AdminDepositsPage() {
         return;
       }
       await Swal.fire({ icon: "success", title: "Approved", timer: 1200, showConfirmButton: false });
-      // The approved row leaves the pending set: reload the current page
-      // (cheap 20-row fetch) so counts and rows stay exact.
-      loadDeposits(page);
+      // Optimistic row patch: update the row in-place instead of refetching
+      // the entire page. The server returns the updated deposit.
+      if (result.deposit) {
+        setDeposits((prev) =>
+          prev.map((d) => (String(d._id) === String(depositId) ? { ...result.deposit, status: "approved" } : d))
+        );
+      }
     } finally {
       setProcessingId(null);
     }
@@ -171,7 +218,12 @@ export default function AdminDepositsPage() {
         return;
       }
       await Swal.fire({ icon: "success", title: "Rejected", timer: 1200, showConfirmButton: false });
-      loadDeposits(page);
+      // Optimistic row patch: update the row in-place instead of refetching
+      if (rejectData.deposit) {
+        setDeposits((prev) =>
+          prev.map((d) => (String(d._id) === String(depositId) ? { ...rejectData.deposit, status: "rejected" } : d))
+        );
+      }
     } finally {
       setProcessingId(null);
     }
@@ -251,10 +303,9 @@ export default function AdminDepositsPage() {
                     <td className="px-4 py-3 text-slate-600 whitespace-nowrap font-mono text-[11px]">{dep.transactionRef || "—"}</td>
                     <td className="px-4 py-3 text-slate-600 whitespace-nowrap font-mono text-[11px]">{dep.referenceId || "—"}</td>
                     <td className="px-4 py-3 text-center whitespace-nowrap">
-                      {dep.screenshot ? (
-                        <button onClick={() => setPreviewImg({ src: dep.screenshot, label: "Payment Screenshot" })} className="inline-block">
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img src={dep.screenshot} alt="ss" className="w-10 h-10 rounded-md object-cover border border-slate-200 hover:ring-2 hover:ring-orange-400 transition-shadow" />
+                      {dep.screenshotAvailable ? (
+                        <button onClick={() => openDepositFile(dep, "screenshot", "Payment Screenshot")} className="inline-block rounded-md border border-slate-200 px-2 py-1 text-xs text-slate-600 hover:bg-slate-50">
+                          View
                         </button>
                       ) : (
                         <span className="text-slate-300 text-xs">—</span>
@@ -265,13 +316,11 @@ export default function AdminDepositsPage() {
                       {dep.status === "rejected" ? (
                         <div className="space-y-1">
                           <p className="break-words">{dep.rejectionReason || "—"}</p>
-                          {dep.rejectionFile && (
+                          {dep.rejectionFileAvailable && (
                             <button
-                              onClick={() => setPreviewImg({ src: dep.rejectionFile, label: "Rejection Supporting File" })}
+                              onClick={() => openDepositFile(dep, "rejectionFile", "Rejection Supporting File")}
                               className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[11px] font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900"
                             >
-                              {/* eslint-disable-next-line @next/next/no-img-element */}
-                              <img src={dep.rejectionFile} alt="rejection file" className="h-5 w-5 rounded object-cover border border-slate-200" />
                               View file
                             </button>
                           )}
@@ -332,8 +381,12 @@ export default function AdminDepositsPage() {
             {previewImg.label && (
               <p className="mb-2 text-center text-sm font-medium text-white">{previewImg.label}</p>
             )}
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={previewImg.src} alt={previewImg.label || "Payment proof"} className="max-h-[85vh] w-auto rounded-lg" />
+            {previewLoading ? (
+              <p className="rounded-lg bg-white px-6 py-8 text-sm text-slate-700">Loading file...</p>
+            ) : (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={previewImg.src} alt={previewImg.label || "Payment proof"} className="max-h-[85vh] w-auto rounded-lg" />
+            )}
           </div>
         </div>
       )}

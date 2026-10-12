@@ -6,9 +6,29 @@ import {
   deletePaymentMethod,
 } from "@/lib/paymentMethodModel";
 
+const CACHE_TTL_MS = 15_000;
+let methodsCache = null;
+let methodsCachedAt = 0;
+let methodsInflight = null;
+
+function invalidateMethodsCache() {
+  methodsCache = null;
+  methodsCachedAt = 0;
+}
+
 export async function GET() {
   try {
-    const methods = await getAllPaymentMethods();
+    if (methodsCache && Date.now() - methodsCachedAt < CACHE_TTL_MS) {
+      return NextResponse.json({ success: true, methods: methodsCache });
+    }
+    if (!methodsInflight) {
+      methodsInflight = getAllPaymentMethods().finally(() => {
+        methodsInflight = null;
+      });
+    }
+    const methods = await methodsInflight;
+    methodsCache = methods;
+    methodsCachedAt = Date.now();
     return NextResponse.json({ success: true, methods });
   } catch (error) {
     return NextResponse.json(
@@ -40,6 +60,7 @@ export async function POST(request) {
     }
 
     const method = await createPaymentMethod(body);
+    invalidateMethodsCache();
     return NextResponse.json({ success: true, method }, { status: 201 });
   } catch (error) {
     return NextResponse.json(
@@ -73,6 +94,7 @@ export async function PUT(request) {
     }
 
     const method = await updatePaymentMethod(id, updates);
+    invalidateMethodsCache();
     return NextResponse.json({ success: true, method });
   } catch (error) {
     return NextResponse.json(
@@ -95,6 +117,7 @@ export async function DELETE(request) {
     }
 
     await deletePaymentMethod(id);
+    invalidateMethodsCache();
     return NextResponse.json({ success: true, message: "Payment method deleted." });
   } catch (error) {
     return NextResponse.json(

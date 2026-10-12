@@ -43,15 +43,22 @@ export default function PaymentMethodsPage() {
 
   const activeColor = "#F48E2B";
 
+  // Request deduplication: prevents duplicate in-flight fetches when
+  // multiple effects trigger simultaneously.
+  const inflightRef = useRef(null);
+
   const loadMethods = async () => {
+    if (inflightRef.current) return inflightRef.current;
     setLoading(true);
     try {
-      const methodsRes = await fetch("/api/admin/payment-methods");
-      const methodsData = await methodsRes.json();
+      const promise = fetch("/api/admin/payment-methods").then((res) => res.json());
+      inflightRef.current = promise;
+      const methodsData = await promise;
       if (methodsData.success) setMethods(methodsData.methods || []);
     } catch (err) {
       console.error(err);
     } finally {
+      inflightRef.current = null;
       setLoading(false);
     }
   };

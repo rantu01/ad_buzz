@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useAdmin } from "../components/AdminProvider";
 import { useSettings } from "@/app/Component/Settings/SettingsProvider";
 import { ROLES, ROLE_LABELS, PERMISSIONS, hasPermission } from "@/lib/permissions";
@@ -104,14 +104,27 @@ export default function TopUpInsightsPage() {
   const [monthItems, setMonthItems] = useState([]);
   const [loading, setLoading] = useState(true);
 
+  // Request deduplication: prevents duplicate in-flight fetches when
+  // multiple effects trigger simultaneously (e.g., day + month + monthly).
+  const inflightRef = useRef({});
+
   const fetchInsights = useCallback(async (params) => {
+    const key = JSON.stringify(params);
+    if (inflightRef.current[key]) return inflightRef.current[key];
     try {
       const qs = new URLSearchParams(params);
-      const res = await fetch(`/api/admin/top-up-insights?${qs}`);
-      const data = await res.json();
-      return data.success ? data : { insights: [], total: 0, totalAmount: 0 };
+      const promise = fetch(`/api/admin/top-up-insights?${qs}`).then(async (res) => {
+        const data = await res.json();
+        return data.success ? data : { insights: [], total: 0, totalAmount: 0 };
+      });
+      inflightRef.current[key] = promise;
+      return await promise;
     } catch {
       return { insights: [], total: 0, totalAmount: 0 };
+    } finally {
+      if (inflightRef.current[key]) {
+        delete inflightRef.current[key];
+      }
     }
   }, []);
 
