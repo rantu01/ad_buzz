@@ -4,6 +4,23 @@ import { ObjectId } from "mongodb";
 import { initializeIndexes } from "@/lib/indexes";
 
 const DB_NAME = process.env.MONGODB_DB_NAME || "ad_buzz";
+const CACHE_TTL_MS = 30_000;
+const responseCache = new Map();
+const inflightRequests = new Map();
+
+function getCached(key) {
+  const entry = responseCache.get(key);
+  if (!entry || Date.now() - entry.createdAt >= CACHE_TTL_MS) {
+    if (entry) responseCache.delete(key);
+    return null;
+  }
+  return entry.value;
+}
+
+function cacheResponse(key, value) {
+  responseCache.set(key, { createdAt: Date.now(), value });
+  return value;
+}
 
 // Only the fields the insights mapping reads (row 129-144 below).
 // balanceLogs docs carry balance snapshots + full metadata; shipping them
@@ -27,6 +44,14 @@ export async function GET(request) {
     const uid = searchParams.get("uid") || "all";
     const from = searchParams.get("from");
     const to = searchParams.get("to");
+    const breakdown = searchParams.get("breakdown");
+    const cacheKey = breakdown === "monthly"
+      ? `monthly:${searchParams.get("months") || "12"}`
+      : `range:${uid}:${from || ""}:${to || ""}`;
+    const cached = getCached(cacheKey);
+    if (cached) return NextResponse.json(cached);
+    const ongoing = inflightRequests.get(cacheKey);
+    if (ongoing) return NextResponse.json(await ongoing);
 
     const client = await clientPromise;
     const db = client.db(DB_NAME);
@@ -35,8 +60,9 @@ export async function GET(request) {
     // last N calendar months (including the current month). Returns per-month
     // totals plus this-calendar-year totals. Existing callers are unaffected
     // (they don't pass `breakdown`).
-    if (searchParams.get("breakdown") === "monthly") {
-      await initializeIndexes();
+    if (breakdown === "monthly") {
+      const work = (async () => {
+        await initializeIndexes();
       const months = Math.min(Math.max(Number(searchParams.get("months")) || 12, 1), 24);
       const now = new Date();
       const rangeStart = new Date(now.getFullYear(), now.getMonth() - (months - 1), 1);
@@ -100,7 +126,7 @@ export async function GET(request) {
         }
       }
 
-      return NextResponse.json({
+      return cacheResponse(cacheKey, {
         success: true,
         monthly,
         yearTotal,
@@ -108,14 +134,18 @@ export async function GET(request) {
         lifetimeTotal: lifetimeCount,
         lifetimeAmount: lifetimeAgg.length ? Number(lifetimeAgg[0].totalAmount || 0) : 0,
       });
+      })();
+      inflightRequests.set(cacheKey, work);
+      try {
+        return NextResponse.json(await work);
+      } finally {
+        inflightRequests.delete(cacheKey);
+      }
     }
 
     await initializeIndexes();
 
     const query = { type: "ad_account_topup" };
-    if (uid && uid !== "all") {
-      query["metadata.accountId"] = { $exists: true };
-    }
     if (from || to) {
       query.createdAt = {};
       if (from) query.createdAt.$gte = new Date(from);
@@ -187,7 +217,7 @@ export async function GET(request) {
       data = data.filter((item) => item.accountUid === uid);
     }
 
-    return NextResponse.json({ success: true, insights: data, total, totalAmount });
+    return NextResponse.json(cacheResponse(cacheKey, { success: true, insights: data, total, totalAmount }));
   } catch (error) {
     return NextResponse.json({ success: false, message: error.message || "Failed to fetch insights" }, { status: 500 });
   }

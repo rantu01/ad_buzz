@@ -426,7 +426,7 @@ See the `INDEX_SPECS` array — 25 indexes across 12 collections.
 | `/admin/deposits` | Request dedup | None | inflightRef pattern |
 | `/admin/support-tickets` | Full scans per count | 2 (getTicketStageTotals + getUnreadCountsByStage) | 0 (aggregation) |
 | `/admin/support-tickets` | SSE trigger | Full page reload | Targeted row update |
-| `/admin/top-up-insights` | Records per query | Up to 10,000 | Unchanged (date-scoped) |
+| `/admin/top-up-insights` | Repeated monthly/range requests | Full aggregation/query each time | 30s server TTL cache + in-flight dedup for monthly summaries |
 
 ### Changes Implemented
 
@@ -452,6 +452,9 @@ See the `INDEX_SPECS` array — 25 indexes across 12 collections.
 #### 5. Top-Up Insights (`app/(admin)/admin/top-up-insights/page.jsx`)
 - Added `inflightRef` request deduplication to `fetchInsights()`
 - Prevents duplicate requests when day + month + monthly effects trigger simultaneously
+- API monthly summaries and range responses now use a short server-side TTL cache
+- Monthly summary requests share one in-flight aggregation during cold loads
+- Removed the unnecessary `metadata.accountId exists` filter for the all-account admin view
 
 #### 6. Payment Methods (`app/(admin)/admin/payment-methods/page.jsx`)
 - Added `inflightRef` request deduplication to `loadMethods()`

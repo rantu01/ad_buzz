@@ -17,6 +17,7 @@ export default function PaymentMethodsPage() {
   const [users, setUsers] = useState(null); // lazy: fetched only when assigning
   const [usersLoading, setUsersLoading] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
   const [showAddModal, setShowAddModal] = useState(false);
   const [showAssignModal, setShowAssignModal] = useState(null);
   const [editing, setEditing] = useState(null);
@@ -50,13 +51,19 @@ export default function PaymentMethodsPage() {
   const loadMethods = async () => {
     if (inflightRef.current) return inflightRef.current;
     setLoading(true);
+    setLoadError("");
     try {
-      const promise = fetch("/api/admin/payment-methods").then((res) => res.json());
+      const promise = fetch("/api/admin/payment-methods", { cache: "no-store" }).then(async (res) => {
+        const data = await res.json();
+        if (!res.ok || !data.success) throw new Error(data.message || "Failed to load payment methods.");
+        return data;
+      });
       inflightRef.current = promise;
       const methodsData = await promise;
-      if (methodsData.success) setMethods(methodsData.methods || []);
+      setMethods(methodsData.methods || []);
     } catch (err) {
       console.error(err);
+      setLoadError("Couldn’t load payment methods. Check your connection and try again.");
     } finally {
       inflightRef.current = null;
       setLoading(false);
@@ -81,7 +88,9 @@ export default function PaymentMethodsPage() {
     }
   };
 
-  useEffect(() => { loadMethods(); }, []);
+  useEffect(() => {
+    queueMicrotask(loadMethods);
+  }, []);
 
   function toBase64(file) {
     return new Promise((resolve, reject) => {
@@ -183,7 +192,7 @@ export default function PaymentMethodsPage() {
     }
   }
 
-  function openEdit(method) {
+  async function openEdit(method) {
     const isMobile = method.type === "mobile-banking";
     setMethodType(isMobile ? "mobile-banking" : "bank");
 
@@ -213,6 +222,26 @@ export default function PaymentMethodsPage() {
     setLogoFile(null);
     setEditing(method._id);
     setShowAddModal(true);
+
+    // The list intentionally omits potentially large logos. Load the full
+    // document only for the method the admin chose to edit.
+    try {
+      const res = await fetch(`/api/admin/payment-methods?id=${encodeURIComponent(method._id)}`);
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.message || "Failed to load payment method.");
+      const fullMethod = data.method;
+      const logo = fullMethod.type === "mobile-banking" ? fullMethod.walletLogo : fullMethod.logo;
+      setLogoPreview(logo || null);
+      setForm((current) => ({
+        ...current,
+        ...(fullMethod.type === "mobile-banking"
+          ? { walletLogo: fullMethod.walletLogo || "", paymentInstructions: fullMethod.paymentInstructions || "" }
+          : { logo: fullMethod.logo || "" }),
+      }));
+    } catch (err) {
+      console.error(err);
+      Swal.fire("Error", "Couldn’t load the payment method details. Please try again.", "error");
+    }
   }
 
   function openAssign(method) {
@@ -266,7 +295,18 @@ export default function PaymentMethodsPage() {
       </div>
 
       {loading ? (
-        <p className="text-slate-500">Loading...</p>
+        <PaymentMethodsSkeleton />
+      ) : loadError ? (
+        <div className="rounded-2xl border border-red-100 bg-red-50 p-8 text-center" role="alert">
+          <p className="font-semibold text-red-800">{loadError}</p>
+          <button
+            type="button"
+            onClick={loadMethods}
+            className="mt-4 rounded-xl bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-600"
+          >
+            Try again
+          </button>
+        </div>
       ) : methods.length ? (
         <div>
           {paginatedBankMethods.length > 0 && (
@@ -472,6 +512,29 @@ function renderCard(method, openEdit, openAssign, handleDelete) {
         {method.referenceId && <Row label="Reference ID" value={method.referenceId} highlight />}
         <Row label="Assigned Users" value={`${(method.assignedUids || []).length} users`} />
       </div>
+    </div>
+  );
+}
+
+function PaymentMethodsSkeleton() {
+  return (
+    <div aria-label="Loading payment methods" className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
+      {Array.from({ length: 6 }, (_, index) => (
+        <div key={index} className="animate-pulse rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="mb-6 flex items-center gap-3">
+            <div className="h-12 w-12 rounded-xl bg-slate-200" />
+            <div className="space-y-2">
+              <div className="h-3 w-28 rounded bg-slate-200" />
+              <div className="h-2.5 w-16 rounded bg-slate-100" />
+            </div>
+          </div>
+          <div className="space-y-3 border-t border-slate-100 pt-4">
+            <div className="h-3 w-full rounded bg-slate-100" />
+            <div className="h-3 w-4/5 rounded bg-slate-100" />
+            <div className="h-3 w-3/5 rounded bg-slate-100" />
+          </div>
+        </div>
+      ))}
     </div>
   );
 }

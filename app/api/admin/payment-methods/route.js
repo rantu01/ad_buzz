@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import {
   getAllPaymentMethods,
+  getPaymentMethodById,
   createPaymentMethod,
   updatePaymentMethod,
   deletePaymentMethod,
@@ -16,8 +17,20 @@ function invalidateMethodsCache() {
   methodsCachedAt = 0;
 }
 
-export async function GET() {
+export async function GET(request) {
   try {
+    const id = new URL(request.url).searchParams.get("id");
+    if (id) {
+      const method = await getPaymentMethodById(id);
+      if (!method) {
+        return NextResponse.json(
+          { success: false, message: "Payment method not found." },
+          { status: 404 }
+        );
+      }
+      return NextResponse.json({ success: true, method });
+    }
+
     if (methodsCache && Date.now() - methodsCachedAt < CACHE_TTL_MS) {
       return NextResponse.json({ success: true, methods: methodsCache });
     }
