@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import React from "react";
-import { LayoutGrid, Users, User, X, DollarSign, History, Megaphone, RefreshCw, MessageSquare, BarChart3, Settings, LifeBuoy, TrendingUp, CreditCard, ArrowUpCircle, ShieldCheck, ChevronDown, Bell } from "lucide-react";
+import { LayoutGrid, Users, User, X, DollarSign, History, Megaphone, RefreshCw, MessageSquare, BarChart3, Settings, LifeBuoy, TrendingUp, CreditCard, ArrowUpCircle, ShieldCheck, ChevronDown, Bell, CircleHelp } from "lucide-react";
 import { useSettings } from "@/app/Component/Settings/SettingsProvider";
 import { useAdmin } from "./AdminProvider";
 import { useTicketAlerts } from "./TicketAlertProvider";
@@ -126,6 +126,17 @@ export default function DashboardSidebar({ open, onClose }) {
   const [settingsOpen, setSettingsOpen] = React.useState(false);
   const settingsExpanded = settingsOpen || settingsActive;
 
+  const HELP_CENTER_CHILDREN = [
+    { label: "All Articles", href: "/admin/help-center", key: "help-center" },
+    { label: "Create Article", href: "/admin/help-center/new", key: "help-center" },
+    { label: "Categories", href: "/admin/help-center/categories", key: "help-center" },
+    { label: "Feedback", href: "/admin/help-center/feedback", key: "help-center" },
+  ];
+  const helpCenterActive = pathname.startsWith("/admin/help-center");
+  const [helpCenterOpen, setHelpCenterOpen] = React.useState(false);
+  const helpCenterExpanded = helpCenterOpen || helpCenterActive;
+  const showHelpCenter = profile?.role === "admin";
+
   return (
     <>
       <div
@@ -217,6 +228,47 @@ export default function DashboardSidebar({ open, onClose }) {
               </div>
             )}
             {extraItems.map((item) => renderNavItem(item))}
+            {showHelpCenter && (
+              <div>
+                <button
+                  onClick={() => setHelpCenterOpen((v) => !v)}
+                  aria-expanded={helpCenterExpanded}
+                  className={`group flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-sm font-medium transition-colors ${helpCenterActive
+                    ? "text-slate-950 shadow-lg"
+                    : "text-white/70 hover:bg-white/8 hover:text-white"
+                    }`}
+                  style={helpCenterActive ? { backgroundColor: secondary, boxShadow: `0 4px 14px ${secondary}33` } : {}}>
+                  <span className={`flex h-9 w-9 items-center justify-center rounded-xl ${helpCenterActive ? "bg-white/20" : "bg-white/10 group-hover:bg-white/15"}`}>
+                    <CircleHelp size={18} />
+                  </span>
+                  <span className="flex-1 text-left">Help Center</span>
+                  <ChevronDown size={16} className={`transition-transform duration-200 ${helpCenterExpanded ? "rotate-0" : "-rotate-90"}`} />
+                </button>
+                <div className={`grid transition-all duration-200 ease-in-out ${helpCenterExpanded ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"}`}>
+                  <div className="overflow-hidden">
+                    <div className="ml-4 mt-1 space-y-1 border-l-2 border-white/10 pl-6">
+                      {HELP_CENTER_CHILDREN.map((child) => {
+                        const childActive = pathname === child.href || pathname.startsWith(child.href + "/");
+                        return (
+                          <Link key={child.href + child.label} href={child.href}
+                            className={`group flex items-center gap-3 rounded-xl px-4 py-2.5 text-sm font-medium transition-colors ${childActive
+                              ? "text-slate-950 shadow-lg"
+                              : "text-white/60 hover:bg-white/8 hover:text-white"
+                              }`}
+                            style={childActive ? { backgroundColor: secondary, boxShadow: `0 4px 14px ${secondary}33` } : {}}
+                            onClick={() => { if (window.innerWidth < 1024) onClose(); }}>
+                            <span className={`flex h-8 w-8 items-center justify-center rounded-lg ${childActive ? "bg-white/20" : "bg-white/10 group-hover:bg-white/15"}`}>
+                              <CircleHelp size={16} />
+                            </span>
+                            <span>{child.label}</span>
+                          </Link>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
             {renderNavItem({ label: "Notifications", href: "/admin/notifications", key: "notifications" })}
             {renderNavItem({ label: "Profile", href: "/admin/profile", key: "profile" })}
           </div>

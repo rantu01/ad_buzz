@@ -5,40 +5,38 @@ import { useAuth } from "@/app/Component/Auth/AuthProvider";
 import { TICKET_STAGES, ticketStageLabel, ticketStageColor } from "@/lib/ticketStages";
 import { useUserAlerts } from "../components/UserAlertProvider";
 import Swal from "sweetalert2";
-import { Search } from "lucide-react";
+import { Plus, X } from "lucide-react";
+import NewTicketModal from "./NewTicketModal";
 import Pagination from "@/app/Component/Pagination";
 import { formatDate, formatDateTime } from "@/lib/dateFormat";
 
 const ITEMS_PER_PAGE = 5;
+
+function statusGroup(status) {
+  const s = String(status || "open").toLowerCase();
+  if (s === "closed") return "solved";
+  if (s === "support_agent_reply" || s === "replied") return "waiting";
+  return "progress";
+}
 
 export default function SupportTicketsPage() {
   const { user, loading: authLoading } = useAuth();
   const { ticketSeq, lastTicketId, markTicketRead, markReadByRef, markReadByTypes, ticketUnread, refreshTickets } = useUserAlerts();
   const [tickets, setTickets] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState("");
-  const [searchTicketId, setSearchTicketId] = useState("");
+  const [error, setError] = useState("");
   const [selected, setSelected] = useState(null);
   const [replyText, setReplyText] = useState("");
   const [sendingReply, setSendingReply] = useState(false);
   const [page, setPage] = useState(1);
   const [showForm, setShowForm] = useState(false);
-  const [subject, setSubject] = useState("");
-  const [message, setMessage] = useState("");
-  const [submitting, setSubmitting] = useState(false);
   const [adAccounts, setAdAccounts] = useState([]);
-  const [selectedAccount, setSelectedAccount] = useState("");
-  // Live refs so SSE-driven thread refreshes never act on stale state.
+  const [previewAtt, setPreviewAtt] = useState(null);
   const selectedRef = useRef(null);
-  selectedRef.current = selected;
-  const userUidRef = useRef(null);
-  userUidRef.current = user?.uid || null;
+  useEffect(() => { selectedRef.current = selected; }, [selected]);
 
-  // Authoritative full-thread fetch (message + ordered replies). The
-  // server array replaces local state wholesale: no appends, so no
-  // duplicates, no gaps, and ordering always matches the database.
   const fetchThread = async (ticketId) => {
-    const uid = userUidRef.current;
+    const uid = user?.uid;
     if (!uid || !ticketId) return null;
     try {
       const res = await fetch(
@@ -47,20 +45,15 @@ export default function SupportTicketsPage() {
       );
       const data = await res.json();
       if (data.success && data.ticket) return data.ticket;
-    } catch { /* caller keeps previous state */ }
+    } catch { /* ignore */ }
     return null;
   };
 
-  // Open a ticket with its complete history. List rows may be stale;
-  // the full thread fetch guarantees previous messages are present.
   const openTicketWithHistory = async (ticketId) => {
     if (!ticketId) return false;
     const full = await fetchThread(ticketId);
     if (full) {
       setReplyText("");
-      setFilter("");
-      setSearchTicketId("");
-      setPage(1);
       markTicketRead(String(full._id));
       markReadByRef("ticket", String(full._id));
       setSelected({ ...full, unread: false });
@@ -77,14 +70,12 @@ export default function SupportTicketsPage() {
   const loadTickets = async () => {
     if (!user?.uid) return;
     try {
+      setError("");
       const res = await fetch(`/api/user/support-tickets?uid=${encodeURIComponent(user.uid)}`, { cache: "no-store" });
       const data = await res.json();
       if (data.success) {
         const list = data.tickets || [];
         setTickets(list);
-        // Deep-link from a notification: open the referenced ticket once
-        // with its COMPLETE history via full-thread fetch. Landing here
-        // counts as viewing it, so its unread state clears.
         try {
           const deep = window.sessionStorage.getItem("ab_highlight_ticket");
           if (deep) {
@@ -92,13 +83,8 @@ export default function SupportTicketsPage() {
             const opened = await openTicketWithHistory(deep);
             if (opened) return;
           }
-        } catch { /* selection still refreshes below */ }
+        } catch { /* ignore */ }
         setSelected((prev) => {
-          // Keep the open ticket's header in sync across list reloads
-          // WITHOUT clobbering freshly loaded replies: the authoritative
-          // thread refresh (fetchThread) owns `replies`, the list owns
-          // summary fields. Reply-count changes are handled by the
-          // SSE thread-sync effect below, not here.
           if (prev) {
             const row = list.find((t) => String(t._id) === String(prev._id));
             if (row) {
@@ -110,11 +96,17 @@ export default function SupportTicketsPage() {
           }
           return prev;
         });
+      } else {
+        setError(data.message || "Failed to load tickets.");
       }
-    } catch { /* ignore */ }
-    finally { setLoading(false); }
+    } catch {
+      setError("Failed to load tickets.");
+    } finally {
+      setLoading(false);
+    }
   };
 
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (user?.uid) {
       loadTickets();
@@ -127,10 +119,9 @@ export default function SupportTicketsPage() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.uid, authLoading]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
-  // Live update (SSE-first, poll/focus as fallback): a staff reply or
-  // stage change refreshes the list AND the open conversation thread, so
-  // new messages appear without a page refresh.
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (ticketSeq === 0) return;
     loadTickets();
@@ -143,7 +134,6 @@ export default function SupportTicketsPage() {
           setSelected((prev) => {
             const prevCount = prev?.replies?.length || 0;
             const nextCount = full.replies?.length || 0;
-            // New arrivals while viewing count as seen: clear unread at once.
             if (nextCount > prevCount || full.unread) {
               markTicketRead(String(full._id));
               markReadByRef("ticket", String(full._id));
@@ -156,64 +146,16 @@ export default function SupportTicketsPage() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ticketSeq]);
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (!subject.trim() || !message.trim()) {
-      Swal.fire("Required", "Please fill in all fields.", "warning");
-      return;
-    }
-    if (adAccounts.length > 0 && !selectedAccount) {
-      Swal.fire("Required", "Please select the affected ad account.", "warning");
-      return;
-    }
-    setSubmitting(true);
-    try {
-      const account = selectedAccount ? adAccounts.find((a) => a._id === selectedAccount) : null;
-      const res = await fetch("/api/user/support-tickets", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          uid: user.uid,
-          email: user.email,
-          subject: subject.trim(),
-          message: message.trim(),
-          adAccountId: account?._id || null,
-          adAccountMetaId: account?.metaAccountId || account?.accountId || null,
-          adAccountName: account?.metaAccountName || account?.name || null,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok || !data.success) throw new Error(data.message || "Failed to create ticket.");
-      setTickets((prev) => [data.ticket, ...prev]);
-      setSelected({ ...data.ticket, unread: false });
-      setReplyText("");
-      setShowForm(false);
-      setSubject("");
-      setMessage("");
-      setSelectedAccount("");
-      Swal.fire({ icon: "success", title: "Ticket Created", text: "Support will get back to you soon.", timer: 1500, showConfirmButton: false });
-    } catch (err) {
-      Swal.fire("Error", err.message, "error");
-    } finally {
-      setSubmitting(false);
-    }
-  };
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const openTicket = async (ticket) => {
-    // Show the row instantly, then replace with the authoritative full
-    // thread so previous messages are never missing (the row may be
-    // stale when a notification arrived just before the list refreshed).
     setSelected((prev) => {
       const prevReplies = prev && String(prev._id) === String(ticket?._id) ? prev.replies : undefined;
       return { ...ticket, replies: ticket?.replies ?? prevReplies };
     });
     setReplyText("");
     const full = await fetchThread(ticket?._id);
-    // Only apply if the user hasn't switched tickets mid-flight.
     if (full && String(selectedRef.current?._id || "") === String(full._id)) {
-      // Opening a ticket means viewing it: clear its ticket flag and its
-      // notification logs together so the bell updates immediately.
       markTicketRead(String(full._id));
       markReadByRef("ticket", String(full._id));
       setTickets((prev) => prev.map((t) => (String(t._id) === String(full._id) ? { ...full, unread: false } : t)));
@@ -242,7 +184,6 @@ export default function SupportTicketsPage() {
       });
       const data = await res.json();
       if (!res.ok || !data.success) throw new Error(data.message || "Failed to send reply.");
-      // The customer has seen their own reply: clear its unread flag and logs.
       setReplyText("");
       markReadByRef("ticket", String(data.ticket._id));
       setSelected({ ...data.ticket, unread: false });
@@ -255,220 +196,250 @@ export default function SupportTicketsPage() {
     }
   };
 
-  const handleMarkAllTicketsRead = async () => {
-    if (!user?.uid) return;
-    try {
-      await fetch("/api/user/support-tickets/read", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ uid: user.uid, all: true }),
-      });
-      setTickets((prev) => prev.map((t) => ({ ...t, unread: false })));
-      setSelected((prev) => (prev ? { ...prev, unread: false } : prev));
-      // Also clear the ticket notification logs so the bell drops at once.
-      markReadByTypes(["ticket_created", "ticket_reply", "ticket_stage"]);
-      refreshTickets();
-    } catch { /* ignore */ }
-  };
+  const sortedTickets = [...tickets].sort((a, b) => {
+    const au = a?.unread ? 1 : 0;
+    const bu = b?.unread ? 1 : 0;
+    if (au !== bu) return bu - au;
+    return new Date(b?.updatedAt || b?.createdAt || 0) - new Date(a?.updatedAt || a?.createdAt || 0);
+  });
 
-  // Same client-side stage/search filtering as the admin list.
-  // Unread tickets always sort first, then newest first, so unread
-  // items surface above newer read tickets.
-  const filteredTickets = tickets
-    .filter((t) => {
-      if (filter && t.status !== filter) return false;
-      if (searchTicketId.trim() && !(t.ticketId || "").toLowerCase().includes(searchTicketId.trim().toLowerCase())) return false;
-      return true;
-    })
-    .sort((a, b) => {
-      const au = a?.unread ? 1 : 0;
-      const bu = b?.unread ? 1 : 0;
-      if (au !== bu) return bu - au;
-      return new Date(b?.createdAt || 0) - new Date(a?.createdAt || 0);
-    });
-  const totalPages = Math.max(1, Math.ceil(filteredTickets.length / ITEMS_PER_PAGE));
+  const totalPages = Math.max(1, Math.ceil(sortedTickets.length / ITEMS_PER_PAGE));
   const safePage = Math.min(Math.max(1, page), totalPages);
-  const paginatedTickets = filteredTickets.slice((safePage - 1) * ITEMS_PER_PAGE, safePage * ITEMS_PER_PAGE);
+  const paginatedTickets = sortedTickets.slice((safePage - 1) * ITEMS_PER_PAGE, safePage * ITEMS_PER_PAGE);
 
-  const goToPage = (p) => {
-    setPage(Math.min(Math.max(1, p), totalPages));
-  };
+  const opened = tickets.length;
+  const waiting = tickets.filter((t) => statusGroup(t.status) === "waiting").length;
+  const inProgress = tickets.filter((t) => statusGroup(t.status) === "progress").length;
+  const solved = tickets.filter((t) => statusGroup(t.status) === "solved").length;
 
   if (authLoading) return <div className="max-w-7xl mx-auto px-4 py-10 text-slate-600 font-medium">Loading...</div>;
 
   return (
-    <div>
-      <div className="mb-1 flex items-center justify-between gap-3">
-        <h1 className="text-2xl font-semibold">Support Tickets</h1>
-        <div className="flex items-center gap-2 shrink-0">
-          {ticketUnread > 0 && (
-            <button onClick={handleMarkAllTicketsRead}
-              className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50 transition">
-              Mark all read ({ticketUnread})
-            </button>
-          )}
-          <button onClick={() => setShowForm(!showForm)}
-            className="rounded-lg bg-[#F59E0B] px-4 py-2 text-sm font-semibold text-slate-950 hover:bg-[#D9910A] transition">
-            {showForm ? "Cancel" : "New Ticket"}
-          </button>
+    <div className="space-y-6">
+      {/* Page header */}
+      <div className="flex items-center justify-between">
+        <h1 className="text-xl font-bold text-slate-900">Support Tickets</h1>
+        <button
+          type="button"
+          onClick={() => setShowForm(true)}
+          className="inline-flex items-center gap-1.5 rounded-xl bg-[#F59E0B] px-4 py-2 text-sm font-semibold text-slate-950 hover:bg-[#D9910A] transition"
+        >
+          <Plus size={16} /> New Ticket
+        </button>
+      </div>
+
+      {/* Statistics */}
+      <div className="flex flex-wrap overflow-hidden rounded-2xl border border-slate-200 bg-white divide-x divide-slate-200">
+        {[
+          { label: "Opened", count: opened, desc: "All time" },
+          { label: "Waiting for you", count: waiting, desc: "Nothing needed" },
+          { label: "In progress", count: inProgress, desc: "We're on it" },
+          { label: "Solved", count: solved, desc: "Done" },
+        ].map((s) => (
+          <div key={s.label} className="min-w-[50%] flex-1 px-5 py-4 text-center md:min-w-0">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{s.label}</p>
+            <p className="mt-1 text-2xl font-bold text-slate-900">{s.count}</p>
+            <p className="text-xs text-slate-400">{s.desc}</p>
+          </div>
+        ))}
+      </div>
+
+      {/* Table */}
+      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+        <div className="overflow-x-auto">
+          <table className="min-w-full text-sm">
+            <thead className="border-b border-slate-200 bg-white">
+              <tr>
+                <th className="px-5 py-3 text-left text-xs font-bold uppercase tracking-wide text-slate-500">Ticket</th>
+                <th className="px-5 py-3 text-left text-xs font-bold uppercase tracking-wide text-slate-500">Subject</th>
+                <th className="px-5 py-3 text-left text-xs font-bold uppercase tracking-wide text-slate-500">About</th>
+                <th className="px-5 py-3 text-left text-xs font-bold uppercase tracking-wide text-slate-500">Status</th>
+                <th className="px-5 py-3 text-left text-xs font-bold uppercase tracking-wide text-slate-500">Last update</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? (
+                <tr>
+                  <td colSpan={5} className="px-5 py-10 text-center text-slate-500">Loading...</td>
+                </tr>
+              ) : error ? (
+                <tr>
+                  <td colSpan={5} className="px-5 py-10 text-center text-red-500">{error}</td>
+                </tr>
+              ) : paginatedTickets.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="px-5 py-16">
+                    <div className="mx-auto flex max-w-sm flex-col items-center text-center">
+                      <p className="text-sm font-semibold text-slate-900">No tickets yet</p>
+                      <p className="mt-1 text-sm text-slate-500">Open a ticket whenever you need help and our team will reply here.</p>
+                      <button
+                        type="button"
+                        onClick={() => setShowForm(true)}
+                        className="mt-4 inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                      >
+                        <Plus size={14} /> Open ticket
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                paginatedTickets.map((t) => (
+                  <tr
+                    key={t._id}
+                    onClick={() => openTicket(t)}
+                    className="cursor-pointer border-t border-slate-100 transition hover:bg-slate-50"
+                  >
+                    <td className="px-5 py-3 font-medium text-slate-900">{t.ticketId}</td>
+                    <td className="px-5 py-3 text-slate-700">{t.subject}</td>
+                    <td className="px-5 py-3 text-slate-600">{(t.adAccounts && t.adAccounts.length ? t.adAccounts.map((a) => a.name).filter(Boolean).join(", ") : t.adAccountName) || "General"}</td>
+                    <td className="px-5 py-3">
+                      <span className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-medium ${ticketStageColor(t.status)}`}>
+                        {ticketStageLabel(t.status)}
+                      </span>
+                    </td>
+                    <td className="px-5 py-3 text-slate-500">{formatDate(t.updatedAt || t.createdAt)}</td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+        <div className="border-t border-slate-100 px-5 py-3">
+          <Pagination page={safePage} totalPages={totalPages} onPageChange={setPage} />
         </div>
       </div>
-      <p className="text-sm text-slate-500 mb-6">Submit and track your support requests</p>
 
-      {showForm && (
-        <div className="mb-6 rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-          <h2 className="text-lg font-bold text-slate-900 mb-4">Create New Ticket</h2>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1.5">Subject *</label>
-              <input type="text" required value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="Brief title of your issue"
-                className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm text-slate-900 placeholder-slate-400 outline-none focus:ring-2 focus:ring-secondary/30 focus:border-secondary" />
+      {/* Ticket detail */}
+      {selected && (
+        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="mb-4 flex items-center justify-between">
+            <h2 className="text-lg font-bold text-slate-900">{selected.subject}</h2>
+            <span className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-medium ${ticketStageColor(selected.status)}`}>
+              {ticketStageLabel(selected.status)}
+            </span>
+          </div>
+          <p className="text-xs text-slate-500 mb-3">
+            Ticket Id: {selected.ticketId} &middot; From: {selected.email} &middot; {formatDateTime(selected.createdAt)}
+          </p>
+          {((selected.adAccounts && selected.adAccounts.length) || selected.adAccountName) && (
+            <p className="text-xs text-amber-600 mb-3 font-medium">
+              Ad Account: {(selected.adAccounts && selected.adAccounts.length
+                ? selected.adAccounts.map((a) => a.name || a.metaAccountId).filter(Boolean).join(", ")
+                : selected.adAccountName)}
+            </p>
+          )}
+          <p className="text-sm text-slate-700 bg-slate-50 rounded-xl p-4">{selected.message}</p>
+
+          {Array.isArray(selected.attachments) && selected.attachments.length > 0 && (
+            <div className="mt-3">
+              <h3 className="text-sm font-semibold text-slate-700 mb-2">Attachments ({selected.attachments.length})</h3>
+              <div className="flex flex-wrap gap-2">
+                {selected.attachments.map((a) => {
+                  const url = `/api/support-tickets/attachments?ticketId=${encodeURIComponent(selected._id)}&attachmentId=${encodeURIComponent(a.id)}&uid=${encodeURIComponent(user.uid)}`;
+                  if (String(a.type || "").startsWith("image/")) {
+                    return (
+                      <button
+                        key={a.id}
+                        type="button"
+                        onClick={() => setPreviewAtt(a)}
+                        className="overflow-hidden rounded-xl border border-slate-200 bg-white"
+                      >
+                        <img src={url} alt={a.name} className="h-24 w-24 object-cover" />
+                      </button>
+                    );
+                  }
+                  return (
+                    <a
+                      key={a.id}
+                      href={url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
+                    >
+                      <span className="truncate">{a.name}</span>
+                    </a>
+                  );
+                })}
+              </div>
             </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1.5">Affected Ad Account *</label>
-              <select value={selectedAccount} onChange={(e) => setSelectedAccount(e.target.value)}
-                className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-secondary/30 focus:border-secondary">
-                <option value="">{adAccounts.length === 0 ? "-- No accounts available --" : "-- Select an account --"}</option>
-                {adAccounts.map((a) => (
-                  <option key={a._id} value={a._id}>
-                    {a.metaAccountName || a.name} (ID: {(a.metaAccountId || a.accountId || "").replace(/^act_/, "")})
-                  </option>
+          )}
+
+          <div className="mt-4">
+            <h3 className="text-sm font-semibold text-slate-700 mb-2">Replies ({selected.replies?.length || 0})</h3>
+            {(!selected.replies || selected.replies.length === 0) ? (
+              <p className="text-sm text-slate-400">No replies yet.</p>
+            ) : (
+              <div className="space-y-2 max-h-60 overflow-y-auto">
+                {selected.replies.map((r, i) => (
+                  <div key={i} className="rounded-xl bg-slate-50 p-3">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-xs font-semibold text-slate-700">{r.by} <span className="text-slate-400 font-normal">({r.role})</span></span>
+                      <span className="text-[11px] text-slate-400">{formatDateTime(r.createdAt)}</span>
+                    </div>
+                    <p className="text-sm text-slate-600">{r.text}</p>
+                  </div>
                 ))}
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1.5">Message *</label>
-              <textarea required value={message} onChange={(e) => setMessage(e.target.value)} rows={5} placeholder="Describe your issue in detail..."
+              </div>
+            )}
+          </div>
+
+          {selected.status !== "closed" && (
+            <form onSubmit={handleReply} className="mt-4 space-y-2">
+              <textarea value={replyText} onChange={(e) => setReplyText(e.target.value)} rows={3} placeholder="Type your reply..." disabled={sendingReply}
                 className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm text-slate-900 placeholder-slate-400 outline-none focus:ring-2 focus:ring-secondary/30 focus:border-secondary" />
-            </div>
-            <div className="flex justify-end">
-              <button type="submit" disabled={submitting}
-                className="rounded-xl bg-[#F59E0B] px-6 py-2.5 text-sm font-semibold text-slate-950 hover:bg-[#D9910A] transition disabled:opacity-50">
-                {submitting ? "Submitting..." : "Submit Ticket"}
+              <button type="submit" disabled={sendingReply || !replyText.trim()}
+                className="rounded-xl bg-[#F59E0B] px-5 py-2 text-sm font-semibold text-slate-950 hover:bg-[#D9910A] transition disabled:opacity-50">
+                {sendingReply ? "Sending..." : "Send Reply"}
               </button>
-            </div>
-          </form>
+            </form>
+          )}
         </div>
       )}
 
-      <div className="mb-6 space-y-3">
-        <div className="flex gap-2 flex-wrap">
-          {[{ key: "", label: "All" }, ...TICKET_STAGES].map((s) => (
-            <button key={s.key} onClick={() => { setFilter(s.key); setPage(1); }}
-              className={`px-4 py-2 rounded-lg font-medium capitalize transition-colors text-sm ${filter === s.key ? "bg-[#F59E0B] text-slate-950" : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"}`}>
-              {s.label}
-            </button>
-          ))}
-        </div>
-        <div className="relative max-w-xs">
-          <input type="text" value={searchTicketId} onChange={(e) => { setSearchTicketId(e.target.value); setPage(1); }}
-            placeholder="Search by Ticket ID..."
-            className="w-full rounded-lg border border-slate-200 pl-4 pr-10 py-2 text-sm outline-none focus:ring-2 focus:ring-secondary/30 focus:border-secondary" />
-          <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-        </div>
-      </div>
+      <NewTicketModal
+        open={showForm}
+        onClose={() => setShowForm(false)}
+        user={user}
+        adAccounts={adAccounts}
+        onCreated={(ticket) => {
+          setTickets((prev) => [ticket, ...prev]);
+          setSelected({ ...ticket, unread: false });
+          setReplyText("");
+          loadTickets();
+        }}
+      />
 
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-        <div className="xl:col-span-1">
-          {loading ? (
-            <p className="text-slate-500">Loading...</p>
-          ) : paginatedTickets.length === 0 ? (
-            <div className="bg-white rounded-xl border border-slate-200 p-8 text-center text-slate-500">No tickets found.</div>
-          ) : (
-            <div className="space-y-3">
-              {paginatedTickets.map((t) => (
-                  <div key={t._id} onClick={() => openTicket(t)}
-                    className={`bg-white rounded-xl border p-4 cursor-pointer transition-all ${selected?._id === t._id ? "border-amber-400 ring-1 ring-amber-400/50" : t.unread ? "border-amber-300 ring-1 ring-amber-300/40 bg-amber-50/40 hover:border-amber-400" : "border-slate-200 hover:border-slate-300"}`}>
-                    <div className="flex items-center justify-between mb-1.5">
-                      <span className="flex items-center gap-1.5">
-                        <span className={`inline-block px-2 py-0.5 rounded-full text-[11px] font-medium capitalize ${ticketStageColor(t.status)}`}>{ticketStageLabel(t.status)}</span>
-                        {t.unread && (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-red-500 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">
-                            <span className="h-1.5 w-1.5 rounded-full bg-white" /> New
-                          </span>
-                        )}
-                      </span>
-                      <span className="text-[11px] text-slate-400">Ticket Id: {t.ticketId} &middot; {formatDate(t.createdAt)}</span>
-                    </div>
-                    <p className="text-sm font-semibold text-slate-900 truncate">{t.subject}</p>
-                    <p className="text-xs text-slate-500 truncate mt-0.5">{t.email}</p>
-                    {t.adAccountName && (
-                      <p className="text-xs text-amber-600 truncate mt-0.5">Ad Account: {t.adAccountName}{t.adAccountMetaId ? ` (ID: ${t.adAccountMetaId.replace(/^act_/, "")})` : ""}</p>
-                    )}
-                    <p className="text-xs text-slate-400 mt-1 line-clamp-2">{t.message}</p>
-                  </div>
-              ))}
+      {previewAtt && selected && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={() => setPreviewAtt(null)}>
+          <div className="max-h-[90vh] max-w-4xl overflow-auto rounded-2xl bg-white p-4 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <div className="mb-3 flex items-center justify-between">
+              <p className="text-sm font-semibold text-slate-800">{previewAtt.name}</p>
+              <button type="button" onClick={() => setPreviewAtt(null)} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100">
+                <X size={18} />
+              </button>
             </div>
-          )}
-          <Pagination page={safePage} totalPages={totalPages} onPageChange={goToPage} />
-        </div>
-
-        <div className="xl:col-span-2">
-          {!selected ? (
-            <div className="bg-white rounded-xl border border-slate-200 p-12 text-center text-slate-400">
-              <p className="text-lg">Select a ticket to view details</p>
-            </div>
-          ) : (
-            <div className="bg-white rounded-xl border border-slate-200 shadow-sm">
-              <div className="p-6 border-b border-slate-200">
-                <div className="flex items-center justify-between mb-2">
-                  <h2 className="text-lg font-bold text-slate-900">{selected.subject}</h2>
-                  <span className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-medium capitalize ${ticketStageColor(selected.status)}`}>
-                    {ticketStageLabel(selected.status)}
-                  </span>
-                </div>
-                <p className="text-xs text-slate-500">
-                    Ticket Id: {selected.ticketId} &middot; From: {selected.email} &middot; {formatDateTime(selected.createdAt)}
-                  </p>
-                  {selected.adAccountName && (
-                    <p className="text-xs text-amber-600 mt-1.5 font-medium">
-                      Ad Account: {selected.adAccountName}{selected.adAccountMetaId ? ` (ID: ${selected.adAccountMetaId.replace(/^act_/, "")})` : ""}
-                    </p>
-                  )}
-                <p className="mt-3 text-sm text-slate-700 bg-slate-50 rounded-xl p-4">{selected.message}</p>
+            {String(previewAtt.type || "").startsWith("image/") ? (
+              <img
+                src={`/api/support-tickets/attachments?ticketId=${encodeURIComponent(selected._id)}&attachmentId=${encodeURIComponent(previewAtt.id)}&uid=${encodeURIComponent(user.uid)}`}
+                alt={previewAtt.name}
+                className="max-h-[75vh] w-auto rounded-lg"
+              />
+            ) : (
+              <div className="p-6 text-center">
+                <p className="text-sm text-slate-600">Preview not available for this file type.</p>
+                <a
+                  href={`/api/support-tickets/attachments?ticketId=${encodeURIComponent(selected._id)}&attachmentId=${encodeURIComponent(previewAtt.id)}&uid=${encodeURIComponent(user.uid)}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="mt-3 inline-block text-sm font-medium text-amber-600 hover:text-amber-700"
+                >
+                  Open file
+                </a>
               </div>
-
-              <div className="p-6 border-b border-slate-200">
-                <h3 className="text-sm font-semibold text-slate-700 mb-3">Replies ({selected.replies?.length || 0})</h3>
-                {(!selected.replies || selected.replies.length === 0) ? (
-                  <p className="text-sm text-slate-400">No replies yet.</p>
-                ) : (
-                  <div className="space-y-3 max-h-60 overflow-y-auto">
-                    {selected.replies.map((r, i) => (
-                      <div key={i} className="rounded-xl bg-slate-50 p-4">
-                        <div className="flex items-center justify-between mb-1">
-                          <span className="text-xs font-semibold text-slate-700">{r.by} <span className="text-slate-400 font-normal">({r.role})</span></span>
-                          <span className="text-[11px] text-slate-400">{formatDateTime(r.createdAt)}</span>
-                        </div>
-                        <p className="text-sm text-slate-600">{r.text}</p>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              {selected.status !== "closed" && (
-                <div className="p-6">
-                  <form onSubmit={handleReply} className="space-y-3">
-                    <textarea value={replyText} onChange={(e) => setReplyText(e.target.value)} rows={3} placeholder="Type your reply..." disabled={sendingReply}
-                      className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm text-slate-900 placeholder-slate-400 outline-none focus:ring-2 focus:ring-secondary/30 focus:border-secondary" />
-                    <div className="flex gap-2">
-                      <button type="submit" disabled={sendingReply || !replyText.trim()}
-                        className="rounded-xl bg-[#F59E0B] px-5 py-2 text-sm font-semibold text-slate-950 hover:bg-[#D9910A] transition disabled:opacity-50">
-                        {sendingReply ? "Sending..." : "Send Reply"}
-                      </button>
-                    </div>
-                  </form>
-                </div>
-              )}
-
-              {selected.status === "closed" && (
-                <div className="p-6 text-center text-sm text-slate-400">This ticket is closed.</div>
-              )}
-            </div>
-          )}
+            )}
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }

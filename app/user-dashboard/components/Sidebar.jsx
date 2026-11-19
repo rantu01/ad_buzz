@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
-import { Home, ListChecks, User, CreditCard, X, AppWindowMac, DollarSign, ChevronDown, LifeBuoy, Bell } from "lucide-react";
+import { Home, ListChecks, User, CreditCard, X, AppWindowMac, DollarSign, ChevronDown, LifeBuoy, Bell, CircleHelp } from "lucide-react";
 import { useSettings } from "@/app/Component/Settings/SettingsProvider";
 import { useUserAlerts } from "./UserAlertProvider";
 
@@ -15,13 +15,14 @@ const navTop = [
 
 const navBottom = [
     { label: "Notifications", href: "/user-dashboard/notifications", icon: Bell, badgeKey: "notifs" },
+    { label: "Help Center", href: "/help-center", icon: CircleHelp, matchPrefix: true },
     { label: "Support Tickets", href: "/user-dashboard/support-tickets", icon: LifeBuoy, badgeKey: "tickets" },
     { label: "Profile", href: "/user-dashboard/profile", icon: User },
 ];
 
 const paymentChildren = [
-    { label: "New Payment", href: "/user-dashboard/deposits" },
-    { label: "Payment History", href: "/user-dashboard/Payment-History" },
+    { label: "Make Deposits", href: "/user-dashboard/deposits" },
+    { label: "Deposits History", href: "/user-dashboard/Payment-History" },
 ];
 
 const balanceChildren = [
@@ -105,7 +106,7 @@ export default function UserSidebar({ open, onClose }) {
                                     className={`group flex w-full items-center gap-3 rounded-lg px-4 py-3 text-sm font-medium transition-colors ${paymentsActive ? "text-white shadow" : "text-white/70 hover:bg-white/10"}`}
                                 style={paymentsActive ? activeBg : {}}>
                                 <span className={`flex h-9 w-9 items-center justify-center rounded-xl ${paymentsActive ? "bg-white/10" : "bg-white/5"}`}><DollarSign size={18} /></span>
-                                <span className="flex-1 text-left">Payments</span>
+                                <span className="flex-1 text-left">Deposits</span>
                                 <ChevronDown size={16} className={`transition-transform duration-200 ${paymentsOpen ? "rotate-0" : "-rotate-90"}`} />
                             </button>
                             <div className={`grid transition-all duration-200 ease-in-out ${paymentsOpen ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"}`}>
@@ -147,7 +148,7 @@ export default function UserSidebar({ open, onClose }) {
                         </div>
 
                         {navBottom.map((item) => {
-                            const active = pathname === item.href;
+                            const active = item.matchPrefix ? (pathname === item.href || pathname.startsWith(item.href + "/")) : pathname === item.href;
                             const Icon = item.icon;
                             const badge = badgeFor(item.badgeKey);
                             return (
@@ -168,9 +169,7 @@ export default function UserSidebar({ open, onClose }) {
                     </div>
                 </nav>
 
-                <div className="border-t border-white/10 px-6 py-5">
-                    <div className="rounded-lg bg-white p-3"><Link href="https://wa.me/message/JPEP3WIO5LALA1" target="_blank" rel="noopener noreferrer"><p className="text-sm text-slate-700">Need help?</p><p className="mt-1 text-xs text-slate-500">Contact support for account help.</p></Link></div>
-                </div>
+                
             </aside>
         </>
     );

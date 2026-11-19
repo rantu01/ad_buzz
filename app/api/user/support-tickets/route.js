@@ -69,13 +69,59 @@ async function notifyStaff({ type = "ticket_created", title, body, refId, event,
 export async function POST(request) {
   try {
     const body = await request.json();
-    const { uid, email, subject, message, adAccountId, adAccountMetaId, adAccountName } = body;
-    if (!uid || !email || !subject || !message) {
+    const { uid, email, customerName, subject, category, message, adAccountIds, adAccounts, attachments } = body;
+    const resolvedSubject = (category || subject || "").trim();
+    if (!uid || !email || !resolvedSubject || !message) {
       return NextResponse.json({ success: false, message: "Missing required fields" }, { status: 400 });
     }
-    const ticket = await createTicket({ uid, email, subject, message, adAccountId, adAccountMetaId, adAccountName });
-    // New ticket starts at Open and must appear for staff/admin with a
-    // notification.
+
+    // Validate ad account ownership server-side.
+    let validatedAccounts = [];
+    const ids = Array.isArray(adAccountIds) ? adAccountIds : (Array.isArray(adAccounts) ? adAccounts.map((a) => a?.accountId || a?._id || a?.id) : []);
+    if (ids.filter(Boolean).length > 0) {
+      const { getAdAccountsByUid } = await import("@/lib/adAccountModel");
+      const userAccounts = await getAdAccountsByUid(uid);
+      const byId = new Map(userAccounts.map((a) => [String(a._id), a]));
+      const clientMeta = new Map((Array.isArray(adAccounts) ? adAccounts : []).map((a) => [String(a?.accountId || a?._id || a?.id), a]));
+      validatedAccounts = ids.filter(Boolean).map((id) => {
+        const acc = byId.get(String(id));
+        if (!acc) return null;
+        const meta = clientMeta.get(String(id)) || {};
+        return {
+          accountId: String(acc._id),
+          metaAccountId: acc.metaAccountId || acc.accountId || meta.metaAccountId || null,
+          name: acc.metaAccountName || acc.name || meta.name || null,
+        };
+      }).filter(Boolean);
+      // Prevent duplicates
+      const seen = new Set();
+      validatedAccounts = validatedAccounts.filter((a) => {
+        if (seen.has(a.accountId)) return false;
+        seen.add(a.accountId);
+        return true;
+      });
+    }
+
+    // Validate attachments shape (metadata only, no file contents).
+    const safeAttachments = Array.isArray(attachments) ? attachments.map((a) => ({
+      id: String(a?.id || ""),
+      name: String(a?.name || "").slice(0, 255),
+      size: Number(a?.size || 0),
+      type: String(a?.type || ""),
+      uploadedAt: a?.uploadedAt || new Date().toISOString(),
+    })).filter((a) => a.id) : [];
+
+    const ticket = await createTicket({
+      uid,
+      email,
+      customerName,
+      subject: resolvedSubject,
+      category: resolvedSubject,
+      message: message.trim(),
+      adAccounts: validatedAccounts,
+      attachments: safeAttachments,
+    });
+
     await notifyStaff({
       title: `New ticket ${ticket.ticketId}: ${ticket.subject}`,
       body: `${email} opened a support ticket.`,

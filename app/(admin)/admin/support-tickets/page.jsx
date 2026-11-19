@@ -7,7 +7,7 @@ import { useNotifications } from "../components/NotificationProvider";
 import { hasPermission } from "@/lib/permissions";
 import { TICKET_STAGES, ticketStageLabel, ticketStageColor } from "@/lib/ticketStages";
 import Swal from "sweetalert2";
-import { Search } from "lucide-react";
+import { Search, X } from "lucide-react";
 import Pagination from "@/app/Component/Pagination";
 import { formatDate, formatDateTime } from "@/lib/dateFormat";
 
@@ -22,7 +22,13 @@ export default function SupportTicketsPage() {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState("all");
   const [searchTicketId, setSearchTicketId] = useState("");
+  const [searchCustomer, setSearchCustomer] = useState("");
+  const [searchEmail, setSearchEmail] = useState("");
+  const [searchSubject, setSearchSubject] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
   const [selected, setSelected] = useState(null);
+  const [previewAtt, setPreviewAtt] = useState(null);
   const [replyText, setReplyText] = useState("");
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
@@ -85,6 +91,11 @@ export default function SupportTicketsPage() {
       // ticket stage showing ALL tickets of that stage, read or unread.
       if (activeFilter && activeFilter !== "all" && activeFilter !== "unread") params.set("status", activeFilter);
       if (searchTicketId.trim()) params.set("ticketId", searchTicketId.trim());
+      if (searchCustomer.trim()) params.set("customer", searchCustomer.trim());
+      if (searchEmail.trim()) params.set("email", searchEmail.trim());
+      if (searchSubject.trim()) params.set("subject", searchSubject.trim());
+      if (dateFrom) params.set("dateFrom", dateFrom);
+      if (dateTo) params.set("dateTo", dateTo);
       params.set("page", String(targetPage));
       params.set("limit", String(ITEMS_PER_PAGE));
       // Viewer uid lets the API attach per-ticket read/unread flags.
@@ -281,7 +292,21 @@ export default function SupportTicketsPage() {
   return (
     <div>
       <h1 className="text-2xl font-semibold mb-1">Support Tickets</h1>
-      <p className="text-sm text-slate-500 mb-6">View and manage user support tickets</p>
+      <p className="text-sm text-slate-500 mb-4">View and manage user support tickets</p>
+
+      <div className="mb-6 flex flex-wrap overflow-hidden rounded-2xl border border-slate-200 bg-white divide-x divide-slate-200">
+        {[
+          { label: "Total Opened", count: totalTickets || 0 },
+          { label: "Waiting for Customer", count: stageTotals?.support_agent_reply || 0 },
+          { label: "In Progress", count: (stageTotals?.open || 0) + (stageTotals?.in_progress || 0) + (stageTotals?.customer_reply || 0) + (stageTotals?.hold || 0) },
+          { label: "Solved", count: stageTotals?.closed || 0 },
+        ].map((s) => (
+          <div key={s.label} className="min-w-[50%] flex-1 px-5 py-4 text-center md:min-w-0">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{s.label}</p>
+            <p className="mt-1 text-2xl font-bold text-slate-900">{s.count}</p>
+          </div>
+        ))}
+      </div>
 
       <div className="mb-6 space-y-3">
         <div className="flex gap-2 flex-wrap">
@@ -304,6 +329,20 @@ export default function SupportTicketsPage() {
             placeholder="Search by Ticket ID..."
             className="w-full rounded-lg border border-slate-200 pl-4 pr-10 py-2 text-sm outline-none focus:ring-2 focus:ring-secondary/30 focus:border-secondary" />
           <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <input value={searchCustomer} onChange={(e) => setSearchCustomer(e.target.value)} placeholder="Customer name"
+            className="rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-secondary/30" />
+          <input value={searchEmail} onChange={(e) => setSearchEmail(e.target.value)} placeholder="Email"
+            className="rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-secondary/30" />
+          <input value={searchSubject} onChange={(e) => setSearchSubject(e.target.value)} placeholder="Subject/Category"
+            className="rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-secondary/30" />
+          <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)}
+            className="rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-secondary/30" />
+          <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)}
+            className="rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-secondary/30" />
+          <button type="button" onClick={() => { setPage(1); loadTickets(1); }}
+            className="rounded-lg bg-[#F59E0B] px-4 py-2 text-sm font-semibold text-slate-950 hover:bg-[#D9910A]">Apply</button>
         </div>
       </div>
 
@@ -331,8 +370,12 @@ export default function SupportTicketsPage() {
                     </div>
                     <p className="text-sm font-semibold text-slate-900 truncate">{t.subject}</p>
                     <p className="text-xs text-slate-500 truncate mt-0.5">{t.email}</p>
-                    {t.adAccountName && (
-                      <p className="text-xs text-amber-600 truncate mt-0.5">Ad Account: {t.adAccountName}{t.adAccountMetaId ? ` (ID: ${t.adAccountMetaId.replace(/^act_/, "")})` : ""}</p>
+                    {((t.adAccounts && t.adAccounts.length) || t.adAccountName) && (
+                      <p className="text-xs text-amber-600 truncate mt-0.5">
+                        Ad Account: {(t.adAccounts && t.adAccounts.length
+                          ? t.adAccounts.map((a) => a.name).filter(Boolean).join(", ")
+                          : t.adAccountName)}
+                      </p>
                     )}
                     <p className="text-xs text-slate-400 mt-1 line-clamp-2">{t.message}</p>
                   </div>
@@ -357,14 +400,50 @@ export default function SupportTicketsPage() {
                   </span>
                 </div>
                 <p className="text-xs text-slate-500">
-                    Ticket Id: {selected.ticketId} &middot; From: {selected.email} &middot; {formatDateTime(selected.createdAt)}
+                    Ticket Id: {selected.ticketId} &middot; From: {selected.customerName || selected.email} ({selected.email}) &middot; {formatDateTime(selected.createdAt)}
                   </p>
-                  {selected.adAccountName && (
+                  {((selected.adAccounts && selected.adAccounts.length) || selected.adAccountName) && (
                     <p className="text-xs text-amber-600 mt-1.5 font-medium">
-                      Ad Account: {selected.adAccountName}{selected.adAccountMetaId ? ` (ID: ${selected.adAccountMetaId.replace(/^act_/, "")})` : ""}
+                      Ad Account: {(selected.adAccounts && selected.adAccounts.length
+                        ? selected.adAccounts.map((a) => `${a.name || "Ad Account"}${a.metaAccountId ? ` (ID: ${String(a.metaAccountId).replace(/^act_/, "")})` : ""}`).join(", ")
+                        : `${selected.adAccountName}${selected.adAccountMetaId ? ` (ID: ${String(selected.adAccountMetaId).replace(/^act_/, "")})` : ""}`)}
                     </p>
                   )}
                 <p className="mt-3 text-sm text-slate-700 bg-slate-50 rounded-xl p-4">{selected.message}</p>
+
+                {Array.isArray(selected.attachments) && selected.attachments.length > 0 && (
+                  <div className="mt-3">
+                    <h3 className="text-sm font-semibold text-slate-700 mb-2">Attachments ({selected.attachments.length})</h3>
+                    <div className="flex flex-wrap gap-2">
+                      {selected.attachments.map((a) => {
+                        const url = `/api/support-tickets/attachments?ticketId=${encodeURIComponent(selected._id)}&attachmentId=${encodeURIComponent(a.id)}&uid=${encodeURIComponent(profile?.uid || "")}`;
+                        if (String(a.type || "").startsWith("image/")) {
+                          return (
+                            <button
+                              key={a.id}
+                              type="button"
+                              onClick={() => setPreviewAtt(a)}
+                              className="overflow-hidden rounded-xl border border-slate-200 bg-white"
+                            >
+                              <img src={url} alt={a.name} className="h-24 w-24 object-cover" />
+                            </button>
+                          );
+                        }
+                        return (
+                          <a
+                            key={a.id}
+                            href={url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
+                          >
+                            <span className="truncate">{a.name}</span>
+                          </a>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div className="p-6 border-b border-slate-200">
@@ -426,6 +505,39 @@ export default function SupportTicketsPage() {
           )}
         </div>
       </div>
+
+    {previewAtt && selected && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={() => setPreviewAtt(null)}>
+        <div className="max-h-[90vh] max-w-4xl overflow-auto rounded-2xl bg-white p-4 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+          <div className="mb-3 flex items-center justify-between">
+            <p className="text-sm font-semibold text-slate-800">{previewAtt.name}</p>
+            <button type="button" onClick={() => setPreviewAtt(null)} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100">
+              <X size={18} />
+            </button>
+          </div>
+          {String(previewAtt.type || "").startsWith("image/") ? (
+            <img
+              src={`/api/support-tickets/attachments?ticketId=${encodeURIComponent(selected._id)}&attachmentId=${encodeURIComponent(previewAtt.id)}&uid=${encodeURIComponent(profile?.uid || "")}`}
+              alt={previewAtt.name}
+              className="max-h-[75vh] w-auto rounded-lg"
+            />
+          ) : (
+            <div className="p-6 text-center">
+              <p className="text-sm text-slate-600">Preview not available for this file type.</p>
+              <a
+                href={`/api/support-tickets/attachments?ticketId=${encodeURIComponent(selected._id)}&attachmentId=${encodeURIComponent(previewAtt.id)}&uid=${encodeURIComponent(profile?.uid || "")}`}
+                target="_blank"
+                rel="noreferrer"
+                className="mt-3 inline-block text-sm font-medium text-amber-600 hover:text-amber-700"
+              >
+                Open file
+              </a>
+            </div>
+          )}
+        </div>
+      </div>
+    )}
+
     </div>
   );
 }

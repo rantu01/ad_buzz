@@ -75,6 +75,12 @@ export async function GET(request) {
     const id = searchParams.get("id");
     const uid = searchParams.get("uid");
     const unreadOnly = searchParams.get("unreadOnly") === "1" || searchParams.get("unreadOnly") === "true";
+    const customer = searchParams.get("customer");
+    const email = searchParams.get("email");
+    const subject = searchParams.get("subject");
+    const category = searchParams.get("category");
+    const dateFrom = searchParams.get("dateFrom");
+    const dateTo = searchParams.get("dateTo");
     // Single full ticket for the detail pane (replies included).
     // Used for notification deep-links so the exact ticket opens even
     // when it is not on the current list page/filter.
@@ -100,7 +106,7 @@ export async function GET(request) {
       const result = await getUnreadTicketsPage(uid, status || null, ticketId || null, { page: 1, limit: 200 });
       return NextResponse.json({ success: true, ...result });
     }
-    const result = await getAllTickets(status || null, ticketId || null, { page, limit });
+    const result = await getAllTickets(status || null, ticketId || null, { page, limit, customer, email, subject, category, dateFrom, dateTo });
     // Attach per-admin read/unread flags when the viewer is known, so
     // unread tickets render distinctly without extra round-trips.
     // Unread rows always sort first, then newest first.

@@ -241,3 +241,17 @@ config test, `runWithReschedule` reschedule-on-throw test); `eslint`
 clean; `npm run build` 72 routes OK. **Not verified here: live Meta
 API responses and the production DB** (no network/credential access in
 this environment) — see the report for the required staging checks.
+
+## Help Center / Knowledge Base (implemented)
+- User: sidebar item Help Center -> /help-center; homepage with categories, search, article cards; article detail with rich text, About sidebar, current date Last updated (Asia/Dhaka), feedback, still need help.
+- Admin: /admin/help-center (articles CRUD, publish/unpublish, delete), categories, feedback stats.
+- DB: helpCenterCategories, helpCenterArticles, helpCenterFeedback collections + indexes.
+- APIs: /api/help-center/* and /api/admin/help-center/*.
+- Verified: npm run build, npm test 33/33, npm run lint (warnings only), dev server categories seed.
+
+## User Support Tickets Redesign (implemented)
+- Redesigned /user-dashboard/support-tickets with 4 stat cards (Opened, Waiting for you, In progress, Solved), 5-column table, empty state with + Open ticket, modal ticket creation, ticket detail/replies preserved.
+- Complete 3-step New Ticket modal: 12 exact subject categories, multi ad-account selection, optional attachments (MongoDB-backed), review/submit, real ad accounts, duplicate prevention.
+- Admin support tickets: stats, search/filter, customer/ad-account/attachment details, download authorized attachments.
+- Extended ticket records: category, adAccounts[], attachments[], customerName, lastActivityAt. Preserved existing tickets/replies/SSE sync/notifications.
+- Build verified (npm run build).
