@@ -2,10 +2,12 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
-import { Home, ListChecks, User, CreditCard, X, AppWindowMac, DollarSign, ChevronDown, LifeBuoy, Bell, CircleHelp } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Home, ListChecks, User, CreditCard, X, AppWindowMac, DollarSign, ChevronDown, LifeBuoy, Bell, CircleHelp, MessageCircle } from "lucide-react";
 import { useSettings } from "@/app/Component/Settings/SettingsProvider";
 import { useUserAlerts } from "./UserAlertProvider";
+import { useAuth } from "@/app/Component/Auth/AuthProvider";
+import useSSE from "@/app/Component/Hooks/useSSE";
 
 const navTop = [
     { label: "Dashboard", href: "/user-dashboard", icon: AppWindowMac },
@@ -15,6 +17,7 @@ const navTop = [
 
 const navBottom = [
     { label: "Notifications", href: "/user-dashboard/notifications", icon: Bell, badgeKey: "notifs" },
+    { label: "Chat", href: "/user-dashboard/chat", icon: MessageCircle, badgeKey: "chat" },
     { label: "Help Center", href: "/help-center", icon: CircleHelp, matchPrefix: true },
     { label: "Support Tickets", href: "/user-dashboard/support-tickets", icon: LifeBuoy, badgeKey: "tickets" },
     { label: "Profile", href: "/user-dashboard/profile", icon: User },
@@ -38,9 +41,25 @@ export default function UserSidebar({ open, onClose }) {
     const secondary = settings?.secondaryColor || "#F48E2B";
     const activeBlue = "#F48E2B";
     const { unread, ticketUnread } = useUserAlerts();
+    const { user } = useAuth();
+    const [chatUnread, setChatUnread] = useState(0);
+    useEffect(() => {
+        if (!user?.uid) return;
+        const load = () => fetch(`/api/user/chat/unread?uid=${encodeURIComponent(user.uid)}`).then(r=>r.json()).then(d=>{ if(d.success) setChatUnread(d.unread||0); }).catch(()=>{});
+        load();
+    }, [user?.uid]);
+    useSSE({
+        uid: user?.uid,
+        channels: [],
+        onEvent: (type) => {
+            if (type !== "chat:message" && type !== "chat:read") return;
+            fetch(`/api/user/chat/unread?uid=${encodeURIComponent(user.uid)}`).then((r) => r.json()).then((d) => { if (d.success) setChatUnread(d.unread || 0); }).catch(() => {});
+        },
+    });
     const badgeFor = (key) => {
         if (key === "notifs") return unread;
         if (key === "tickets") return ticketUnread;
+        if (key === "chat") return chatUnread;
         return 0;
     };
 

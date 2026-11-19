@@ -1,5 +1,13 @@
 # API Status — Meta Sync & Realtime Delivery
 
+## Chat and calling additions
+
+- `POST /api/chat/calls` creates and updates voice calls.
+- `POST /api/chat/signal` sends voice SDP/ICE/end/reject/missed events through
+  SSE `chat:signal`.
+- `chat:message`, `chat:read`, and `notify` remain the live chat/unread
+  delivery events.
+
 Last updated: 2026-10-12. Covers the centralized Meta synchronization service,
 SSE delivery, and the health endpoint. See `realtime-sync.md` for architecture
 and `progress.md` for change history.

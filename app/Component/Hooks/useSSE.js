@@ -16,6 +16,10 @@ const GRANULAR_EVENTS = [
   "deposit.created",
   "deposit.updated",
   "notify",
+  "chat:message",
+  "chat:signal",
+  "chat:call",
+  "chat:read",
 ];
 
 const SERVER_RETRY_MS = 15000;

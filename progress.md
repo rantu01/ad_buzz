@@ -1,5 +1,18 @@
 # Progress — Near-Real-Time Meta Ad Account Sync
 
+## Chat and voice calling update
+
+- Added a centralized, app-wide voice call provider using the existing SSE
+  transport and WebRTC signaling.
+- Incoming calls are visible across dashboard pages, with ringtone,
+  accept/reject controls, cancel/missed handling, mute, minimize/restore,
+  and call duration.
+- Video controls and video UI were removed from customer/admin chat surfaces;
+  call signaling is voice-only.
+- Chat message and unread events now use the shared SSE connection where
+  practical, and incoming chat messages produce real-time toasts and
+  notification-sound support.
+
 ## 1. Audit findings (why Meta changes appeared late)
 
 - `lib/autoMetaFetch.js` ran a **full BM list fetch every ~30–50s**

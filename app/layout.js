@@ -3,6 +3,7 @@ import "./globals.css";
 import SettingsProvider from "./Component/Settings/SettingsProvider";
 import AuthProvider from "./Component/Auth/AuthProvider";
 import QueryProvider from "./Component/QueryProvider";
+import CentralCallProvider from "./Component/Chat/CentralCallProvider";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -29,7 +30,9 @@ export default function RootLayout({ children }) {
       <body className="min-h-full flex flex-col">
         <SettingsProvider>
           <AuthProvider>
-            <QueryProvider>{children}</QueryProvider>
+            <QueryProvider>
+              <CentralCallProvider>{children}</CentralCallProvider>
+            </QueryProvider>
           </AuthProvider>
         </SettingsProvider>
       </body>

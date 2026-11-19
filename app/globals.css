@@ -33,3 +33,98 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+:root {
+  --chat-font-size: 0.875rem;
+  --chat-meta-size: 0.6875rem;
+  --chat-space-xs: 0.5rem;
+  --chat-space-sm: 0.75rem;
+  --chat-radius: 1rem;
+  --chat-shell: #ffffff;
+  --chat-canvas: #f8fafc;
+  --chat-ink: #0f172a;
+  --chat-accent: #f97316;
+  --chat-border: #e2e8f0;
+  --chat-float-width: 22.5rem;
+  --chat-float-height: 32.5rem;
+}
+
+.chat-interface,
+.chat-interface button,
+.chat-interface textarea,
+.chat-interface p,
+.chat-interface span {
+  font-family: Arial, Helvetica, "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", sans-serif;
+}
+
+.chat-interface--compact {
+  height: 100%;
+}
+
+.emoji-picker {
+  position: absolute;
+  bottom: 3rem;
+  left: 0;
+  z-index: 40;
+  width: min(22rem, calc(100vw - 1.5rem));
+  box-sizing: border-box;
+  max-height: 15rem;
+  overflow-y: auto;
+  padding: 0.75rem;
+  background: #ffffff;
+  border: 1px solid var(--chat-border);
+  border-radius: 0.75rem;
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.18);
+}
+
+@media (max-width: 639px) {
+  .emoji-picker {
+    width: min(22rem, calc(100vw - 5.5rem));
+  }
+}
+
+.emoji-picker-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(2.75rem, 1fr));
+  gap: 0.5rem;
+  width: 100%;
+}
+
+.emoji-picker-item {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-width: 2.75rem;
+  min-height: 2.75rem;
+  aspect-ratio: 1 / 1;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  border-radius: 0.5rem;
+  font-size: 1.375rem;
+  line-height: 1;
+  cursor: pointer;
+  font-family: "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", sans-serif;
+}
+
+.emoji-picker-item:hover {
+  background: #f1f5f9;
+}
+
+.emoji-picker-item:focus-visible {
+  outline: 2px solid #fb923c;
+  outline-offset: 1px;
+}
+
+.chat-interface--compact .chat-interface-side {
+  display: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chat-interface * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

@@ -1,5 +1,14 @@
 # TODO — Meta Sync Follow-ups
 
+## Chat and calling
+
+- [x] Central app-wide voice call provider
+- [x] Incoming call, ringtone, accept/reject, mute, and minimize/restore
+- [x] Removed video calling controls
+- [x] Website-wide chat SSE notifications and unread updates
+- [ ] Perform manual two-device WebRTC, ringtone, network-loss, and
+  navigation test on staging
+
 ## Done (2026-10-12)
 
 - [x] Scoped SSE account delivery (`lib/metaEvents.js`): staff channel +

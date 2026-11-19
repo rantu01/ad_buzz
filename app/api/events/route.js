@@ -65,6 +65,7 @@ export async function GET(request) {
       // requests are still honored (existing behavior).
       if (staff) {
         try { subscribeChannel(clientId, "admin:meta"); } catch {}
+        try { subscribeChannel(clientId, "admin:chat"); } catch {}
       }
 
       heartbeat = setInterval(() => {

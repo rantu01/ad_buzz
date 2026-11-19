@@ -7,6 +7,7 @@ import UserSidebar from './components/Sidebar';
 import UserTopbar from './components/Topbar';
 import UserAlertProvider from './components/UserAlertProvider';
 import { useLoginSession } from '@/app/Component/Hooks/useLoginSession';
+import FloatingChatWidget from '@/app/Component/Chat/FloatingChatWidget';
 
 export default function ClientLayout({ children }) {
   const router = useRouter();
@@ -38,6 +39,7 @@ export default function ClientLayout({ children }) {
   return (
     <UserAlertProvider>
       <UserSidebar open={open} onClose={() => setOpen(false)} />
+      <FloatingChatWidget />
       <div className="min-h-screen lg:pl-64">
         <UserTopbar onToggle={() => setOpen((v) => !v)} />
         <main className="px-4 py-6 sm:px-6 lg:px-8 lg:py-8">

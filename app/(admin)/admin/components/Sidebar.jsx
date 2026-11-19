@@ -3,13 +3,14 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import React from "react";
-import { LayoutGrid, Users, User, X, DollarSign, History, Megaphone, RefreshCw, MessageSquare, BarChart3, Settings, LifeBuoy, TrendingUp, CreditCard, ArrowUpCircle, ShieldCheck, ChevronDown, Bell, CircleHelp } from "lucide-react";
+import { LayoutGrid, Users, User, X, DollarSign, History, Megaphone, RefreshCw, MessageSquare, BarChart3, Settings, LifeBuoy, TrendingUp, CreditCard, ArrowUpCircle, ShieldCheck, ChevronDown, Bell, CircleHelp, MessageCircle } from "lucide-react";
 import { useSettings } from "@/app/Component/Settings/SettingsProvider";
 import { useAdmin } from "./AdminProvider";
 import { useTicketAlerts } from "./TicketAlertProvider";
 import { useDepositAlerts } from "./DepositAlertProvider";
 import { useNotifications } from "./NotificationProvider";
 import { getAllowedRoutes } from "@/lib/permissions";
+import useSSE from "@/app/Component/Hooks/useSSE";
 
 const ICON_MAP = {
   overview: LayoutGrid,
@@ -18,6 +19,7 @@ const ICON_MAP = {
   "user-management": Users,
   "payment-methods": CreditCard,
   "support-tickets": LifeBuoy,
+  "chat": MessageCircle,
   "balance-logs": History,
   "top-up-insights": TrendingUp,
   "ad-accounts-topup": ArrowUpCircle,
@@ -57,10 +59,25 @@ export default function DashboardSidebar({ open, onClose }) {
   const { unread } = useTicketAlerts();
   const { pending: pendingDeposits } = useDepositAlerts();
   const { unread: notifUnread } = useNotifications();
+  const [chatUnread, setChatUnread] = React.useState(0);
+  React.useEffect(() => {
+    if (!profile?.uid) return;
+    const load = () => fetch(`/api/admin/chat/unread?uid=${encodeURIComponent(profile.uid)}`).then(r=>r.json()).then(d=>{ if(d.success) setChatUnread(d.unread||0); }).catch(()=>{});
+    load();
+  }, [profile?.uid]);
+  useSSE({
+    uid: profile?.uid,
+    channels: [],
+    onEvent: (type) => {
+      if (type !== "chat:message" && type !== "chat:read") return;
+      fetch(`/api/admin/chat/unread?uid=${encodeURIComponent(profile.uid)}`).then((r) => r.json()).then((d) => { if (d.success) setChatUnread(d.unread || 0); }).catch(() => {});
+    },
+  });
   const badgeFor = (key) => {
     if (key === "support-tickets") return unread;
     if (key === "deposits") return pendingDeposits;
     if (key === "notifications") return notifUnread;
+    if (key === "chat") return chatUnread;
     return 0;
   };
   const logo = settings?.logo || "/logo.jpeg";
@@ -269,6 +286,7 @@ export default function DashboardSidebar({ open, onClose }) {
                 </div>
               </div>
             )}
+            {renderNavItem({ label: "Chat", href: "/admin/chat", key: "chat" })}
             {renderNavItem({ label: "Notifications", href: "/admin/notifications", key: "notifications" })}
             {renderNavItem({ label: "Profile", href: "/admin/profile", key: "profile" })}
           </div>
