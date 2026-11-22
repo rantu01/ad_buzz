@@ -30,7 +30,13 @@ export default function UserTopbar({ onToggle }) {
       if (mounted && data?.success) setProfile(data.user);
     }
     load();
-    return () => (mounted = false);
+    // Refresh immediately when the picture is changed on the profile page.
+    function onAvatarUpdated() { load(); }
+    window.addEventListener("adbuzz:avatar-updated", onAvatarUpdated);
+    return () => {
+      mounted = false;
+      window.removeEventListener("adbuzz:avatar-updated", onAvatarUpdated);
+    };
   }, [user?.uid]);
 
   return (
@@ -89,8 +95,13 @@ export default function UserTopbar({ onToggle }) {
             />
             <div className="flex items-center gap-3 rounded-2xl border border-[#F1E7DF] bg-white px-3 py-2 shadow-sm">
               <div className="flex h-9 w-9 items-center justify-center rounded-full overflow-hidden text-sm font-bold text-white"
-                style={{ background: `linear-gradient(135deg, ${settings?.primaryColor || "#135B9A"}, ${settings?.secondaryColor || "#F48E2B"})` }}>
-                <span className="h-full w-full flex items-center justify-center">AB</span>
+                style={profile?.avatar ? undefined : { background: `linear-gradient(135deg, ${settings?.primaryColor || "#135B9A"}, ${settings?.secondaryColor || "#F48E2B"})` }}>
+                {profile?.avatar ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={profile.avatar} alt="Profile" className="h-full w-full object-cover" />
+                ) : (
+                  <span className="h-full w-full flex items-center justify-center">AB</span>
+                )}
               </div>
               <div className="hidden sm:block">
                 <p className="text-sm font-semibold text-slate-900">{profile?.displayName || user?.email || 'Member'}</p>

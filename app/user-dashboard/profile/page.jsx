@@ -1,8 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/app/Component/Auth/AuthProvider";
+import { useSettings } from "@/app/Component/Settings/SettingsProvider";
 import { auth } from "@/lib/firebaseClient";
 import {
   EmailAuthProvider,
@@ -408,12 +409,15 @@ function ActiveDevicesCard({ uid }) {
 
 export default function ProfilePage() {
   const { user, loading: authLoading } = useAuth();
+  const settings = useSettings();
+  const fileInputRef = useRef(null);
   const [profile, setProfile] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [phoneNumber, setPhoneNumber] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [avatarSaving, setAvatarSaving] = useState(false);
 
   const loadProfile = useCallback(async () => {
     if (!user?.uid) { setIsLoading(false); return; }
@@ -454,6 +458,58 @@ export default function ProfilePage() {
     }
   }
 
+  async function saveAvatar(avatar, successMessage) {
+    setAvatarSaving(true);
+    try {
+      const res = await fetch(`/api/user/profile`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ uid: user.uid, avatar }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.message || "Failed to update profile picture.");
+      setProfile(data.user);
+      // Keep the avatar in sync everywhere it is rendered (e.g. the topbar).
+      window.dispatchEvent(new CustomEvent("adbuzz:avatar-updated", { detail: { avatar: data.user?.avatar || null } }));
+      Swal.fire("Updated!", successMessage, "success");
+    } catch (err) {
+      Swal.fire("Error", err.message, "error");
+    } finally {
+      setAvatarSaving(false);
+    }
+  }
+
+  function handleAvatarChange(e) {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // allow selecting the same file again
+    if (!file) return;
+    if (!/^image\/(png|jpe?g|webp|gif)$/.test(file.type)) {
+      Swal.fire("Invalid file", "Please choose a PNG, JPG, WEBP or GIF image.", "warning");
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      Swal.fire("Too large", "Profile picture must be smaller than 2 MB.", "warning");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => saveAvatar(String(reader.result), "Your profile picture has been updated.");
+    reader.onerror = () => Swal.fire("Error", "Could not read the selected image.", "error");
+    reader.readAsDataURL(file);
+  }
+
+  function handleRemoveAvatar() {
+    Swal.fire({
+      title: "Remove profile picture?",
+      text: "Your account will go back to showing your initials.",
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonText: "Remove",
+      cancelButtonText: "Cancel",
+    }).then((result) => {
+      if (result.isConfirmed) saveAvatar(null, "Your profile picture has been removed.");
+    });
+  }
+
   if (authLoading) return <div className="max-w-7xl mx-auto px-4 py-10 text-slate-600 font-medium">Loading profile...</div>;
 
   if (isLoading) return <SkeletonProfile />;
@@ -471,6 +527,36 @@ export default function ProfilePage() {
         <div className="lg:col-span-2">
           <form onSubmit={handleUpdate} className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
             <h2 className="text-lg font-bold text-slate-900 mb-6">Personal Information</h2>
+
+            <div className="flex items-center gap-4 mb-6 pb-6 border-b border-slate-100">
+              {profile?.avatar ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={profile.avatar} alt="Profile picture" className="h-16 w-16 rounded-full object-cover border border-slate-200" />
+              ) : (
+                <div className="flex h-16 w-16 items-center justify-center rounded-full overflow-hidden text-xl font-bold text-white"
+                  style={{ background: `linear-gradient(135deg, ${settings?.primaryColor || "#135B9A"}, ${settings?.secondaryColor || "#F48E2B"})` }}>
+                  AB
+                </div>
+              )}
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-slate-900">Profile picture</p>
+                <p className="text-xs text-slate-500 mt-0.5">PNG, JPG, WEBP or GIF. Max 2 MB.</p>
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <button type="button" onClick={() => fileInputRef.current?.click()} disabled={avatarSaving}
+                    className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm hover:border-orange-400 hover:text-orange-600 transition disabled:opacity-50">
+                    {avatarSaving ? "Uploading..." : profile?.avatar ? "Change picture" : "Upload picture"}
+                  </button>
+                  {profile?.avatar && (
+                    <button type="button" onClick={handleRemoveAvatar} disabled={avatarSaving}
+                      className="rounded-lg px-3 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-50 transition disabled:opacity-50">
+                      Remove
+                    </button>
+                  )}
+                </div>
+                <input ref={fileInputRef} type="file" accept="image/png,image/jpeg,image/webp,image/gif" onChange={handleAvatarChange} className="hidden" aria-label="Upload profile picture" />
+              </div>
+            </div>
+
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Display Name</label>
