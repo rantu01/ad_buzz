@@ -41,12 +41,12 @@ const ALLOWED_TYPES = ["image/jpeg", "image/jpg", "image/png", "application/pdf"
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
 
 function accountLabel(acc) {
-  const name = acc?.metaAccountName || acc?.name || "Ad Account";
+  const name = acc?.displayName || acc?.metaAccountName || acc?.name || "Ad Account";
   const id = (acc?.metaAccountId || acc?.accountId || "").replace(/^act_/, "");
   return id ? `${name} (ID: ${id})` : name;
 }
 
-export default function NewTicketModal({ open, onClose, user, adAccounts = [], onCreated }) {
+export default function NewTicketModal({ open, onClose, user, adAccounts = [], onCreated, initialAccountId = null }) {
   const [step, setStep] = useState(1);
   const [category, setCategory] = useState("");
   const [accountRows, setAccountRows] = useState([""]);
@@ -62,14 +62,14 @@ export default function NewTicketModal({ open, onClose, user, adAccounts = [], o
     if (open) {
       setStep(1);
       setCategory("");
-      setAccountRows([""]);
+      setAccountRows([initialAccountId || ""]);
       setDescription("");
       setFiles([]);
       setErrors({});
       setSubmitting(false);
       setUploadProgress(0);
     }
-  }, [open]);
+  }, [open, initialAccountId]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
   if (!open) return null;

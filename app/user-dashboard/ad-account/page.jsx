@@ -1,12 +1,52 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import Swal from "sweetalert2";
+import {
+  CircleHelp,
+  Eye,
+  History,
+  Link2,
+  Megaphone,
+  MoreVertical,
+  Pencil,
+  RefreshCw,
+  X,
+} from "lucide-react";
 import { useAuth } from "@/app/Component/Auth/AuthProvider";
 import { useSettings } from "@/app/Component/Settings/SettingsProvider";
 import useSSE from "@/app/Component/Hooks/useSSE";
 import useAdAccountRealtime from "@/app/Component/Hooks/useAdAccountRealtime";
 import { formatDateTime } from "@/lib/dateFormat";
+import NewTicketModal from "@/app/user-dashboard/support-tickets/NewTicketModal";
+
+const MENU_WIDTH = 224;
+const MENU_HEIGHT = 310;
+
+function MenuItem({ icon: Icon, iconClassName, children, onClick }) {
+  return (
+    <button
+      type="button"
+      role="menuitem"
+      onClick={onClick}
+      className="flex w-full items-center gap-3 px-3.5 py-2 text-left text-sm text-slate-700 transition-colors hover:bg-slate-50 focus:bg-slate-50 focus:outline-none"
+    >
+      <Icon size={16} strokeWidth={2} className={`shrink-0 ${iconClassName || "text-slate-500"}`} />
+      <span>{children}</span>
+    </button>
+  );
+}
+
+function DetailRow({ label, value, mono = false, className = "" }) {
+  return (
+    <div>
+      <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">{label}</p>
+      <p className={`mt-1 text-sm text-slate-900 ${mono ? "font-mono" : ""} ${className}`}>{value ?? "—"}</p>
+    </div>
+  );
+}
 
 function timeAgo(date) {
   if (!date) return "\u2014";
@@ -34,6 +74,10 @@ export default function AdAccountPage() {
   const [topUpError, setTopUpError] = useState("");
 
   const [openMenuId, setOpenMenuId] = useState(null);
+  const [menuPos, setMenuPos] = useState({ top: 0, left: 0 });
+
+  const [detailsModal, setDetailsModal] = useState(null);
+  const [ticketModal, setTicketModal] = useState(null);
 
   const [historyModal, setHistoryModal] = useState(null);
   const [historyData, setHistoryData] = useState([]);
@@ -105,11 +149,20 @@ export default function AdAccountPage() {
 
   useEffect(() => {
     if (!openMenuId) return;
+    const close = () => setOpenMenuId(null);
     const handleClick = (e) => {
-      if (!e.target.closest('[data-menu]')) setOpenMenuId(null);
+      if (!e.target.closest('[data-menu]')) close();
     };
     document.addEventListener("click", handleClick);
-    return () => document.removeEventListener("click", handleClick);
+    // The menu is portalled to <body> so it escapes the table's overflow;
+    // keep it anchored to the trigger while the page or table scrolls.
+    window.addEventListener("scroll", close, true);
+    window.addEventListener("resize", close);
+    return () => {
+      document.removeEventListener("click", handleClick);
+      window.removeEventListener("scroll", close, true);
+      window.removeEventListener("resize", close);
+    };
   }, [openMenuId]);
 
   const totalBudget = adAccounts.reduce((s, a) => s + Number(a.metaSpendCap || a.spendCap || 0), 0);
@@ -173,6 +226,99 @@ export default function AdAccountPage() {
     }
   };
 
+  const closeMenu = () => setOpenMenuId(null);
+
+  const toggleMenu = (event, account) => {
+    if (openMenuId === account._id) {
+      closeMenu();
+      return;
+    }
+    const rect = event.currentTarget.getBoundingClientRect();
+    let top = rect.bottom + 6;
+    if (top + MENU_HEIGHT > window.innerHeight) {
+      top = Math.max(8, rect.top - MENU_HEIGHT - 6);
+    }
+    const left = Math.max(8, Math.min(rect.right - MENU_WIDTH, window.innerWidth - MENU_WIDTH - 8));
+    setMenuPos({ top, left });
+    setOpenMenuId(account._id);
+  };
+
+  // Campaigns and BM access have no implementation yet — keep them clickable.
+  const showComingSoon = (title) => {
+    Swal.fire({
+      icon: "info",
+      title,
+      text: "This action will be available soon.",
+      timer: 1800,
+      showConfirmButton: false,
+    });
+  };
+
+  const handleRefresh = async (account) => {
+    try {
+      const res = await fetch("/api/user/ad-accounts/refresh", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ uid: user.uid, accountId: account._id }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.message || "Refresh failed");
+      queryClient.invalidateQueries({ queryKey: ["user", "ad-accounts", uid] });
+      Swal.fire({
+        toast: true,
+        position: "top-end",
+        icon: "success",
+        title: "Refresh from Meta queued",
+        timer: 2000,
+        showConfirmButton: false,
+      });
+    } catch (err) {
+      Swal.fire("Refresh failed", err.message || "Something went wrong.", "error");
+    }
+  };
+
+  const handleRename = async (account) => {
+    const currentName = account.displayName || account.metaAccountName || account.name || "";
+    const { isConfirmed, value } = await Swal.fire({
+      title: "Rename ad account",
+      input: "text",
+      inputValue: currentName,
+      inputPlaceholder: "Enter a new name",
+      showCancelButton: true,
+      confirmButtonText: "Save",
+      confirmButtonColor: "#ea580c",
+      inputValidator: (v) => (!v || !v.trim() ? "Please enter a name." : null),
+    });
+    if (!isConfirmed) return;
+
+    const name = String(value).trim();
+    try {
+      const res = await fetch("/api/user/ad-accounts/rename", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ uid: user.uid, accountId: account._id, name }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.message || "Rename failed");
+      queryClient.setQueryData(["user", "ad-accounts", uid], (old) =>
+        Array.isArray(old)
+          ? old.map((a) => (a._id === account._id ? { ...a, name, metaAccountName: name, displayName: name } : a))
+          : old
+      );
+      queryClient.invalidateQueries({ queryKey: ["user", "ad-accounts", uid] });
+      Swal.fire({
+        toast: true,
+        position: "top-end",
+        icon: "success",
+        title: "Ad account renamed",
+        timer: 2000,
+        showConfirmButton: false,
+      });
+    } catch (err) {
+      Swal.fire("Rename failed", err.message || "Something went wrong.", "error");
+    }
+  };
+
   if (authLoading) return <div className="max-w-7xl mx-auto px-4 py-10 text-slate-600 font-medium">Loading ad accounts...</div>;
 
   if (isLoading) {
@@ -217,6 +363,8 @@ export default function AdAccountPage() {
       </div>
     );
   }
+
+  const menuAccount = adAccounts.find((a) => a._id === openMenuId) || null;
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-8">
@@ -323,7 +471,9 @@ export default function AdAccountPage() {
                 const metaBalanceDollars = Number(acc.metaBalance || 0);
                 return (
                   <tr key={acc._id} className="hover:bg-slate-50/60 transition-colors">
-                    <td className="py-4 pr-4 font-medium text-slate-900 max-w-[220px] truncate">{acc.metaAccountName || acc.name}</td>
+                    <td className="py-4 pr-4 font-medium text-slate-900 max-w-[220px] truncate" title={acc.displayName || acc.metaAccountName || acc.name}>
+                      {acc.displayName || acc.metaAccountName || acc.name}
+                    </td>
                     <td className="py-4 pr-4 font-mono text-xs text-blue-600">ID: {(acc.metaAccountId || acc.accountId || "").replace(/^act_/, "")}</td>
                     <td className="py-4 pr-4">
                       {getStatusBadge(acc.status, acc.metaStatusLabel)}
@@ -354,21 +504,15 @@ export default function AdAccountPage() {
                         </button>
                         <div className="relative" data-menu>
                           <button
-                            onClick={() => setOpenMenuId(openMenuId === acc._id ? null : acc._id)}
-                            className="text-slate-400 hover:text-slate-600 px-1.5 py-1 text-lg font-bold leading-none rounded-lg hover:bg-slate-100 transition"
+                            type="button"
+                            aria-label={`Actions for ${acc.displayName || acc.metaAccountName || acc.name}`}
+                            aria-haspopup="menu"
+                            aria-expanded={openMenuId === acc._id}
+                            onClick={(e) => toggleMenu(e, acc)}
+                            className="inline-flex items-center justify-center p-1.5 text-slate-400 rounded-lg hover:text-slate-600 hover:bg-slate-100 transition"
                           >
-                            ⋮
+                            <MoreVertical size={18} />
                           </button>
-                          {openMenuId === acc._id && (
-                            <div data-menu className="absolute right-0 top-full mt-1 w-36 bg-white border border-slate-200 rounded-xl shadow-lg z-50 py-1 overflow-hidden">
-                              <button
-                                onClick={() => { setOpenMenuId(null); openHistory(acc); }}
-                                className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 transition"
-                              >
-                                History
-                              </button>
-                            </div>
-                          )}
                         </div>
                       </div>
                     </td>
@@ -540,6 +684,131 @@ export default function AdAccountPage() {
           </div>
         </div>
       )}
+
+      {openMenuId && menuAccount && createPortal(
+        <div
+          data-menu
+          role="menu"
+          aria-label="Ad account actions"
+          className="fixed z-[60] w-56 max-w-[calc(100vw-1rem)] rounded-xl border border-slate-200 bg-white py-1.5 shadow-xl"
+          style={{ top: menuPos.top, left: menuPos.left }}
+        >
+          <MenuItem
+            icon={Eye}
+            iconClassName="text-sky-500"
+            onClick={() => { closeMenu(); setDetailsModal(menuAccount); }}
+          >
+            View Details
+          </MenuItem>
+          <MenuItem
+            icon={Megaphone}
+            iconClassName="text-purple-600"
+            onClick={() => { closeMenu(); showComingSoon("Campaigns"); }}
+          >
+            Campaigns
+          </MenuItem>
+          <MenuItem
+            icon={History}
+            iconClassName="text-amber-500"
+            onClick={() => { closeMenu(); openHistory(menuAccount); }}
+          >
+            Top-up history
+          </MenuItem>
+
+          <div className="my-1 border-t border-slate-100" role="separator" />
+
+          <MenuItem
+            icon={RefreshCw}
+            iconClassName="text-blue-500"
+            onClick={() => { closeMenu(); handleRefresh(menuAccount); }}
+          >
+            Refresh from Meta
+          </MenuItem>
+
+          <div className="my-1 border-t border-slate-100" role="separator" />
+
+          <MenuItem
+            icon={Link2}
+            iconClassName="text-sky-500"
+            onClick={() => { closeMenu(); showComingSoon("BM access"); }}
+          >
+            BM access
+          </MenuItem>
+          {/* <MenuItem
+            icon={Pencil}
+            iconClassName="text-slate-500"
+            onClick={() => { closeMenu(); handleRename(menuAccount); }}
+          >
+            Rename
+          </MenuItem> */}
+          <MenuItem
+            icon={CircleHelp}
+            iconClassName="text-slate-600"
+            onClick={() => { closeMenu(); setTicketModal(menuAccount); }}
+          >
+            Support ticket
+          </MenuItem>
+        </div>,
+        document.body
+      )}
+
+      {detailsModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-4 max-h-[85vh] overflow-y-auto">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200">
+              <div>
+                <h2 className="text-lg font-bold text-slate-900">Ad Account Details</h2>
+                <p className="text-sm text-slate-500 mt-0.5">{detailsModal.displayName || detailsModal.metaAccountName || detailsModal.name}</p>
+              </div>
+              <button
+                onClick={() => setDetailsModal(null)}
+                aria-label="Close"
+                className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-100 transition"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="p-6">
+              <div className="flex items-center gap-2 mb-5">
+                <span className="text-sm text-slate-500">Meta status</span>
+                {getStatusBadge(detailsModal.status, detailsModal.metaStatusLabel)}
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-5">
+                <DetailRow label="Meta Account ID" value={detailsModal.metaAccountId || detailsModal.accountId || "—"} mono className="break-all" />
+                <DetailRow label="Currency" value={detailsModal.currency || "USD"} />
+                <DetailRow
+                  label="Remaining balance"
+                  value={detailsModal.remainingBalance == null ? "N/A" : `${detailsModal.currency || "USD"} $${formatMoney(detailsModal.remainingBalance)}`}
+                  className="font-semibold"
+                />
+                <DetailRow label="Spend cap" value={`$${formatMoney(detailsModal.metaSpendCap ?? detailsModal.spendCap ?? 0)}`} />
+                <DetailRow label="Amount spent" value={`$${formatMoney(detailsModal.metaAmountSpent ?? detailsModal.spent ?? 0)}`} />
+                <DetailRow label="Meta balance" value={detailsModal.metaBalance == null ? "N/A" : `$${formatMoney(detailsModal.metaBalance)}`} />
+                <DetailRow label="Prepaid balance" value={detailsModal.prepaidBalance == null ? "N/A" : `$${formatMoney(detailsModal.prepaidBalance)}`} />
+                <DetailRow label="Last refreshed" value={detailsModal.lastSyncedAt ? formatDateTime(detailsModal.lastSyncedAt) : "—"} />
+              </div>
+            </div>
+
+            <div className="px-6 py-4 border-t border-slate-200 shrink-0 flex justify-end">
+              <button
+                onClick={() => setDetailsModal(null)}
+                className="px-4 py-2 border border-slate-200 text-slate-700 text-sm font-medium rounded-xl hover:bg-slate-50 transition"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <NewTicketModal
+        open={Boolean(ticketModal)}
+        onClose={() => setTicketModal(null)}
+        user={user}
+        adAccounts={adAccounts}
+        initialAccountId={ticketModal?._id || null}
+      />
     </div>
   );
 }

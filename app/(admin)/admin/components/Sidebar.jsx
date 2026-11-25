@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import React from "react";
-import { LayoutGrid, Users, User, X, DollarSign, History, Megaphone, RefreshCw, MessageSquare, BarChart3, Settings, LifeBuoy, TrendingUp, CreditCard, ArrowUpCircle, ShieldCheck, ChevronDown, Bell, CircleHelp, MessageCircle } from "lucide-react";
+import { LayoutGrid, Users, User, X, DollarSign, History, Megaphone, RefreshCw, MessageSquare, BarChart3, Settings, LifeBuoy, TrendingUp, CreditCard, ArrowUpCircle, ShieldCheck, ChevronDown, Bell, CircleHelp, MessageCircle, ClipboardList } from "lucide-react";
 import { useSettings } from "@/app/Component/Settings/SettingsProvider";
 import { useAdmin } from "./AdminProvider";
 import { useTicketAlerts } from "./TicketAlertProvider";
@@ -23,6 +23,7 @@ const ICON_MAP = {
   "balance-logs": History,
   "top-up-insights": TrendingUp,
   "ad-accounts-topup": ArrowUpCircle,
+  "ad-account-requests": ClipboardList,
   reports: BarChart3,
   "meta-api": RefreshCw,
   whatsapp: MessageSquare,
@@ -36,6 +37,7 @@ const ALL_NAV = [
   { label: "Overview", href: "/admin", key: "overview" },
   { label: "Ad Accounts Insights", href: "/admin/ad-accounts", key: "ad-accounts" },
   { label: "Ad Accounts TopUp", href: "/admin/ad-accounts-topup", key: "ad-accounts-topup" },
+  { label: "Ad Account Request", href: "/admin/ad-account-requests", key: "ad-account-requests" },
   { label: "Deposit Verification", href: "/admin/deposits", key: "deposits" },
   { label: "Support Tickets", href: "/admin/support-tickets", key: "support-tickets" },
   { label: "Payment Methods", href: "/admin/payment-methods", key: "payment-methods" },
@@ -96,6 +98,7 @@ export default function DashboardSidebar({ open, onClose }) {
     "overview",
     "ad-accounts",
     "ad-accounts-topup",
+    "ad-account-requests",
     "deposits",
     "support-tickets",
     "payment-methods",

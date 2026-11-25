@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState, useEffect } from "react";
-import { Home, ListChecks, User, CreditCard, X, AppWindowMac, DollarSign, ChevronDown, LifeBuoy, Bell, CircleHelp, MessageCircle } from "lucide-react";
+import { Home, ListChecks, User, CreditCard, X, AppWindowMac, DollarSign, ChevronDown, LifeBuoy, Bell, CircleHelp, MessageCircle, FilePlus2 } from "lucide-react";
 import { useSettings } from "@/app/Component/Settings/SettingsProvider";
 import { useUserAlerts } from "./UserAlertProvider";
 import { useAuth } from "@/app/Component/Auth/AuthProvider";
@@ -12,6 +12,7 @@ import useSSE from "@/app/Component/Hooks/useSSE";
 const navTop = [
     { label: "Dashboard", href: "/user-dashboard", icon: AppWindowMac },
     { label: "Ad Account Topup", href: "/user-dashboard/ad-account", icon: ListChecks },
+    { label: "Ad Account Request", href: "/user-dashboard/ad-account-request", icon: FilePlus2 },
     // { label: "Need Help?", href: "https://wa.me/message/JPEP3WIO5LALA1", icon: LifeBuoy },
 ];
 

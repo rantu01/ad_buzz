@@ -76,6 +76,17 @@ export default function UserTopbar({ onToggle }) {
                   router.push("/user-dashboard/support-tickets");
                   return;
                 }
+                // Ad account request updates open the exact referenced request.
+                if (n.refType === "ad_account_request" && n.refId) {
+                  markRead(String(n._id));
+                  try {
+                    if (typeof window !== "undefined") {
+                      window.sessionStorage.setItem("ab_open_ad_request", String(n.refId));
+                    }
+                  } catch { /* navigation still works */ }
+                  router.push(n.link || "/user-dashboard/ad-account-request");
+                  return;
+                }
                 // Deposit + every other type opens its relevant page via
                 // the stored link (deposits -> Payment-History).
                 if (n.refType === "deposit") {

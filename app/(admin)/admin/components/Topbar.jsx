@@ -58,6 +58,16 @@ export default function DashboardTopbar({ onToggle }) {
             goToTicket(n);
             return;
         }
+        if (n.refType === "ad_account_request" && n.refId) {
+            markNotifRead(String(n._id));
+            try {
+                if (typeof window !== "undefined") {
+                    window.sessionStorage.setItem("ab_open_admin_ad_request", String(n.refId));
+                }
+            } catch { /* navigation still works */ }
+            router.push(n.link || "/admin/ad-account-requests");
+            return;
+        }
         if (n.refType === "deposit" && n.refId) {
             markNotifRead(String(n._id));
             try {
