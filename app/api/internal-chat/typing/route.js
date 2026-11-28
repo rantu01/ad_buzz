@@ -16,12 +16,15 @@ export async function POST(request) {
   const conv = await getConversationForParticipant(String(body.conversationId || ""), auth.uid);
   if (!conv) return NextResponse.json({ success: false, message: "Conversation not found" }, { status: 404 });
 
-  const receiverId = conv.participants.find((uid) => uid !== auth.uid);
-  emitToUser(receiverId, "internal:typing", {
+  const payload = {
     conversationId: conv.conversationId,
     uid: auth.uid,
     typing: Boolean(body.typing),
     system: "internal",
-  });
+  };
+  // Direct messages notify the peer; group messages notify all other members.
+  for (const uid of conv.participants || []) {
+    if (uid !== auth.uid) emitToUser(uid, "internal:typing", payload);
+  }
   return NextResponse.json({ success: true });
 }

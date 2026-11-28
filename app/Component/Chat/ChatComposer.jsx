@@ -2,6 +2,7 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import { Paperclip, Smile, Mic, Send, X, Square, Trash2, Loader2 } from "lucide-react";
+import ChatReplyPreview from "./ChatReplyPreview";
 
 const EMOJIS = [
   "😀", "😁", "😂", "🤣", "😊", "😍", "😘", "🤔",
@@ -9,7 +10,7 @@ const EMOJIS = [
   "😡", "✅", "❌", "⭐", "💬", "📞", "📎",
 ];
 
-export default function ChatComposer({ uid, uploadUrl = "/api/user/chat/attachments", onSend, disabled = false, placeholder = "Type your message" }) {
+export default function ChatComposer({ uid, uploadUrl = "/api/user/chat/attachments", onSend, disabled = false, placeholder = "Type your message", replyTo = null, onCancelReply }) {
   const [text, setText] = useState("");
   const [attachments, setAttachments] = useState([]);
   const [uploading, setUploading] = useState(false);
@@ -114,7 +115,9 @@ export default function ChatComposer({ uid, uploadUrl = "/api/user/chat/attachme
           attachments: [data.attachment],
           voiceMetadata: { duration: recordSeconds },
           clientId: `v_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+          replyToMessageId: replyTo?.messageId || null,
         });
+        onCancelReply?.();
         setAudioBlob(null);
         setAudioUrl(null);
         setRecordSeconds(0);
@@ -141,9 +144,11 @@ export default function ChatComposer({ uid, uploadUrl = "/api/user/chat/attachme
         attachments: hasAttachments ? attachments : [],
         voiceMetadata: null,
         clientId: `c_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+        replyToMessageId: replyTo?.messageId || null,
       });
       setText("");
       setAttachments([]);
+      onCancelReply?.();
     } catch (e) {
       alert("Send failed");
     } finally {
@@ -192,8 +197,14 @@ export default function ChatComposer({ uid, uploadUrl = "/api/user/chat/attachme
     };
   }, [showEmoji]);
 
+  const replyToMessageId = replyTo?.messageId;
+  useEffect(() => {
+    if (replyToMessageId) textareaRef.current?.focus();
+  }, [replyToMessageId]);
+
   return (
     <div className="border-t border-slate-200 bg-white p-3">
+      {replyTo && <ChatReplyPreview message={replyTo} onCancel={onCancelReply} />}
       {attachments.length > 0 && (
         <div className="mb-2 flex flex-wrap gap-2">
           {attachments.map((a) => (

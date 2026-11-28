@@ -6,6 +6,7 @@ import { Search, Users, X } from "lucide-react";
 import { useAuth } from "@/app/Component/Auth/AuthProvider";
 import { authFetch } from "@/lib/authFetch";
 import useSSE from "@/app/Component/Hooks/useSSE";
+import ChatParticipantAvatar from "@/app/Component/Chat/ChatParticipantAvatar";
 
 export default function NewChatModal({ open, onClose, onSelect }) {
   const { user } = useAuth();
@@ -108,10 +109,7 @@ export default function NewChatModal({ open, onClose, onSelect }) {
               onClick={() => pick(person)}
               className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition hover:bg-slate-50"
             >
-              <span className="relative flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-slate-200 text-sm font-bold text-slate-600">
-                {person.avatar ? <img src={person.avatar} alt="" loading="lazy" decoding="async" className="h-full w-full object-cover" /> : (person.displayName || "?").charAt(0).toUpperCase()}
-                <span className={`absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full border-2 border-white ${person.online ? "bg-green-500" : "bg-slate-300"}`} />
-              </span>
+              <ChatParticipantAvatar person={person} size="h-10 w-10" online={person.online} showOfflineIndicator />
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-sm font-semibold text-slate-900">{person.displayName}</span>
                 <span className="block truncate text-xs text-slate-500">{person.designation || person.email}</span>

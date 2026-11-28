@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { Bell, CheckCheck, Volume2, VolumeX } from "lucide-react";
 import { formatDateTime } from "@/lib/dateFormat";
 
@@ -24,6 +24,27 @@ export default function NotificationBell({
   icon = null,
 }) {
   const [open, setOpen] = useState(false);
+  const menuRef = useRef(null);
+  const triggerRef = useRef(null);
+  const panelId = useId();
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const closeOnOutsidePointer = (event) => {
+      if (!menuRef.current?.contains(event.target)) setOpen(false);
+    };
+    const closeOnEscape = (event) => {
+      if (event.key !== "Escape") return;
+      setOpen(false);
+      triggerRef.current?.focus();
+    };
+    document.addEventListener("pointerdown", closeOnOutsidePointer);
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("pointerdown", closeOnOutsidePointer);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [open]);
 
   const toggle = () => {
     const willOpen = !open;
@@ -37,12 +58,15 @@ export default function NotificationBell({
   };
 
   return (
-    <div className="relative">
+    <div className="relative" ref={menuRef}>
       <button
+        ref={triggerRef}
         type="button"
         onClick={toggle}
         className="relative inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-[#E5DED6] bg-white text-slate-600 shadow-sm transition hover:border-secondary hover:text-primary-700"
         aria-label={title}
+        aria-expanded={open}
+        aria-controls={panelId}
       >
         <Bell size={20} />
         {unread > 0 && (
@@ -52,9 +76,7 @@ export default function NotificationBell({
         )}
       </button>
       {open && (
-        <>
-          <div className="fixed inset-0 z-30" onClick={() => setOpen(false)} />
-          <div className="absolute right-0 z-40 mt-2 w-80 max-w-[calc(100vw-2rem)] overflow-hidden rounded-2xl border border-[#E5DED6] bg-white shadow-xl">
+          <div id={panelId} className="absolute right-0 z-40 mt-2 w-80 max-w-[calc(100vw-2rem)] overflow-hidden rounded-2xl border border-[#E5DED6] bg-white shadow-xl">
             <div className="border-b border-slate-100 px-4 py-3">
               <div className="flex items-center justify-between gap-2">
                 <p className="text-sm font-semibold text-slate-900">{title}</p>
@@ -134,7 +156,6 @@ export default function NotificationBell({
               </button>
             )}
           </div>
-        </>
       )}
     </div>
   );

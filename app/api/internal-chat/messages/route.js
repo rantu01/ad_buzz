@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireInternalChatUser } from "@/lib/internalChatAuth";
-import { getConversationForParticipant, createInternalMessage, personOf } from "@/lib/internalChatModel";
+import { getConversationForParticipant, createInternalMessage } from "@/lib/internalChatModel";
 import { emitToUser } from "@/lib/sseManager";
 
 const ALLOWED_TYPES = new Set(["text", "image", "file", "voice"]);
@@ -19,7 +19,10 @@ export async function POST(request) {
   const conv = await getConversationForParticipant(conversationId, auth.uid);
   if (!conv) return NextResponse.json({ success: false, message: "Conversation not found" }, { status: 404 });
 
-  const receiverId = conv.participants.find((uid) => uid !== auth.uid);
+  const isGroup = conv.type === "group";
+  // Groups have no single receiver: every other member's unread counter is
+  // incremented by the model's audienceUids path.
+  const receiverId = isGroup ? null : conv.participants.find((uid) => uid !== auth.uid);
   const messageType = ALLOWED_TYPES.has(body.messageType) ? body.messageType : "text";
   const content = String(body.content || "").slice(0, 8000);
   const attachments = Array.isArray(body.attachments)
@@ -37,7 +40,7 @@ export async function POST(request) {
 
   try {
     // Snapshot comes from the conversation document: no extra user lookup.
-    const senderSnapshot = personOf(conv, auth.uid) || {
+    const senderSnapshot = {
       uid: auth.uid,
       displayName: auth.user.displayName || auth.user.email || "User",
       role: auth.role,
@@ -53,6 +56,8 @@ export async function POST(request) {
       attachments,
       voiceMetadata: messageType === "voice" ? { duration: Number(body.voiceMetadata?.duration) || 0 } : null,
       clientId: body.clientId,
+      replyToMessageId: body.replyToMessageId,
+      audienceUids: isGroup ? conv.participants : null,
     });
     // Echo only once to both members; a retried send is not re-broadcast.
     if (!duplicate) {
@@ -66,6 +71,7 @@ export async function POST(request) {
     }
     return NextResponse.json({ success: true, message, clientId: message.clientId || null, duplicate });
   } catch (error) {
-    return NextResponse.json({ success: false, message: error.message || "Could not send message" }, { status: 500 });
+    const status = error.code === "INVALID_REPLY" ? 400 : 500;
+    return NextResponse.json({ success: false, message: error.message || "Could not send message" }, { status });
   }
 }

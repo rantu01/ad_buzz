@@ -19,6 +19,8 @@ const DEFAULT_BOTTOM_THRESHOLD = 80;
  *   infinite scroll), once per in-flight request.
  *
  * Pass the scrollable element through `listRef` and attach `onScroll` to it.
+ * For conditionally mounted lists, attach the returned `listRefCallback` so
+ * resize observation starts when the list enters the DOM.
  */
 export function useChatScroll({
   listRef,
@@ -34,6 +36,7 @@ export function useChatScroll({
 } = {}) {
   const atBottomRef = useRef(true);
   const [atBottom, setAtBottom] = useState(true);
+  const [listRefVersion, setListRefVersion] = useState(0);
   const metricsRef = useRef({ scrollTop: 0, scrollHeight: 0 });
   const firstIdRef = useRef("");
   const countRef = useRef(0);
@@ -42,6 +45,12 @@ export function useChatScroll({
   // One older-page request per scroll position: a single user scroll can emit
   // several native scroll events, which must not fan out into duplicate calls.
   const loadAnchorRef = useRef(null);
+  const bottomRef = useRef(null);
+
+  const listRefCallback = useCallback((element) => {
+    listRef.current = element;
+    setListRefVersion((version) => version + 1);
+  }, [listRef]);
 
   useEffect(() => {
     olderRef.current = { onLoadOlder, hasOlder, loadingOlder };
@@ -82,7 +91,11 @@ export function useChatScroll({
     if (!el) return;
     atBottomRef.current = true;
     setAtBottom(true);
-    if (typeof el.scrollTo === "function") el.scrollTo({ top: el.scrollHeight, behavior });
+    const sentinel = bottomRef.current;
+    const target = sentinel
+      ? el.scrollTop + sentinel.getBoundingClientRect().bottom - el.getBoundingClientRect().bottom
+      : el.scrollHeight;
+    if (typeof el.scrollTo === "function") el.scrollTo({ top: Math.max(0, target), behavior });
     else el.scrollTop = el.scrollHeight;
   }, [listRef]);
 
@@ -137,12 +150,48 @@ export function useChatScroll({
     captureMetrics();
   }, [messages, firstId, loading, conversationKey, activityKey, captureMetrics]);
 
+  useIsomorphicLayoutEffect(() => {
+    const el = listRef.current;
+    if (!el || !atBottomRef.current) return;
+    el.scrollTop = el.scrollHeight;
+    captureMetrics();
+  }, [listRefVersion, listRef, captureMetrics]);
+
+  useEffect(() => {
+    const el = listRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return undefined;
+    const resizeObserver = new ResizeObserver(() => {
+      if (atBottomRef.current) {
+        el.scrollTop = el.scrollHeight;
+        captureMetrics();
+      } else {
+        syncAtBottom();
+      }
+    });
+    const observeChildren = () => {
+      resizeObserver.disconnect();
+      resizeObserver.observe(el);
+      for (const child of el.children) resizeObserver.observe(child);
+    };
+    observeChildren();
+    const mutationObserver = typeof MutationObserver === "undefined"
+      ? null
+      : new MutationObserver(observeChildren);
+    mutationObserver?.observe(el, { childList: true });
+    return () => {
+      mutationObserver?.disconnect();
+      resizeObserver.disconnect();
+    };
+  }, [listRefVersion, listRef, captureMetrics, syncAtBottom]);
+
   return {
     atBottom,
     showScrollToLatest: !atBottom,
     handleScroll,
     scrollToLatest,
     pinToBottom,
+    bottomRef,
+    listRefCallback,
   };
 }
 

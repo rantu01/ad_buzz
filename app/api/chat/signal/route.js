@@ -1,49 +1,99 @@
 ﻿import { NextResponse } from "next/server";
-import { getUserByUid } from "@/lib/chatModel";
-import { emitToUser, emitToChannel, isUidOnline } from "@/lib/sseManager";
+import { getConversationById, getCall, getUserByUid } from "@/lib/chatModel";
+import { resolveChatCaller } from "@/lib/chatCallAuth";
+import { isStaffRole } from "@/lib/permissions";
+import { emitToUser, isUidOnline, getCallClaim } from "@/lib/sseManager";
 
-// System A (customer support chat) signaling. Event names and payload fields
-// are unchanged; the additions are a staff-channel fallback for unreachable
-// targets (customers could not reach an admin when no staff was assigned) and
-// an "accepted" claim marker so the first accepting staff wins.
+const SIGNAL_TYPES = new Set(["offer", "answer", "ice", "end", "cancel", "reject", "missed", "accepted", "media", "renegotiate", "renegotiate-answer"]);
+
+// System A (customer support chat) signaling.
+//
+// Incoming-call privacy rule: signals are delivered to ONE explicitly resolved
+// recipient uid. There is no channel fallback — broadcasting an offer to
+// `admin:chat` meant every staff tab on every device rang for a call meant for
+// a single person. Unreachable targets simply report `delivered: false`; the
+// caller's existing timeout records the call as missed.
 export async function POST(request) {
   try {
     const body = await request.json();
-    const { fromUid, toUid, conversationId, callId, type, payload } = body || {};
-    if (!fromUid || !type) return NextResponse.json({ success: false, message: "fromUid and type required" }, { status: 400 });
-    const fromUser = await getUserByUid(fromUid);
-    if (!fromUser) return NextResponse.json({ success: false, message: "Sender not found" }, { status: 404 });
+    const { conversationId, callId, type, payload } = body || {};
+    const caller = await resolveChatCaller(request, body?.fromUid);
+    if (!caller.ok) return NextResponse.json({ success: false, message: caller.message }, { status: caller.status });
+
+    const signalType = String(type || "");
+    if (!SIGNAL_TYPES.has(signalType)) {
+      return NextResponse.json({ success: false, message: "Invalid signal type" }, { status: 400 });
+    }
+    const toUid = body?.toUid ? String(body.toUid) : "";
+    if (!toUid) {
+      return NextResponse.json({ success: false, message: "Signal recipient is required", delivered: false }, { status: 400 });
+    }
+    if (toUid === caller.uid) {
+      return NextResponse.json({ success: false, message: "Invalid signal recipient", delivered: false }, { status: 403 });
+    }
+
+    const conv = conversationId ? await getConversationById(String(conversationId)) : null;
+    if (!conv) return NextResponse.json({ success: false, message: "Conversation not found" }, { status: 404 });
+    const call = callId ? await getCall(String(callId)) : null;
+    if (callId && (!call || call.conversationId !== conv.conversationId)) {
+      return NextResponse.json({ success: false, message: "Invalid call" }, { status: 403 });
+    }
+
+    const callerIsStaff = isStaffRole(caller.user.role);
+    const participantUids = new Set([
+      conv.customerId,
+      conv.assignedStaffId,
+      call?.initiatorId,
+      call?.receiverId,
+    ].filter(Boolean));
+    // Membership is authoritative: neither a customer nor a staff member may
+    // inject a signal into a conversation/call they are not part of.
+    if (!participantUids.has(caller.uid)) {
+      return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 403 });
+    }
+    if (call && ![call.initiatorId, call.receiverId].includes(caller.uid)) {
+      return NextResponse.json({ success: false, message: "Not your call" }, { status: 403 });
+    }
+    if (!participantUids.has(toUid)) {
+      return NextResponse.json({ success: false, message: "Invalid signal recipient", delivered: false }, { status: 403 });
+    }
+    const targetUser = await getUserByUid(toUid);
+    if (!targetUser) {
+      return NextResponse.json({ success: false, message: "Recipient not found", delivered: false }, { status: 404 });
+    }
+    // A customer may only signal staff and vice versa.
+    if (callerIsStaff === isStaffRole(targetUser.role)) {
+      return NextResponse.json({ success: false, message: "Invalid signal recipient", delivered: false }, { status: 403 });
+    }
+    // An accepted call already has an owner; a second device of the recipient
+    // must not create a duplicate call session.
+    if (signalType === "offer") {
+      const claim = getCallClaim(String(callId || ""));
+      if (claim && claim.byUid !== toUid) {
+        return NextResponse.json({ success: false, message: "Call already answered", delivered: false }, { status: 409 });
+      }
+    }
+    if (!isUidOnline(toUid)) {
+      return NextResponse.json({ success: false, message: "Recipient is offline", delivered: false }, { status: 200 });
+    }
+
     const eventPayload = {
-      fromUid,
+      fromUid: caller.uid,
       toUid,
-      conversationId,
-      callId,
-      type,
-      payload,
-      fromName: fromUser.displayName || fromUser.email,
-      fromAvatar: fromUser.avatar || "",
-      fromRole: fromUser.role,
+      conversationId: conv.conversationId,
+      callId: callId || null,
+      callType: call?.callType || null,
+      type: signalType,
+      payload: payload || {},
+      fromName: caller.user.displayName || caller.user.email,
+      fromAvatar: caller.user.avatar || "",
+      fromRole: caller.user.role,
+      fromClientId: body?.fromClientId || null,
+      toClientId: body?.toClientId || null,
       system: "customer",
     };
-
-    const reachable = Boolean(toUid) && isUidOnline(toUid);
-    if (reachable) {
-      emitToUser(toUid, "chat:signal", eventPayload);
-    } else if (toUid || type === "offer") {
-      // No live SSE client for the assigned staff (or no assignment at all):
-      // let any online staff member pick the call up from the staff channel.
-      emitToChannel("admin:chat", "chat:signal", eventPayload);
-    }
-
-    // Claim marker: other staff tabs with the same incoming call stop ringing.
-    if (type === "accepted" && callId) {
-      emitToChannel("admin:chat", "chat:signal", {
-        ...eventPayload,
-        type: "accepted",
-        byUid: fromUid,
-      });
-    }
-    return NextResponse.json({ success: true, delivered: reachable || (!toUid && type === "offer") });
+    emitToUser(toUid, "chat:signal", eventPayload, body?.toClientId ? { onlyClientId: String(body.toClientId) } : undefined);
+    return NextResponse.json({ success: true, delivered: true });
   } catch (error) {
     return NextResponse.json({ success: false, message: error.message }, { status: 500 });
   }

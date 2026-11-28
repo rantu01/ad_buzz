@@ -4,6 +4,8 @@ import { getUserByUid } from "@/lib/chatModel";
 
 const ALLOWED_TYPES = [
   "image/jpeg","image/png","image/webp","image/gif",
+  "video/mp4","video/webm","video/quicktime",
+  "audio/webm","audio/mpeg","audio/mp4","audio/ogg","audio/wav",
   "application/pdf","text/plain",
   "application/msword","application/vnd.openxmlformats-officedocument.wordprocessingml.document",
   "application/vnd.ms-excel","application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",

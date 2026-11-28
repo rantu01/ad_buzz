@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requireInternalChatUser } from "@/lib/internalChatAuth";
 import {
   getOrCreateInternalConversation,
+  getInternalUsersByUids,
   listInternalConversations,
   internalUnreadCount,
   peerOf,
@@ -11,8 +12,18 @@ import { isStaffRole } from "@/lib/permissions";
 import { ROLE_LABELS } from "@/lib/rbacCatalog";
 import { isUidOnline, emitToUser } from "@/lib/sseManager";
 
-function withPeer(conv, uid) {
-  const peer = peerOf(conv, uid);
+function withPeer(conv, uid, currentUsers = new Map()) {
+  const snapshot = peerOf(conv, uid);
+  const current = snapshot ? currentUsers.get(snapshot.uid) : null;
+  const peer = snapshot
+    ? {
+        ...snapshot,
+        displayName: current?.displayName || snapshot.displayName,
+        email: current?.email || snapshot.email,
+        role: current?.role || snapshot.role,
+        avatar: current ? current.avatar || null : snapshot.avatar || null,
+      }
+    : null;
   return {
     ...conv,
     peer: peer
@@ -68,7 +79,9 @@ export async function POST(request) {
 
   try {
     const conv = await getOrCreateInternalConversation(auth.uid, peerUid);
-    const result = withPeer(conv, auth.uid);
+    const peerUid = conv.participants.find((uid) => uid !== auth.uid);
+    const currentUsers = await getInternalUsersByUids([peerUid]);
+    const result = withPeer(conv, auth.uid, new Map(currentUsers.map((user) => [user.uid, user])));
     // Both participants converge on the same conversation; tell the other one
     // immediately so their list updates without a refresh. Send the raw
     // document: each client resolves "peer" from its own uid.

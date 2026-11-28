@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireInternalChatUser } from "@/lib/internalChatAuth";
 import { getConversationForParticipant, getInternalMessagesPage } from "@/lib/internalChatModel";
+import { getUsersByUids, attachCurrentAvatars } from "@/lib/chatModel";
 
 export async function GET(request, { params }) {
   const auth = await requireInternalChatUser(request);
@@ -15,6 +16,7 @@ export async function GET(request, { params }) {
     before: searchParams.get("before"),
     limit: searchParams.get("limit") || 25,
   });
+  const users = await getUsersByUids(messages.map((message) => message.senderId));
   // Additive fields: existing clients that only read `messages` are unchanged.
-  return NextResponse.json({ success: true, messages, hasMore, nextCursor });
+  return NextResponse.json({ success: true, messages: attachCurrentAvatars(messages, users), hasMore, nextCursor });
 }

@@ -126,8 +126,294 @@ body {
   display: none;
 }
 
+/* ------------------------------------------------------------------ *
+ * Chat message layout — one source of truth for every chat page.
+ * Keeping these rules here (instead of repeating slightly different
+ * Tailwind utilities in each bubble component) prevents the alignment,
+ * width and spacing conflicts that break the conversation view.
+ * ------------------------------------------------------------------ */
+.chat-msg-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.625rem;
+  width: 100%;
+  margin: 0 0 0.75rem;
+}
+
+.chat-msg-row--in { justify-content: flex-start; }
+.chat-msg-row--out { justify-content: flex-end; }
+
+.chat-msg-avatar {
+  flex: 0 0 2rem;
+  width: 2rem;
+  max-width: 2rem;
+  min-width: 0;
+}
+
+.chat-msg-content {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  min-width: 0;
+  /* Never wider than the row minus the 2rem avatar + 0.625rem gap.
+     The 34rem cap keeps bubbles readable on very wide screens. */
+  max-width: min(75%, 34rem, calc(100% - 2.75rem));
+  border-radius: 1rem;
+  transition: background-color 150ms ease;
+}
+
+.chat-msg-row--out .chat-msg-content { align-items: flex-end; }
+.chat-msg-content--highlighted { background-color: #fef3c7; }
+
+.chat-msg-bubble {
+  min-width: 0;
+  max-width: 100%;
+  padding: 0.5rem 0.75rem;
+  border-radius: 1rem;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+  font-size: 0.875rem;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.chat-msg-row--in .chat-msg-bubble {
+  background-color: #eef2f7;
+  color: #0f172a;
+  border-bottom-left-radius: 0.25rem;
+}
+
+.chat-msg-row--out .chat-msg-bubble {
+  background-color: #f97316;
+  color: #ffffff;
+  border-bottom-right-radius: 0.25rem;
+}
+
+.chat-msg-bubble > * { max-width: 100%; }
+.chat-msg-bubble img,
+.chat-msg-bubble video,
+.chat-msg-bubble audio {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+.chat-msg-bubble a { text-decoration: underline; text-underline-offset: 2px; }
+
+/* Consistent, responsive media thumbnails in every chat surface. The viewer
+   (ChatMediaLightbox) shows the uncropped original at its natural ratio. */
+.chat-msg-media-button {
+  width: min(15rem, 60vw);
+  max-width: 100%;
+  background-color: #e2e8f0;
+}
+.chat-msg-media-thumb {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 4 / 3;
+  max-height: 14rem;
+  object-fit: cover;
+}
+.chat-msg-media-video {
+  max-height: 14rem;
+  aspect-ratio: 16 / 9;
+  object-fit: contain;
+  background-color: #0f172a;
+}
+@media (max-width: 640px) {
+  .chat-msg-media-button { width: min(13rem, 68vw); }
+  .chat-msg-media-thumb { max-height: 11rem; }
+  .chat-msg-media-video { max-height: 11rem; }
+}
+
+.chat-msg-text {
+  margin: 0;
+  min-width: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.chat-msg-attachment {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+  max-width: 100%;
+  padding: 0.375rem 0.625rem;
+  border-radius: 0.5rem;
+  border: 1px solid rgba(148, 163, 184, 0.5);
+  font-size: 0.875rem;
+  text-decoration: underline;
+}
+
+.chat-msg-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  min-height: 1rem;
+  margin-top: 0.25rem;
+  font-size: 0.625rem;
+  line-height: 1rem;
+  color: #94a3b8;
+}
+
+.chat-msg-row--out .chat-msg-meta { justify-content: flex-end; }
+
+/* Reply stays available but does not inflate the timestamp row. */
+.chat-msg-action {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1rem;
+  height: 1rem;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 150ms ease;
+}
+
+.chat-msg-action::after {
+  content: "";
+  position: absolute;
+  inset: -0.875rem;
+}
+
+.chat-msg-row:hover .chat-msg-action,
+.chat-msg-row:focus-within .chat-msg-action,
+.chat-msg-action:focus-visible { opacity: 1; }
+
+.chat-msg-action:focus-visible {
+  outline: 2px solid #f97316;
+  outline-offset: 2px;
+  border-radius: 9999px;
+}
+
+@media (hover: none) {
+  .chat-msg-action { opacity: 0.8; }
+}
+
+.chat-msg-spinner {
+  width: 0.75rem;
+  height: 0.75rem;
+  border-radius: 9999px;
+  border: 2px solid #cbd5e1;
+  border-top-color: #f97316;
+  animation: chat-spin 700ms linear infinite;
+}
+
+@keyframes chat-spin {
+  to { transform: rotate(360deg); }
+}
+
+.chat-msg-retry {
+  font-weight: 600;
+  color: #ef4444;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+}
+
+.chat-msg-retry:hover { text-decoration: underline; }
+
+.chat-msg-event-reply {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin-top: 0.25rem;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #64748b;
+  cursor: pointer;
+}
+
+.chat-msg-event-reply:hover { color: #c2410c; }
+
+.chat-msg-drag-hint {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin-top: 0.25rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: #c2410c;
+}
+
+/* Admin chat: one viewport-sized shell. Only the message list and the
+   conversation list scroll; the page itself never grows past the viewport. */
+.admin-chat-layout {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  height: calc(100dvh - 7.25rem); /* topbar + main padding on small screens */
+  min-height: 0;
+  overflow: hidden;
+}
+main:has(.admin-chat-layout) { overflow: hidden; }
+
+.admin-chat-side {
+  display: none;
+  width: 100%;
+  min-width: 0;
+  max-height: none;
+  flex-shrink: 0;
+}
+/* Mobile conversation-list drawer. */
+.admin-chat-side--open {
+  display: flex;
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  width: 100%;
+  border: 0;
+  border-radius: 0;
+}
+
+.admin-chat-main { min-height: 0; }
+.admin-chat-info { display: none; min-width: 0; }
+
+/* Scrollbars stay accessible to wheel/touch but are visually hidden. */
+.admin-chat-scroll { scrollbar-width: none; -ms-overflow-style: none; }
+.admin-chat-scroll::-webkit-scrollbar { display: none; }
+
+@media (min-width: 768px) {
+  .admin-chat-layout {
+    flex-direction: row;
+    gap: 1rem;
+  }
+  .admin-chat-side,
+  .admin-chat-side--open {
+    display: flex;
+    position: static;
+    z-index: auto;
+    width: 18rem;
+    border: 1px solid #e2e8f0;
+    border-radius: 1rem;
+  }
+}
+
+@media (min-width: 1024px) {
+  .admin-chat-layout { height: calc(100dvh - 8.75rem); }
+}
+
+@media (min-width: 1280px) {
+  .admin-chat-info {
+    display: block;
+    width: 18rem;
+    overflow-y: auto;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .chat-interface * {
+  .chat-interface *,
+  .internal-chat *,
+  .chat-msg-row * {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;

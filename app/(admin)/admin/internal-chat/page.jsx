@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, MessageCirclePlus, Phone, Video, Search, RefreshCw, Users } from "lucide-react";
+import { ArrowLeft, MessageCirclePlus, Phone, Video, Search, RefreshCw, Users, Info, UsersRound } from "lucide-react";
 import Swal from "sweetalert2";
 import { useAuth } from "@/app/Component/Auth/AuthProvider";
 import { authFetch } from "@/lib/authFetch";
@@ -11,12 +11,16 @@ import useSSE from "@/app/Component/Hooks/useSSE";
 import useChatScroll from "@/app/Component/Hooks/useChatScroll";
 import useChatPagination from "@/app/Component/Hooks/useChatPagination";
 import { useCentralCall } from "@/app/Component/Chat/CentralCallProvider";
+import ChatParticipantAvatar from "@/app/Component/Chat/ChatParticipantAvatar";
 import ScrollToLatestButton from "@/app/Component/Chat/ScrollToLatestButton";
 import ChatHistoryStatus from "@/app/Component/Chat/ChatHistoryStatus";
+import ChatInfoPanel from "@/app/Component/Chat/ChatInfoPanel";
+import ChatDateSeparator from "@/app/Component/Chat/ChatDateSeparator";
 import { CHAT_PAGE_SIZE, dedupeMessages, mergeOlderMessages, upsertMessage } from "@/lib/chatPagination";
 import InternalMessageBubble from "./components/InternalMessageBubble";
 import InternalComposer from "./components/InternalComposer";
 import NewChatModal from "./components/NewChatModal";
+import GroupMembersModal from "./components/GroupMembersModal";
 import CallHistoryPanel from "./components/CallHistoryPanel";
 
 const LIST_REFRESH_MS = 120;
@@ -54,6 +58,17 @@ function unreadOf(conv, uid) {
 // every participant's snapshot so each side resolves "peer" independently.
 function normalizeConv(conv, uid) {
   if (!conv) return conv;
+  if (conv.type === "group") {
+    const avatar = conv.avatarAttachmentId
+      ? `/api/internal-chat/groups/${encodeURIComponent(conv.conversationId)}/photo?uid=${encodeURIComponent(uid || "")}`
+      : null;
+    return {
+      ...conv,
+      isGroup: true,
+      peer: { uid: null, displayName: conv.name || "Group", role: "group", avatar },
+      unread: unreadOf(conv, uid),
+    };
+  }
   const people = conv.people || [];
   const peer = people.find((p) => p.uid !== uid) || null;
   return {
@@ -65,19 +80,6 @@ function normalizeConv(conv, uid) {
   };
 }
 
-const Avatar = React.memo(function Avatar({ person, size = "h-9 w-9", online = false }) {
-  const name = person?.displayName || person?.email || "?";
-  return (
-    <span className={`relative flex ${size} shrink-0 items-center justify-center overflow-hidden rounded-full bg-slate-200 text-xs font-bold text-slate-600`}>
-      {person?.avatar ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img src={person.avatar} alt="" loading="lazy" decoding="async" className="h-full w-full object-cover" />
-      ) : name.charAt(0).toUpperCase()}
-      {online && <span className="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full border-2 border-white bg-green-500" />}
-    </span>
-  );
-});
-
 const ConversationItem = React.memo(function ConversationItem({ conv, active, online, onOpen }) {
   return (
     <button
@@ -85,10 +87,17 @@ const ConversationItem = React.memo(function ConversationItem({ conv, active, on
       onClick={() => onOpen(conv)}
       className={`flex w-full items-center gap-3 border-b border-slate-100 px-3 py-3 text-left transition hover:bg-slate-50 ${active ? "bg-orange-50" : ""}`}
     >
-      <Avatar person={conv.peer} online={online} />
+      {conv.isGroup ? (
+        <span className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-orange-100 text-orange-700">
+          <UsersRound size={18} aria-hidden="true" />
+          <span className="absolute -bottom-0.5 -right-0.5 rounded-full bg-white px-1 text-[9px] font-bold text-slate-600">{(conv.participants || []).length}</span>
+        </span>
+      ) : (
+        <ChatParticipantAvatar person={conv.peer} online={online} />
+      )}
       <span className="min-w-0 flex-1">
         <span className="flex items-center justify-between gap-2">
-          <span className="truncate text-sm font-semibold text-slate-900">{conv.peer?.displayName || "Colleague"}</span>
+          <span className="truncate text-sm font-semibold text-slate-900">{conv.peer?.displayName || (conv.isGroup ? "Group" : "Colleague")}</span>
           <span className="shrink-0 text-[10px] text-slate-400">{conv.pending ? "Opening..." : timeLabel(conv.lastMessageAt)}</span>
         </span>
         <span className="flex items-center justify-between gap-2">
@@ -99,7 +108,7 @@ const ConversationItem = React.memo(function ConversationItem({ conv, active, on
             <span className="flex h-5 min-w-[20px] shrink-0 items-center justify-center rounded-full bg-red-500 px-1.5 text-[11px] font-bold text-white">{conv.unread > 99 ? "99+" : conv.unread}</span>
           ) : null}
         </span>
-        <span className="block truncate text-[10px] text-slate-400">{designationOf(conv.peer)}</span>
+        <span className="block truncate text-[10px] text-slate-400">{conv.isGroup ? `${(conv.participants || []).length} members` : designationOf(conv.peer)}</span>
       </span>
     </button>
   );
@@ -116,14 +125,21 @@ export default function InternalChatPage() {
   const [calls, setCalls] = useState([]);
   const [search, setSearch] = useState("");
   const [directoryOpen, setDirectoryOpen] = useState(false);
+  const [groupModal, setGroupModal] = useState(null); // { mode: "create" | "add" }
   const [loadingList, setLoadingList] = useState(true);
   const [loadingThread, setLoadingThread] = useState(false);
   const [loadingCalls, setLoadingCalls] = useState(false);
   const [error, setError] = useState("");
   const [typingPeer, setTypingPeer] = useState(false);
   const [onlineMap, setOnlineMap] = useState({});
+  const [replyTo, setReplyTo] = useState(null);
+  const [infoOpen, setInfoOpen] = useState(false);
+  const [highlightedMessageId, setHighlightedMessageId] = useState(null);
 
   const listRef = useRef(null);
+  const messagesRef = useRef(messages);
+  const replyToRef = useRef(replyTo);
+  const highlightTimerRef = useRef(null);
   const searchRef = useRef("");
   const selectedRef = useRef(null);
   const activeIdRef = useRef(null);
@@ -141,6 +157,8 @@ export default function InternalChatPage() {
   const pendingConvRef = useRef(new Map());
 
   useEffect(() => { searchRef.current = search; }, [search]);
+  useEffect(() => { messagesRef.current = messages; }, [messages]);
+  useEffect(() => { replyToRef.current = replyTo; }, [replyTo]);
   useEffect(() => { conversationsRef.current = conversations; }, [conversations]);
   useEffect(() => { onlineRef.current = onlineMap; }, [onlineMap]);
   useEffect(() => { selectedRef.current = selected; }, [selected]);
@@ -183,7 +201,7 @@ export default function InternalChatPage() {
     });
   }, [loadOlder, getState]);
 
-  const { showScrollToLatest, handleScroll, scrollToLatest, pinToBottom } = useChatScroll({
+  const { showScrollToLatest, handleScroll, scrollToLatest, pinToBottom, bottomRef, listRefCallback } = useChatScroll({
     listRef,
     messages,
     conversationKey: selected?.conversationId,
@@ -250,6 +268,8 @@ export default function InternalChatPage() {
     activeIdRef.current = cid;
     selectedRef.current = conv;
     setSelected(conv);
+    setReplyTo(null);
+    setInfoOpen(false);
     setTypingPeer(false);
     pinToBottom();
 
@@ -282,6 +302,35 @@ export default function InternalChatPage() {
     scheduleListRefresh();
   }, [api, loadCalls, scheduleListRefresh, pinToBottom, applyPage, restorePage, getState]);
 
+  const jumpToMessage = useCallback(async (messageId) => {
+    const findTarget = () => Array.from(listRef.current?.querySelectorAll("[data-message-id]") || [])
+      .find((element) => element.dataset.messageId === messageId);
+    let target = findTarget();
+    while (!target) {
+      const older = await loadOlder();
+      if (!older?.length) break;
+      setMessages((prev) => mergeOlderMessages(prev, older));
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      target = findTarget();
+    }
+    if (!target) return;
+    target.scrollIntoView({ behavior: "smooth", block: "center" });
+    setHighlightedMessageId(messageId);
+    clearTimeout(highlightTimerRef.current);
+    highlightTimerRef.current = setTimeout(() => setHighlightedMessageId(null), 1400);
+  }, [loadOlder]);
+
+  const fetchSharedPage = useCallback(async ({ kind, before, limit }) => {
+    const params = new URLSearchParams({ kind, limit: String(limit) });
+    if (before) params.set("before", before);
+    const data = await api(`/api/internal-chat/conversations/${encodeURIComponent(selected?.conversationId || "")}/shared?${params}`);
+    return data;
+  }, [api, selected?.conversationId]);
+
+  const getAttachmentUrl = useCallback((attachment) =>
+    `/api/internal-chat/attachments?attachmentId=${encodeURIComponent(attachment?.id || "")}&conversationId=${encodeURIComponent(selected?.conversationId || "")}&uid=${encodeURIComponent(uid || "")}`,
+  [selected?.conversationId, uid]);
+
   // Keep the active cache current for messages sent/received while viewing.
   // Preserve the pagination cursor / hasOlder flag stored alongside it.
   useEffect(() => {
@@ -300,6 +349,7 @@ export default function InternalChatPage() {
   useEffect(() => () => {
     clearTimeout(typingTimeoutRef.current);
     clearTimeout(refreshTimerRef.current);
+    clearTimeout(highlightTimerRef.current);
   }, []);
 
   // SSE reconnect: refresh only the newest page. Older pages already loaded
@@ -357,9 +407,44 @@ export default function InternalChatPage() {
         scheduleListRefresh();
         if (data?.conversationId === activeIdRef.current) loadCalls(data.conversationId, true);
       }
+      if (type === "internal:reaction" && data?.messageId) {
+        setMessages((prev) => prev.map((message) => message.messageId === data.messageId
+          ? { ...message, reactions: data.reactions || [] }
+          : message));
+      }
+      if (type === "internal:group" && data?.conversationId) {
+        if (["deleted", "deleted-for-me", "member-removed", "member-left"].includes(data.action)) {
+          const removedUid = data.removedUid || data.byUid;
+          if (data.action === "deleted-for-me" || data.action === "deleted") {
+            setConversations((prev) => prev.filter((c) => c.conversationId !== data.conversationId));
+            if (activeIdRef.current === data.conversationId) {
+              activeIdRef.current = null;
+              selectedRef.current = null;
+              setSelected(null);
+              setMessages([]);
+            }
+          } else if (removedUid === uid && activeIdRef.current === data.conversationId) {
+            activeIdRef.current = null;
+            selectedRef.current = null;
+            setSelected(null);
+            setMessages([]);
+          }
+        } else if (data.conversation) {
+          const normalized = normalizeConv(data.conversation, uid);
+          setConversations((prev) => prev.some((c) => c.conversationId === normalized.conversationId)
+            ? prev.map((c) => c.conversationId === normalized.conversationId ? normalized : c)
+            : [normalized, ...prev]);
+          if (activeIdRef.current === normalized.conversationId) {
+            selectedRef.current = normalized;
+            setSelected(normalized);
+          }
+        }
+        scheduleListRefresh();
+      }
     },
     // Reconnect: reconcile anything missed while the stream was down.
     onReconnect: () => {
+      setOnlineMap({});
       loadConversations();
       refreshActiveMessages();
       if (activeIdRef.current) loadCalls(activeIdRef.current, true);
@@ -456,6 +541,9 @@ export default function InternalChatPage() {
       content: payload.content || "",
       attachments: payload.attachments || [],
       voiceMetadata: payload.voiceMetadata || null,
+      replyTo: payload.replyToMessageId
+        ? messagesRef.current.find((message) => message.messageId === payload.replyToMessageId) || replyToRef.current
+        : null,
       readBy: [uid],
       createdAt: new Date().toISOString(),
       status: "sending",
@@ -490,6 +578,107 @@ export default function InternalChatPage() {
     setMessages((prev) => prev.map((m) => m.clientId === message.clientId ? { ...m, status: "sending" } : m));
     sendMessage({ ...payload, clientId: message.clientId }).catch(() => {});
   }, [sendMessage]);
+
+  const reactToMessage = useCallback(async (message, emoji) => {
+    const conv = selectedRef.current;
+    if (!conv || !message?.messageId) return;
+    const current = messagesRef.current.find((m) => m.messageId === message.messageId)?.reactions || [];
+    const mine = current.find((r) => r.uid === uid && r.emoji === emoji);
+    const optimistic = mine ? current.filter((r) => r !== mine) : [...current, { uid, emoji, at: new Date().toISOString() }];
+    setMessages((prev) => prev.map((m) => m.messageId === message.messageId ? { ...m, reactions: optimistic } : m));
+    try {
+      const data = await api("/api/internal-chat/reactions", {
+        method: "POST",
+        body: JSON.stringify({ conversationId: conv.conversationId, messageId: message.messageId, emoji }),
+      });
+      setMessages((prev) => prev.map((m) => m.messageId === message.messageId ? { ...m, reactions: data.reactions || [] } : m));
+    } catch {
+      setMessages((prev) => prev.map((m) => m.messageId === message.messageId ? { ...m, reactions: current } : m));
+    }
+  }, [api, uid]);
+
+  const createGroup = useCallback(async ({ name, description, memberUids, photo }) => {
+    const data = await api("/api/internal-chat/groups", {
+      method: "POST",
+      body: JSON.stringify({ name, description, memberUids }),
+    });
+    let conversation = normalizeConv(data.conversation, uid);
+    if (photo) {
+      const form = new FormData();
+      form.append("file", photo);
+      const res = await authFetch(`/api/internal-chat/groups/${encodeURIComponent(conversation.conversationId)}/photo`, { method: "POST", body: form }, user);
+      const photoData = await res.json().catch(() => ({}));
+      if (res.ok && photoData.conversation) conversation = normalizeConv(photoData.conversation, uid);
+      else if (!res.ok) throw new Error(photoData.message || "Could not upload group photo");
+    }
+    setConversations((prev) => [conversation, ...prev.filter((c) => c.conversationId !== conversation.conversationId)]);
+    openConversation(conversation);
+    return conversation;
+  }, [api, uid, user, openConversation]);
+
+  const addGroupMembers = useCallback(async (memberUids) => {
+    const conv = selectedRef.current;
+    if (!conv?.isGroup) return;
+    const data = await api(`/api/internal-chat/groups/${encodeURIComponent(conv.conversationId)}/members`, {
+      method: "POST",
+      body: JSON.stringify({ uids: memberUids }),
+    });
+    const normalized = normalizeConv(data.conversation, uid);
+    setConversations((prev) => prev.map((c) => c.conversationId === normalized.conversationId ? normalized : c));
+    setSelected(normalized);
+    selectedRef.current = normalized;
+  }, [api, uid]);
+
+  const groupAction = useCallback(async (action, payload) => {
+    const conv = selectedRef.current;
+    if (!conv?.isGroup) return;
+    const base = `/api/internal-chat/groups/${encodeURIComponent(conv.conversationId)}`;
+    try {
+      if (action === "add-members") { setGroupModal({ mode: "add" }); return; }
+      if (action === "details") {
+        await api(base, { method: "PATCH", body: JSON.stringify(payload) });
+      } else if (action === "photo") {
+        const form = new FormData();
+        form.append("file", payload);
+        const res = await authFetch(`${base}/photo`, { method: "POST", body: form }, user);
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data.success) throw new Error(data.message || "Could not update group photo");
+      } else if (action === "remove" || action === "role") {
+        const url = action === "remove" ? `${base}/members?uid=${encodeURIComponent(payload)}` : `${base}/members`;
+        const options = action === "remove"
+          ? { method: "DELETE" }
+          : { method: "PATCH", body: JSON.stringify(payload) };
+        await api(url, options);
+      } else if (action === "leave" || action === "delete") {
+        const confirmed = await Swal.fire({
+          title: action === "delete" ? "Delete this group?" : "Leave this group?",
+          text: action === "delete" ? "Messages and call history in this group will be removed. This cannot be undone." : "You will no longer receive messages from this group.",
+          icon: "warning",
+          showCancelButton: true,
+          confirmButtonColor: "#dc2626",
+          confirmButtonText: action === "delete" ? "Delete group" : "Leave group",
+        });
+        if (!confirmed.isConfirmed) return;
+        await api(action === "delete" ? base : `${base}/leave`, { method: action === "delete" ? "DELETE" : "POST" });
+        setConversations((prev) => prev.filter((c) => c.conversationId !== conv.conversationId));
+        activeIdRef.current = null;
+        selectedRef.current = null;
+        setSelected(null);
+        setMessages([]);
+        return;
+      }
+      const fresh = await api(`/api/internal-chat/conversations?limit=50`);
+      const match = (fresh.items || []).find((c) => c.conversationId === conv.conversationId);
+      if (match) {
+        const normalized = normalizeConv(match, uid);
+        setConversations((prev) => prev.map((c) => c.conversationId === normalized.conversationId ? normalized : c));
+        setSelected(normalized);
+        selectedRef.current = normalized;
+      }
+    } catch (error) {
+      Swal.fire({ toast: true, position: "top-end", icon: "error", title: error.message || "Could not update group", timer: 4000, showConfirmButton: false });
+    }
+  }, [api, uid, user]);
 
   const notifyTyping = useCallback(async (typing) => {
     const conv = selectedRef.current;
@@ -540,6 +729,9 @@ export default function InternalChatPage() {
           <button type="button" onClick={() => setDirectoryOpen(true)} className="mt-2 flex w-full items-center justify-center gap-2 rounded-lg bg-orange-500 px-3 py-2 text-sm font-semibold text-white transition hover:bg-orange-600">
             <MessageCirclePlus size={16} /> New conversation
           </button>
+          <button type="button" onClick={() => setGroupModal({ mode: "create" })} className="mt-2 flex w-full items-center justify-center gap-2 rounded-lg border border-orange-300 px-3 py-2 text-sm font-semibold text-orange-700 transition hover:bg-orange-50">
+            <UsersRound size={16} /> New group
+          </button>
         </div>
         <div className="flex-1 overflow-y-auto">
           {loadingList && (
@@ -578,20 +770,26 @@ export default function InternalChatPage() {
           <>
             <header className="flex items-center gap-2 border-b border-slate-200 px-3 py-3 sm:px-4">
               <button type="button" onClick={() => { setSelected(null); selectedRef.current = null; activeIdRef.current = null; }} className="rounded-full p-2 text-slate-500 hover:bg-slate-100 md:hidden" aria-label="Back to conversations"><ArrowLeft size={18} /></button>
-              <Avatar person={selected.peer} size="h-10 w-10" online={peerOnline} />
+              {selected.isGroup ? (
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-orange-100 text-orange-700"><UsersRound size={19} aria-hidden="true" /></span>
+              ) : (
+                <ChatParticipantAvatar person={selected.peer} size="h-10 w-10" online={peerOnline} />
+              )}
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-bold text-slate-900">{selected.peer?.displayName || "Colleague"}</p>
                 <p className="truncate text-xs text-slate-500">
                   {selected.pending ? <span className="text-orange-600">Opening conversation...</span>
+                    : selected.isGroup ? `${(selected.participants || []).length} members${typingPeer ? " · typing..." : ""}`
                     : typingPeer ? <span className="text-orange-600">typing...</span>
                     : `${designationOf(selected.peer)}${peerOnline ? " · Online" : " · Offline"}`}
                 </p>
               </div>
-              <button type="button" onClick={() => startCall("voice")} disabled={selected.pending} className="rounded-full p-2 text-slate-600 hover:bg-slate-100 disabled:opacity-40" aria-label="Voice call"><Phone size={18} /></button>
-              <button type="button" onClick={() => startCall("video")} disabled={selected.pending} className="rounded-full p-2 text-slate-600 hover:bg-slate-100 disabled:opacity-40" aria-label="Video call"><Video size={18} /></button>
+              <button type="button" onClick={() => startCall("voice")} disabled={selected.pending || selected.isGroup} className="rounded-full p-2 text-slate-600 hover:bg-slate-100 disabled:opacity-40" aria-label="Voice call"><Phone size={18} /></button>
+              <button type="button" onClick={() => startCall("video")} disabled={selected.pending || selected.isGroup} className="rounded-full p-2 text-slate-600 hover:bg-slate-100 disabled:opacity-40" aria-label="Video call"><Video size={18} /></button>
+              <button type="button" onClick={() => setInfoOpen((open) => !open)} disabled={selected.pending} className="rounded-full p-2 text-slate-600 hover:bg-slate-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-orange-500 disabled:opacity-40" aria-label="Shared conversation information" aria-expanded={infoOpen}><Info size={18} /></button>
             </header>
             <div className="relative min-h-0 flex-1">
-              <div ref={listRef} onScroll={handleScroll} className="h-full overflow-y-auto bg-slate-50 px-3 py-3 sm:px-4">
+              <div ref={listRefCallback} onScroll={handleScroll} className="h-full overflow-y-auto bg-slate-50 px-3 py-3 sm:px-4">
                 <ChatHistoryStatus loadingOlder={loadingOlder} showBeginning={!hasOlder && !loadingThread && messages.length > 0} />
                 {hasOlder && !loadingThread && !loadingOlder && (
                   <div className="mb-3 flex justify-center">
@@ -616,20 +814,45 @@ export default function InternalChatPage() {
                     <p className="text-xs">Say hello to {selected.peer?.displayName || "your colleague"}.</p>
                   </div>
                 )}
-                {!loadingThread && messages.map((m) => (
-                  <InternalMessageBubble
-                    key={m.clientId || m.messageId}
-                    message={m}
-                    isOwn={m.senderId === uid}
-                    conversationId={selected.conversationId}
-                    uid={uid}
-                    onRetry={retryMessage}
-                  />
-                ))}
+                {!loadingThread && messages.map((m, index) => {
+                  const previous = messages[index - 1];
+                  const changedDay = !previous || new Date(previous.createdAt).toDateString() !== new Date(m.createdAt).toDateString();
+                  return (
+                    <React.Fragment key={m.clientId || m.messageId}>
+                      {changedDay && <ChatDateSeparator value={m.createdAt} />}
+                      <InternalMessageBubble
+                        message={m}
+                        isOwn={m.senderId === uid}
+                        showSender={m.senderId !== uid}
+                        senderOnline={m.senderId !== uid && peerOnline}
+                        conversationId={selected.conversationId}
+                        uid={uid}
+                        onRetry={retryMessage}
+                        onReply={setReplyTo}
+                        onJumpToMessage={jumpToMessage}
+                        highlighted={highlightedMessageId === m.messageId}
+                        onReact={reactToMessage}
+                        showSenderName={Boolean(selected.isGroup)}
+                      />
+                    </React.Fragment>
+                  );
+                })}
+                <div ref={bottomRef} aria-hidden="true" />
               </div>
               <ScrollToLatestButton visible={showScrollToLatest} onClick={() => scrollToLatest()} />
+              {infoOpen && <ChatInfoPanel
+                conversationKey={selected.conversationId}
+                fetchPage={fetchSharedPage}
+                getAttachmentUrl={getAttachmentUrl}
+                onClose={() => setInfoOpen(false)}
+                group={selected.isGroup ? selected : null}
+                uid={uid}
+                onlineMap={onlineMap}
+                canManage={Boolean(selected.isGroup && (selected.admins || []).includes(uid))}
+                onGroupAction={groupAction}
+              />}
             </div>
-            <InternalComposer onSend={sendMessage} onTyping={notifyTyping} disabled={selected.pending} />
+            <InternalComposer onSend={sendMessage} onTyping={notifyTyping} disabled={selected.pending} replyTo={replyTo} onCancelReply={() => setReplyTo(null)} />
           </>
         ) : (
           <div className="flex h-full flex-col items-center justify-center gap-2 text-slate-400">
@@ -646,7 +869,7 @@ export default function InternalChatPage() {
           <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
             <h3 className="text-sm font-bold text-slate-900">About</h3>
             <div className="mt-3 flex flex-col items-center text-center">
-              <Avatar person={selected.peer} size="h-14 w-14" online={peerOnline} />
+              <ChatParticipantAvatar person={selected.peer} size="h-14 w-14" online={peerOnline} />
               <p className="mt-2 text-sm font-semibold text-slate-900">{selected.peer?.displayName}</p>
               <p className="text-xs text-slate-500">{designationOf(selected.peer)}</p>
               <p className="mt-1 text-[11px] text-slate-400">{selected.peer?.email}</p>
@@ -661,6 +884,18 @@ export default function InternalChatPage() {
         open={directoryOpen}
         onClose={() => setDirectoryOpen(false)}
         onSelect={startConversation}
+      />
+      <GroupMembersModal
+        key={groupModal ? `${groupModal.mode}-open` : "group-closed"}
+        open={Boolean(groupModal)}
+        mode={groupModal?.mode || "create"}
+        group={selected}
+        api={api}
+        onClose={() => setGroupModal(null)}
+        onSubmit={async ({ name, description, memberUids, photo }) => {
+          if (groupModal?.mode === "create") return createGroup({ name, description, memberUids, photo });
+          return addGroupMembers(memberUids);
+        }}
       />
     </div>
   );

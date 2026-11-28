@@ -17,17 +17,29 @@ const GRANULAR_EVENTS = [
   "deposit.updated",
   "notify",
   "chat:message",
+  "chat:presence",
   "chat:signal",
   "chat:call",
+  "chat:call-status",
+  "chat:reaction",
   "chat:read",
   "internal:conversation",
   "internal:message",
   "internal:read",
   "internal:signal",
   "internal:call",
+  "internal:call-status",
+  "internal:reaction",
   "internal:typing",
   "internal:presence",
 ];
+
+// Per-tab connection id published by /api/events. Call signaling includes it
+// so a call can be claimed by exactly one device per recipient.
+const clientIds = new Map();
+export function getSseClientId(uid) {
+  return uid ? clientIds.get(uid) || null : null;
+}
 
 // Fast first retry (network blips should not leave chat stale for 15 s),
 // exponential backoff to a sane ceiling, small jitter to avoid thundering herd.
@@ -104,6 +116,10 @@ function createConnection(uid) {
         // Ignore malformed individual events without taking down the stream.
         return;
       }
+      if (data?.connected && data?.clientId) {
+        conn.clientId = data.clientId;
+        if (conn.uid) clientIds.set(conn.uid, data.clientId);
+      }
       if (type !== "message") conn.retryMs = SERVER_RETRY_MS;
       // One bad listener must never break delivery to the others.
       for (const listener of [...conn.listeners]) {
@@ -159,6 +175,7 @@ function createConnection(uid) {
       if (conn.reconnectTimer) clearTimeout(conn.reconnectTimer);
       conn.disconnectSource();
       if (connections.get(uid) === conn) connections.delete(uid);
+      if (conn.clientId && clientIds.get(uid) === conn.clientId) clientIds.delete(uid);
     },
   };
   return conn;

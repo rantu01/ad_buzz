@@ -1,7 +1,11 @@
 "use client";
 
-import React from "react";
-import { Check, CheckCheck, File, Play } from "lucide-react";
+import React, { useRef, useState } from "react";
+import { Check, CheckCheck, Play, Reply } from "lucide-react";
+import ChatMediaAttachment from "./ChatMediaAttachment";
+import MessageReactions from "./MessageReactions";
+import ChatReplyPreview from "./ChatReplyPreview";
+import ChatParticipantAvatar from "./ChatParticipantAvatar";
 
 function toValidDate(value) {
   if (!value) return null;
@@ -13,7 +17,9 @@ function formatTime(d) {
   const date = toValidDate(d);
   if (!date) return "";
   try {
-    return date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+    // Match the reference UI: "10:20 am" rather than "10:20 AM".
+    return date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit", hour12: true })
+      .replace(/\s*(AM|PM)\s*$/i, (_match, period) => ` ${period.toLowerCase()}`);
   } catch {
     return "";
   }
@@ -69,17 +75,59 @@ function callStatusLabel(meta, content) {
   return known || (key ? key.replace(/_/g, " ") : "Call");
 }
 
-function ChatMessageBubble({ message, isOwn, showSender = true, onRetry }) {
+function MessageMeta({ time, canReply, onReply, message, onRetry }) {
+  const { status, readBy } = message;
+  return (
+    <div className="chat-msg-meta">
+      <span>{time}</span>
+      {canReply && (
+        <button type="button" onClick={() => onReply(message)} className="chat-msg-action" aria-label="Reply to message">
+          <Reply size={13} aria-hidden="true" />
+        </button>
+      )}
+      {status === "sending" && (
+        <span className="chat-msg-spinner" aria-label="Sending message" />
+      )}
+      {status === "failed" && (
+        <button type="button" onClick={() => onRetry?.(message)} className="chat-msg-retry" aria-label="Retry sending message">Retry</button>
+      )}
+      {!["sending", "failed"].includes(status) && message.isOwn && ((readBy || []).length > 1
+        ? <CheckCheck size={12} className="text-blue-500" aria-label="Read" />
+        : <Check size={12} aria-label="Sent" />)}
+    </div>
+  );
+}
+
+function ChatMessageBubble({ message, isOwn, senderOnline = false, onRetry, onReply, onJumpToMessage, highlighted = false, uid, onReact }) {
   const m = message || {};
   const type = m.messageType || "text";
   const time = formatTime(m.createdAt);
+  const canReply = Boolean(onReply && m.messageId && !String(m.messageId).startsWith("tmp_") && m.status !== "sending");
+  const pointerStartRef = useRef(null);
+  const [dragging, setDragging] = useState(false);
+
+  const handlePointerDown = (event) => {
+    if (event.target.closest("button, a, input, audio, video")) return;
+    pointerStartRef.current = { x: event.clientX, y: event.clientY };
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+  };
+  const handlePointerUp = (event) => {
+    const start = pointerStartRef.current;
+    pointerStartRef.current = null;
+    setDragging(false);
+    if (!canReply || !start || Math.abs(event.clientY - start.y) > 40) return;
+    const delta = event.clientX - start.x;
+    if (Math.abs(delta) >= 64) onReply?.(m);
+  };
 
   if (type === "system_event") {
     return (
-      <div className="flex justify-center my-2">
+      <div data-message-id={m.messageId} className="flex justify-center my-2">
+        {m.replyTo && <ChatReplyPreview message={m.replyTo} onClick={() => onJumpToMessage?.(m.replyTo.messageId)} compact />}
         <span className="rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-500">
           {normalizeText(m.content) || type}
         </span>
+        {canReply && <button type="button" onClick={() => onReply(m)} className="chat-msg-action !opacity-100" aria-label="Reply to message"><Reply size={14} /></button>}
       </div>
     );
   }
@@ -102,8 +150,9 @@ function ChatMessageBubble({ message, isOwn, showSender = true, onRetry }) {
     }
 
     return (
-      <div className="flex justify-center px-2 py-1 my-2">
+      <div data-message-id={m.messageId} className="flex justify-center px-2 py-1 my-2">
         <div className="max-w-full rounded-2xl bg-slate-100 px-4 py-2 text-center text-xs text-slate-600 shadow-sm">
+          {m.replyTo && <ChatReplyPreview message={m.replyTo} onClick={() => onJumpToMessage?.(m.replyTo.messageId)} compact />}
           <div className="font-semibold text-slate-700">
             <span>{statusLabel}</span>
           </div>
@@ -126,90 +175,84 @@ function ChatMessageBubble({ message, isOwn, showSender = true, onRetry }) {
               )}
             </div>
           )}
+          {canReply && <button type="button" onClick={() => onReply(m)} className="chat-msg-event-reply" aria-label="Reply to message"><Reply size={13} /> Reply</button>}
         </div>
       </div>
     );
   }
 
-  const bubbleBase = isOwn
-    ? "bg-orange-500 text-white rounded-2xl rounded-br-sm"
-    : "bg-white text-slate-900 rounded-2xl rounded-bl-sm border border-slate-200";
-
   return (
-    <div className={`flex gap-2 mb-3 ${isOwn ? "justify-end" : "justify-start"}`}>
-      {!isOwn && showSender && (
-        <div className="flex-shrink-0">
-          {m.senderAvatar ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={m.senderAvatar} alt="" className="h-8 w-8 rounded-full object-cover" />
-          ) : (
-            <div className="h-8 w-8 rounded-full bg-slate-200 flex items-center justify-center text-xs font-bold text-slate-600">
-              {(m.senderNameSnapshot || "?").charAt(0).toUpperCase()}
-            </div>
-          )}
+    <div className={`chat-msg-row ${isOwn ? "chat-msg-row--out" : "chat-msg-row--in"}`}>
+      {!isOwn && (
+        <div className="chat-msg-avatar">
+          <ChatParticipantAvatar
+            person={{ displayName: m.senderNameSnapshot, avatar: m.senderAvatar }}
+            size="h-8 w-8"
+            online={senderOnline}
+          />
         </div>
       )}
-      <div className={`max-w-[75%] ${isOwn ? "items-end" : "items-start"} flex flex-col`}>
-        {!isOwn && showSender && (
-          <div className="mb-1 text-xs font-semibold text-slate-600">
-            {m.senderNameSnapshot}
-            {m.senderRole && m.senderRole !== "customer" && (
-              <span className="ml-1 text-[10px] font-normal text-slate-400">· {String(m.senderRole).replace(/_/g, " ")}</span>
-            )}
-          </div>
-        )}
-        <div className={`px-3 py-2 shadow-sm ${bubbleBase}`}>
+      <div
+        data-message-id={m.messageId}
+        className={`chat-msg-content ${highlighted ? "chat-msg-content--highlighted" : ""}`}
+        onPointerDown={handlePointerDown}
+        onPointerMove={(event) => {
+          if (pointerStartRef.current && Math.abs(event.clientX - pointerStartRef.current.x) > Math.abs(event.clientY - pointerStartRef.current.y) && Math.abs(event.clientX - pointerStartRef.current.x) > 12) setDragging(true);
+        }}
+        onPointerUp={handlePointerUp}
+        onPointerCancel={() => { pointerStartRef.current = null; setDragging(false); }}
+        style={{ touchAction: "pan-y" }}
+      >
+        <div className="chat-msg-bubble">
+          {m.replyTo && <ChatReplyPreview message={m.replyTo} onClick={() => onJumpToMessage?.(m.replyTo.messageId)} compact />}
           {type === "text" && (
-            <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">{m.content}</p>
+            <p className="chat-msg-text">
+              {String(m.content || "").split(/(https?:\/\/[^\s]+)/g).map((part, index) =>
+                /^https?:\/\//i.test(part)
+                  ? <a key={`${index}-${part}`} href={part.replace(/[.,!?;:]+$/, "")} target="_blank" rel="noreferrer">{part}</a>
+                  : part
+              )}
+            </p>
           )}
-          {type === "image" && m.attachments?.length ? (
+          {(type === "image" || type === "file") && m.attachments?.length ? (
             <div className="space-y-1">
               {m.attachments.map((a) => (
-                <a key={a.id} href={`/api/user/chat/attachments?attachmentId=${a.id}&uid=${m.senderId}`} target="_blank" rel="noreferrer">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={`/api/user/chat/attachments?attachmentId=${a.id}&uid=${m.senderId}`} alt={a.name} className="max-h-48 rounded-lg" />
-                </a>
+                <ChatMediaAttachment
+                  key={a.id}
+                  message={m}
+                  attachment={a}
+                  buildUrl={(attachment) => `/api/user/chat/attachments?attachmentId=${encodeURIComponent(attachment.id)}&uid=${encodeURIComponent(m.senderId || "")}`}
+                />
               ))}
-              {m.content && <p className="mt-1 text-sm">{m.content}</p>}
-            </div>
-          ) : null}
-          {type === "file" && m.attachments?.length ? (
-            <div className="space-y-1">
-              {m.attachments.map((a) => (
-                <a key={a.id} href={`/api/user/chat/attachments?attachmentId=${a.id}&uid=${m.senderId}`} target="_blank" rel="noreferrer" className="flex items-center gap-2 text-sm underline">
-                  <File size={14} /> {a.name} <span className="text-[10px] opacity-70">({Math.round((a.size||0)/1024)}KB)</span>
-                </a>
-              ))}
-              {m.content && <p className="mt-1 text-sm">{m.content}</p>}
+              {m.content && <p className="chat-msg-text mt-1">{m.content}</p>}
             </div>
           ) : null}
           {type === "voice" && (
-            <div className="flex items-center gap-2 min-w-[180px]">
+            <div className="flex items-center gap-2 min-w-[180px] max-w-full">
               <button className="rounded-full bg-white/20 p-1.5" aria-label="play">
                 <Play size={14} />
               </button>
-              <div className="flex-1">
+              <div className="min-w-0 flex-1">
                 <div className="h-1 rounded bg-white/30" />
                 <div className="mt-1 text-[10px] opacity-80">{m.voiceMetadata?.duration || 0}s</div>
               </div>
             </div>
           )}
           {type === "voice" && m.attachments?.length ? (
-            <audio controls src={`/api/user/chat/attachments?attachmentId=${m.attachments[0].id}&uid=${m.senderId}`} className="mt-1 max-w-full" />
+            <audio controls src={`/api/user/chat/attachments?attachmentId=${m.attachments[0].id}&uid=${m.senderId}`} className="mt-1 w-full" />
           ) : null}
-        </div>
-        <div className={`mt-1 flex items-center gap-1 text-[10px] text-slate-400 ${isOwn ? "justify-end" : "justify-start"}`}>
-          <span>{time}</span>
-          {m.status === "sending" && (
-            <span className="h-3 w-3 animate-spin rounded-full border-2 border-slate-300 border-t-orange-500" aria-label="Sending message" />
+          {onReact && !String(m.messageId || "").startsWith("tmp_") && (
+            <MessageReactions reactions={m.reactions} uid={uid} align={isOwn ? "right" : "left"} onReact={(emoji) => onReact(m, emoji)} />
           )}
-          {m.status === "failed" && (
-            <button type="button" onClick={() => onRetry?.(m)} className="font-semibold text-red-500 hover:underline" aria-label="Retry sending message">Retry</button>
-          )}
-          {!m.status && isOwn && (m.readBy && m.readBy.length > 1
-            ? <CheckCheck size={12} className="text-blue-500" />
-            : <Check size={12} />)}
         </div>
+        <MessageMeta
+          time={time}
+          canReply={canReply}
+          onReply={onReply}
+          onRetry={onRetry}
+          message={{ ...m, isOwn }}
+        />
+        {dragging && canReply && <span className="chat-msg-drag-hint" aria-live="polite"><Reply size={13} /> Release to reply</span>}
       </div>
     </div>
   );

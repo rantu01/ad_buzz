@@ -4,6 +4,7 @@ import SettingsProvider from "./Component/Settings/SettingsProvider";
 import AuthProvider from "./Component/Auth/AuthProvider";
 import QueryProvider from "./Component/QueryProvider";
 import CentralCallProvider from "./Component/Chat/CentralCallProvider";
+import ChatMediaProvider from "./Component/Chat/ChatMediaLightbox";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -31,7 +32,9 @@ export default function RootLayout({ children }) {
         <SettingsProvider>
           <AuthProvider>
             <QueryProvider>
-              <CentralCallProvider>{children}</CentralCallProvider>
+              <ChatMediaProvider>
+                <CentralCallProvider>{children}</CentralCallProvider>
+              </ChatMediaProvider>
             </QueryProvider>
           </AuthProvider>
         </SettingsProvider>

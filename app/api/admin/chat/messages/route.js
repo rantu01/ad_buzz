@@ -1,6 +1,5 @@
 ﻿import { NextResponse } from "next/server";
-import { getConversationById, getMessagesPage, createMessage, markRead } from "@/lib/chatModel";
-import { getUserByUid } from "@/lib/chatModel";
+import { getConversationById, getMessagesPage, createMessage, markRead, getUserByUid, getUsersByUids, attachCurrentAvatars } from "@/lib/chatModel";
 import { isStaffRole } from "@/lib/permissions";
 import { emitToUser, emitToChannel } from "@/lib/sseManager";
 import { ROLE_LABELS } from "@/lib/rbacCatalog";
@@ -19,7 +18,8 @@ export async function GET(request) {
     const conv = await getConversationById(conversationId);
     if (!conv) return NextResponse.json({ success: false, message: "Not found" }, { status: 404 });
     const { messages, hasMore, nextCursor } = await getMessagesPage(conversationId, { before, limit });
-    return NextResponse.json({ success: true, conversationId, messages, hasMore, nextCursor });
+    const users = await getUsersByUids(messages.map((message) => message.senderId));
+    return NextResponse.json({ success: true, conversationId, messages: attachCurrentAvatars(messages, users), hasMore, nextCursor });
   } catch (error) {
     return NextResponse.json({ success: false, message: error.message }, { status: 500 });
   }
@@ -28,7 +28,7 @@ export async function GET(request) {
 export async function POST(request) {
   try {
     const body = await request.json();
-    const { uid, conversationId, content, messageType = "text", attachments = [], voiceMetadata = null, callMetadata = null, clientId = null } = body || {};
+    const { uid, conversationId, content, messageType = "text", attachments = [], voiceMetadata = null, callMetadata = null, clientId = null, replyToMessageId = null } = body || {};
     if (!uid || !conversationId) return NextResponse.json({ success: false, message: "uid and conversationId required" }, { status: 400 });
     const user = await getUserByUid(uid);
     if (!user || !isStaffRole(user.role)) return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 403 });
@@ -51,6 +51,7 @@ export async function POST(request) {
       voiceMetadata,
       callMetadata,
       clientId,
+      replyToMessageId,
     });
     const payload = { conversationId, message: msg, conversation: msg._conversation || conv };
     if (!msg._duplicate) {
@@ -73,6 +74,7 @@ export async function POST(request) {
     }
     return NextResponse.json({ success: true, message: msg });
   } catch (error) {
-    return NextResponse.json({ success: false, message: error.message }, { status: 500 });
+    const status = error.code === "INVALID_REPLY" ? 400 : 500;
+    return NextResponse.json({ success: false, message: error.message }, { status });
   }
 }

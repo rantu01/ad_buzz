@@ -1,27 +1,39 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { Menu, ChevronDown, LifeBuoy, Banknote } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/app/Component/Auth/AuthProvider";
 import { useSettings } from "@/app/Component/Settings/SettingsProvider";
+import { useAdmin } from "./AdminProvider";
 import { useTicketAlerts } from "./TicketAlertProvider";
 import { useDepositAlerts } from "./DepositAlertProvider";
 import { useNotifications } from "./NotificationProvider";
 import NotificationBell from "@/app/Component/Notifications/NotificationBell";
 import { formatDateTime } from "@/lib/dateFormat";
+import { ROLE_LABELS } from "@/lib/rbacCatalog";
 
 export default function DashboardTopbar({ onToggle }) {
     const router = useRouter();
     const { user, logout } = useAuth();
+    const { profile, access } = useAdmin();
     const [avatarState, setAvatarState] = useState({ uid: null, url: "" });
     const avatarUrl = avatarState.uid === user?.uid ? avatarState.url : "";
     const settings = useSettings();
-    const logo = settings?.logo || "/logo.jpeg";
     const { canView } = useTicketAlerts();
     const { unread: notifUnread, items: notifItems, markRead: markNotifRead, markAllRead: markAllNotifRead, soundOn, toggleSound, refresh: refreshNotifs } = useNotifications();
     const { canView: canViewDeposits, pending: pendingDeposits, items: depositItems } = useDepositAlerts();
     const [depositOpen, setDepositOpen] = useState(false);
+    const [accountOpen, setAccountOpen] = useState(false);
+    const depositMenuRef = useRef(null);
+    const depositTriggerRef = useRef(null);
+    const accountMenuRef = useRef(null);
+    const accountTriggerRef = useRef(null);
+    const roleName = access?.roleLabels?.[profile?.role]
+        || ROLE_LABELS[profile?.role]
+        || String(profile?.role || "Staff").replace(/_/g, " ");
+    const displayName = profile?.displayName || user?.displayName || user?.email || "Staff";
 
     // Show the admin's uploaded picture here too (same users.avatar field as
     // the profile page) and keep it live across tabs of the admin panel.
@@ -45,6 +57,31 @@ export default function DashboardTopbar({ onToggle }) {
             window.removeEventListener("adbuzz:avatar-updated", onAvatarUpdated);
         };
     }, [user?.uid]);
+
+    useEffect(() => {
+        if (!depositOpen && !accountOpen) return undefined;
+        const closeOnOutsidePointer = (event) => {
+            if (depositOpen && !depositMenuRef.current?.contains(event.target)) setDepositOpen(false);
+            if (accountOpen && !accountMenuRef.current?.contains(event.target)) setAccountOpen(false);
+        };
+        const closeOnEscape = (event) => {
+            if (event.key !== "Escape") return;
+            if (accountOpen) {
+                setAccountOpen(false);
+                accountTriggerRef.current?.focus();
+            }
+            if (depositOpen) {
+                setDepositOpen(false);
+                depositTriggerRef.current?.focus();
+            }
+        };
+        document.addEventListener("pointerdown", closeOnOutsidePointer);
+        document.addEventListener("keydown", closeOnEscape);
+        return () => {
+            document.removeEventListener("pointerdown", closeOnOutsidePointer);
+            document.removeEventListener("keydown", closeOnEscape);
+        };
+    }, [depositOpen, accountOpen]);
 
     const handleLogout = async () => {
         await logout();
@@ -142,12 +179,15 @@ export default function DashboardTopbar({ onToggle }) {
 
                 <div className="flex items-center gap-3 sm:gap-4">
                     {canViewDeposits && (
-                        <div className="relative">
+                        <div className="relative" ref={depositMenuRef}>
                             <button
+                                ref={depositTriggerRef}
                                 type="button"
                                 onClick={() => setDepositOpen((v) => !v)}
                                 className="relative inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-[#E5DED6] bg-white text-slate-600 shadow-sm transition hover:border-secondary hover:text-primary-700"
                                 aria-label="Deposit request notifications"
+                                aria-expanded={depositOpen}
+                                aria-controls="admin-deposit-menu"
                             >
                                 <Banknote size={20} />
                                 {pendingDeposits > 0 && (
@@ -157,9 +197,7 @@ export default function DashboardTopbar({ onToggle }) {
                                 )}
                             </button>
                             {depositOpen && (
-                                <>
-                                    <div className="fixed inset-0 z-30" onClick={() => setDepositOpen(false)} />
-                                    <div className="absolute right-0 z-40 mt-2 w-80 max-w-[calc(100vw-2rem)] overflow-hidden rounded-2xl border border-[#E5DED6] bg-white shadow-xl">
+                                    <div id="admin-deposit-menu" className="absolute right-0 z-40 mt-2 w-80 max-w-[calc(100vw-2rem)] overflow-hidden rounded-2xl border border-[#E5DED6] bg-white shadow-xl">
                                         <div className="border-b border-slate-100 px-4 py-3">
                                             <p className="text-sm font-semibold text-slate-900">Deposit requests</p>
                                             <p className="text-xs text-slate-500">New deposit requests awaiting review</p>
@@ -200,7 +238,6 @@ export default function DashboardTopbar({ onToggle }) {
                                             View all deposits
                                         </button>
                                     </div>
-                                </>
                             )}
                         </div>
                     )}
@@ -222,30 +259,44 @@ export default function DashboardTopbar({ onToggle }) {
                             icon={<LifeBuoy size={16} />}
                         />
                     )}
-                    <div className="flex items-center gap-3 rounded-2xl border border-[#E5DED6] bg-white px-3 py-2 shadow-sm">
-                        {avatarUrl ? (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img src={avatarUrl} alt="Profile" className="h-9 w-9 rounded-xl object-cover border border-slate-200" />
-                        ) : (
-                            <div className="flex h-9 w-9 items-center justify-center rounded-xl text-sm font-bold text-white"
-                                style={{ background: `linear-gradient(135deg, ${settings?.primaryColor || "#135B9A"}, ${settings?.secondaryColor || "#F48E2B"})` }}>
-                                AB
+                    <div className="relative" ref={accountMenuRef}>
+                        <button
+                            ref={accountTriggerRef}
+                            type="button"
+                            onClick={() => setAccountOpen((open) => !open)}
+                            className="flex items-center gap-3 rounded-2xl border border-[#E5DED6] bg-white px-3 py-2 text-left shadow-sm hover:border-secondary focus-visible:outline focus-visible:outline-2 focus-visible:outline-orange-500"
+                            aria-expanded={accountOpen}
+                            aria-haspopup="true"
+                            aria-controls="admin-account-menu"
+                        >
+                            {avatarUrl ? (
+                                // eslint-disable-next-line @next/next/no-img-element
+                                <img src={avatarUrl} alt="Profile" className="h-9 w-9 rounded-xl border border-slate-200 object-cover" />
+                            ) : (
+                                <div className="flex h-9 w-9 items-center justify-center rounded-xl text-sm font-bold text-white"
+                                    style={{ background: `linear-gradient(135deg, ${settings?.primaryColor || "#135B9A"}, ${settings?.secondaryColor || "#F48E2B"})` }}>
+                                    AB
+                                </div>
+                            )}
+                            <div className="hidden sm:block">
+                                <p className="max-w-36 truncate text-sm font-semibold text-slate-900">{displayName}</p>
+                                <p className="text-xs text-slate-500">{roleName}</p>
+                            </div>
+                            <ChevronDown size={16} className="text-slate-400" />
+                        </button>
+                        {accountOpen && (
+                            <div id="admin-account-menu" className="absolute right-0 z-40 mt-2 w-64 overflow-hidden rounded-2xl border border-[#E5DED6] bg-white shadow-xl">
+                                <div className="border-b border-slate-100 px-4 py-3">
+                                    <p className="truncate text-sm font-semibold text-slate-900">{displayName}</p>
+                                    <p className="truncate text-xs text-slate-500">{profile?.email || user?.email || ""}</p>
+                                    <p className="mt-1 text-xs font-medium text-slate-600">{roleName}</p>
+                                </div>
+                                <Link href="/admin/profile" onClick={() => setAccountOpen(false)} className="block px-4 py-3 text-sm text-slate-700 hover:bg-slate-50">My profile</Link>
+                                <Link href="/admin" onClick={() => setAccountOpen(false)} className="block border-t border-slate-100 px-4 py-3 text-sm text-slate-700 hover:bg-slate-50">Dashboard</Link>
+                                <button type="button" onClick={handleLogout} className="w-full border-t border-slate-100 px-4 py-3 text-left text-sm font-medium text-red-700 hover:bg-red-50">Sign out</button>
                             </div>
                         )}
-                        <div className="hidden sm:block">
-                            <p className="text-sm font-semibold text-slate-900">Admin</p>
-                            <p className="text-xs text-slate-500">Operations lead</p>
-                        </div>
-                        <ChevronDown size={16} className="text-slate-400" />
                     </div>
-
-                    <button
-                        type="button"
-                        onClick={handleLogout}
-                        className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-700 transition hover:bg-red-100"
-                    >
-                        Logout
-                    </button>
                 </div>
             </div>
         </header>

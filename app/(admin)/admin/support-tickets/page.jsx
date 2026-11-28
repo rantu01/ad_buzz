@@ -7,14 +7,16 @@ import { useNotifications } from "../components/NotificationProvider";
 import { hasPermission } from "@/lib/permissions";
 import { TICKET_STAGES, ticketStageLabel, ticketStageColor } from "@/lib/ticketStages";
 import Swal from "sweetalert2";
-import { Search, X } from "lucide-react";
+import { Search } from "lucide-react";
 import Pagination from "@/app/Component/Pagination";
 import { formatDate, formatDateTime } from "@/lib/dateFormat";
+import { useChatMedia } from "@/app/Component/Chat/ChatMediaLightbox";
 
 const ITEMS_PER_PAGE = 5;
 
 export default function SupportTicketsPage() {
   const { profile } = useAdmin();
+  const mediaViewer = useChatMedia();
   const role = profile?.role || "customer";
   const canManage = hasPermission(role, "manage_tickets");
 
@@ -28,7 +30,6 @@ export default function SupportTicketsPage() {
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [selected, setSelected] = useState(null);
-  const [previewAtt, setPreviewAtt] = useState(null);
   const [replyText, setReplyText] = useState("");
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
@@ -422,7 +423,15 @@ export default function SupportTicketsPage() {
                             <button
                               key={a.id}
                               type="button"
-                              onClick={() => setPreviewAtt(a)}
+                              onClick={() => {
+                                const images = (selected.attachments || []).filter((item) => String(item.type || "").startsWith("image/"));
+                                mediaViewer?.open(images.map((item) => ({
+                                  id: item.id,
+                                  name: item.name,
+                                  type: item.type,
+                                  url: `/api/support-tickets/attachments?ticketId=${encodeURIComponent(selected._id)}&attachmentId=${encodeURIComponent(item.id)}&uid=${encodeURIComponent(profile?.uid || "")}`,
+                                })), images.findIndex((item) => item.id === a.id));
+                              }}
                               className="overflow-hidden rounded-xl border border-slate-200 bg-white"
                             >
                               <img src={url} alt={a.name} className="h-24 w-24 object-cover" />
@@ -505,38 +514,6 @@ export default function SupportTicketsPage() {
           )}
         </div>
       </div>
-
-    {previewAtt && selected && (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={() => setPreviewAtt(null)}>
-        <div className="max-h-[90vh] max-w-4xl overflow-auto rounded-2xl bg-white p-4 shadow-2xl" onClick={(e) => e.stopPropagation()}>
-          <div className="mb-3 flex items-center justify-between">
-            <p className="text-sm font-semibold text-slate-800">{previewAtt.name}</p>
-            <button type="button" onClick={() => setPreviewAtt(null)} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100">
-              <X size={18} />
-            </button>
-          </div>
-          {String(previewAtt.type || "").startsWith("image/") ? (
-            <img
-              src={`/api/support-tickets/attachments?ticketId=${encodeURIComponent(selected._id)}&attachmentId=${encodeURIComponent(previewAtt.id)}&uid=${encodeURIComponent(profile?.uid || "")}`}
-              alt={previewAtt.name}
-              className="max-h-[75vh] w-auto rounded-lg"
-            />
-          ) : (
-            <div className="p-6 text-center">
-              <p className="text-sm text-slate-600">Preview not available for this file type.</p>
-              <a
-                href={`/api/support-tickets/attachments?ticketId=${encodeURIComponent(selected._id)}&attachmentId=${encodeURIComponent(previewAtt.id)}&uid=${encodeURIComponent(profile?.uid || "")}`}
-                target="_blank"
-                rel="noreferrer"
-                className="mt-3 inline-block text-sm font-medium text-amber-600 hover:text-amber-700"
-              >
-                Open file
-              </a>
-            </div>
-          )}
-        </div>
-      </div>
-    )}
 
     </div>
   );

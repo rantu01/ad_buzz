@@ -36,6 +36,9 @@ export default function AdminProvider({ children }) {
             permissions: Object.fromEntries(
               rolesData.roles.map((r) => [r.key, r.permissions || []])
             ),
+            roleLabels: Object.fromEntries(
+              rolesData.roles.map((r) => [r.key, r.label || r.name || r.key])
+            ),
           });
         }
       } catch { /* ignore */ }

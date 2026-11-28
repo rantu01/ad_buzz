@@ -3,13 +3,14 @@
 import React, { useEffect, useRef, useState } from "react";
 import Swal from "sweetalert2";
 import { Paperclip, Smile, Mic, Send, X, Square, Trash2, Loader2 } from "lucide-react";
+import ChatReplyPreview from "@/app/Component/Chat/ChatReplyPreview";
 import { useAuth } from "@/app/Component/Auth/AuthProvider";
 import { authFetch } from "@/lib/authFetch";
 
 const EMOJIS = ["😀", "😂", "😊", "👍", "❤️", "🔥", "🎉", "🙏", "✅", "❌", "⭐", "💬"];
 const MAX_FILE_SIZE = 15 * 1024 * 1024;
 
-export default function InternalComposer({ onSend, onTyping, disabled = false }) {
+export default function InternalComposer({ onSend, onTyping, disabled = false, replyTo = null, onCancelReply }) {
   const { user } = useAuth();
   const [text, setText] = useState("");
   const [attachments, setAttachments] = useState([]);
@@ -21,6 +22,7 @@ export default function InternalComposer({ onSend, onTyping, disabled = false })
   const [audioUrl, setAudioUrl] = useState(null);
   const [recordSeconds, setRecordSeconds] = useState(0);
   const fileInputRef = useRef(null);
+  const textareaRef = useRef(null);
   const emojiRef = useRef(null);
   const emojiButtonRef = useRef(null);
   const mediaRecorderRef = useRef(null);
@@ -113,7 +115,8 @@ export default function InternalComposer({ onSend, onTyping, disabled = false })
       const res = await authFetch("/api/internal-chat/attachments", { method: "POST", body: fd }, user);
       const data = await res.json();
       if (data.success && data.attachment) {
-        await onSend({ content: "", messageType: "voice", attachments: [data.attachment], voiceMetadata: { duration: recordSeconds } });
+        await onSend({ content: "", messageType: "voice", attachments: [data.attachment], voiceMetadata: { duration: recordSeconds }, replyToMessageId: replyTo?.messageId || null });
+        onCancelReply?.();
         setAudioBlob(null);
         setAudioUrl(null);
         setRecordSeconds(0);
@@ -147,9 +150,11 @@ export default function InternalComposer({ onSend, onTyping, disabled = false })
         messageType: attachments.length ? (attachments[0].type?.startsWith("image/") ? "image" : "file") : "text",
         attachments,
         voiceMetadata: null,
+        replyToMessageId: replyTo?.messageId || null,
       });
       setText("");
       setAttachments([]);
+      onCancelReply?.();
       onTyping?.(false);
     } catch {
       notifyError("Message could not be sent");
@@ -164,8 +169,14 @@ export default function InternalComposer({ onSend, onTyping, disabled = false })
     setTimeout(() => emojiButtonRef.current?.focus(), 0);
   };
 
+  const replyToMessageId = replyTo?.messageId;
+  useEffect(() => {
+    if (replyToMessageId) textareaRef.current?.focus();
+  }, [replyToMessageId]);
+
   return (
     <div className="border-t border-slate-200 bg-white p-3">
+      {replyTo && <ChatReplyPreview message={replyTo} onCancel={onCancelReply} />}
       {attachments.length > 0 && (
         <div className="mb-2 flex flex-wrap gap-2">
           {attachments.map((a) => (
@@ -213,6 +224,7 @@ export default function InternalComposer({ onSend, onTyping, disabled = false })
           <button onClick={startRecording} className="rounded-full p-2 text-slate-500 hover:bg-slate-100" aria-label="Voice message"><Mic size={18} /></button>
         )}
         <textarea
+          ref={textareaRef}
           value={text}
           onChange={(e) => handleChange(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
