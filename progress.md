@@ -526,3 +526,96 @@ this environment) — see the report for the required staging checks.
 - Admin support tickets: stats, search/filter, customer/ad-account/attachment details, download authorized attachments.
 - Extended ticket records: category, adAccounts[], attachments[], customerName, lastActivityAt. Preserved existing tickets/replies/SSE sync/notifications.
 - Build verified (npm run build).
+## Notice & Announcement Management System (2026-11-28) — complete
+- **Analysis first:** mapped the existing Next.js 16 / MongoDB / Firebase / SSE
+  architecture and reused it. No existing module, dashboard layout or business
+  logic was rebuilt. No dummy or seed data was written to production MongoDB.
+- **Admin panel:** `/admin/notices` (search, status/type/audience filters,
+  pagination, stat cards, table with recipient/read/unread counts, detail and
+  recipients modals, publish/schedule/archive/delete/revision actions),
+  `/admin/notices/new` and `/admin/notices/[id]` backed by a shared
+  `NoticeEditor` with contentEditable rich text (paragraphs, H1–H3, lists,
+  bold, links, Bengali + English), two-card audience selector with customer
+  search, dynamic structured-change editor and an Ads Buzz-branded preview.
+- **Customer panel:** `/user-dashboard/notices` (Notice Center with unread /
+  important filters, pagination, structured change rows, acknowledgement
+  state) plus a global `NoticeProvider` mounted in `ClientLayout` that shows
+  important notices in a responsive, accessible modal anywhere in the panel.
+  Sidebar "Notices" item carries the server-derived unread badge.
+- **Backend:** new `notices` + `noticeRecipients` collections, indexes,
+  `lib/noticeConstants.js`, `lib/noticeModel.js`, `lib/noticeDelivery.js`,
+  `lib/noticeAuth.js`; two new RBAC permissions (`view_notices`,
+  `manage_notices`) wired through `rbacCatalog.js`, `permissions.js`, both
+  sidebars and the role seed script.
+- **Delivery:** global notices stay as ONE document (lazy per-customer
+  recipient rows created only on first read/ack); individual notices create
+  bounded recipient rows plus persistent notification-log entries and live
+  SSE pushes. Scheduled notices are promoted lazily on the next customer read
+  (no external cron), and expiry/effective windows are enforced server-side.
+- **Safety:** published notice content is immutable; only priority and expiry
+  extensions are editable (audit history is kept). Content changes require a
+  separate revision. Drafts only may be deleted. Account rates, balances and
+  billing logic are untouched — rate-change notices are informational only.
+- **Branding:** every new surface is signed `Ads Buzz`; `AdsFixer` appears
+  nowhere in the new code (verified by search).
+- **Verification:** `npm run build` passes (new admin + customer + 8 API
+  routes); ESLint on all touched files: 0 errors; `npm test`: 86/86 pass
+  (14 new notice tests); 21/21 end-to-end data-layer checks in an isolated
+  throwaway database (dropped afterwards; production data untouched) covering
+  individual/global delivery, read/ack persistence, duplicate acks, cross-
+  customer access denial, scheduling, expiry and safe-edit guards.
+
+## Notice system bug fixes (2026-11-28, second pass)
+- **`/admin/notices` crash — root cause:** `getRecipientStatsForNotices()` in
+  `lib/noticeModel.js` returned the *un-awaited* `countDocuments()` promise as
+  `total`. `NextResponse.json` serialized the promise as `{}` and `unread` as
+  `null`, so React threw "Objects are not valid as a React child" while
+  rendering the stats table. Fixed by awaiting the count and coercing every
+  stat to a number; the admin table also coerces defensively. Verified in a
+  real browser: page renders with zero console/page errors.
+- **Email-based individual selection — root cause:** the customer search API
+  returned only the Firebase auth `uid`; the editor keyed selections on it and
+  posted it directly, with no MongoDB `_id`, no error/no-result states and no
+  audience in the preview. Fixed: the search API now returns both `mongoId`
+  and `uid`; the picker selects by the real MongoDB `_id`, shows the customer
+  email clearly, handles loading/empty/error/duplicate cases, and the preview
+  lists selected emails. The server resolves `_id` **or** legacy `uid` to the
+  canonical auth uid before storing recipients — email is never a DB key.
+- **New notice "Publish Now"/"Schedule" silently saved drafts:** the editor's
+  action payload omitted `status` on POST (the `action` field is only handled
+  by PATCH). Fixed by sending `status: published|scheduled` for new notices.
+- **Immediate delivery:** customer provider now fetches `?needsAction=1`
+  (unread OR mandatory-but-unacknowledged) and listens to `notice:published`,
+  `notice:updated` and `notify` SSE events, with 60 s polling + focus/visibility
+  reconciliation as a fallback. Pending notices are re-fetched on login.
+- **Strict acknowledgement:** mandatory notices have no outside-click, Escape
+  or close-icon path; the modal stays open on API failure, shows an error,
+  guards duplicate requests, and only closes after a successful server write.
+  Opening a notice writes `readAt` only — never `acknowledgedAt`.
+- **Verification:** `npm test` 86/86; lint clean on all touched files; build
+  passes; 28/28 API-level end-to-end checks (isolated throwaway DB, dropped)
+  and 20/20 real-browser Playwright checks covering online/offline,
+  individual/global delivery, cross-customer isolation, escape/outside-click/
+  navigation bypass attempts, duplicate acks and refresh behaviour.
+
+## Notice pages UI improvements (2026-11-28, third pass)
+- **Loading states:** admin notice list now tracks one `busyAction` per notice
+  and action (publish, schedule, archive, delete, view details, recipients),
+  with `Loader2` spinners, disabled buttons and no cross-row blocking.
+  SweetAlert2 confirmations use `showLoaderOnConfirm` so their buttons show a
+  loader while the API request runs. The notice editor has per-action states
+  (`Saving…`, `Scheduling…`, `Publishing…`) with a duplicate-submit guard, and
+  customer search shows a spinner/loading text. Customer page "Read notice"
+  shows `Opening…` with a spinner; the mandatory modal's Confirm button shows
+  `Confirming…` and stays open with an error toast on API failure.
+- **Delete:** added a separate Delete action alongside Archive. The destructive
+  confirmation names the notice. Draft/scheduled notices are hard-deleted with
+  their own recipient rows; published/archived notices are tombstoned
+  (`status: deleted`) so the notice, its history and all customer read /
+  acknowledgement records remain in MongoDB while the notice disappears from
+  the admin list and customer feeds. Only the selected notice is affected.
+- **Verification:** npm test 86/86, ESLint clean on touched files, production
+  build passes; 18/18 real-browser Playwright checks (loading states, duplicate
+  clicks, failure reset, archive + delete dialogs, list refresh) and a database
+  integrity check (tombstone + preserved ack, hard-deleted draft, users
+  untouched). All test data used an isolated DB that was dropped.

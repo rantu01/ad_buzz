@@ -59,6 +59,8 @@ const PERMISSIONS = {
   MANAGE_WHATSAPP: "manage_whatsapp",
   UNLIMITED_BALANCE: "unlimited_balance",
   VIEW_AD_ACCOUNTS_TOPUP: "view_ad_accounts_topup",
+  VIEW_NOTICES: "view_notices",
+  MANAGE_NOTICES: "manage_notices",
 };
 
 const ALL_PERMS = Object.values(PERMISSIONS);
@@ -77,6 +79,7 @@ const OPS_PERMS = [
   PERMISSIONS.VIEW_PAYMENT_METHODS, PERMISSIONS.MANAGE_PAYMENT_METHODS, PERMISSIONS.VIEW_BALANCE_LOGS,
   PERMISSIONS.VIEW_TICKETS, PERMISSIONS.MANAGE_TICKETS, PERMISSIONS.UNLIMITED_BALANCE,
   PERMISSIONS.VIEW_AD_ACCOUNTS_TOPUP,
+  PERMISSIONS.VIEW_NOTICES, PERMISSIONS.MANAGE_NOTICES,
 ];
 const OPS_L2 = [
   "/", "/customers", "/sales", "/sale-setup", "/topups", "/refund", "/ad-accounts",

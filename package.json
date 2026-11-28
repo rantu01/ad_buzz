@@ -7,7 +7,7 @@
     "build": "next build --webpack",
     "start": "next start",
     "lint": "eslint",
-    "test": "node --test tests/accountMath.test.js tests/metaSyncState.test.js tests/prepaid.test.js tests/webhookAuth.test.js tests/httpUtil.test.js tests/adAccountRequest.test.js tests/chatPagination.test.js tests/chatSharedContent.test.js tests/callState.test.js tests/groupChat.test.js tests/chatMedia.test.js tests/popoverPosition.test.js"
+    "test": "node --test tests/accountMath.test.js tests/metaSyncState.test.js tests/prepaid.test.js tests/webhookAuth.test.js tests/httpUtil.test.js tests/adAccountRequest.test.js tests/chatPagination.test.js tests/chatSharedContent.test.js tests/callState.test.js tests/groupChat.test.js tests/chatMedia.test.js tests/popoverPosition.test.js tests/noticeValidation.test.js"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.102.8",

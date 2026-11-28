@@ -267,3 +267,101 @@ MongoDB on reconnect/focus so nothing is lost.
    pair; cross-user 403 checks; call create/accept/end/history; signal delivery.
 3. Manual two-browser WebRTC check (voice + video, accept/reject/missed, mute,
    camera, ICE on slow network, navigation cleanup) — requires staging devices.
+
+## 9. Notice & Announcement system (2026-11-28)
+
+### Collections
+- `notices` — one document per notice: `title`, sanitized HTML `message`,
+  `type`, `priority`/`priorityRank`, `audienceType` (`all` | `individual`),
+  `targetCustomerIds`, `targetCustomerDetails`, `changeKind`,
+  `structuredChanges[]`, `status` (`draft`/`scheduled`/`published`/`archived`),
+  `publishedAt`, `scheduledAt`, `effectiveAt`, `expiresAt`,
+  `requireAcknowledgement`, `company: "Ads Buzz"`, `createdBy`/`updatedBy`,
+  `revisionOf`, `editCount`, bounded `history[]`, timestamps.
+- `noticeRecipients` — per-customer state: `noticeId`, `uid`, `deliveredAt`,
+  `readAt`, `acknowledgedAt`, timestamps. Unique `{noticeId, uid}` index makes
+  concurrent read/ack upserts duplicate-free; duplicate-key races are caught
+  and reconciled with a plain update. Reads/acks are idempotent.
+
+### Indexes (added to `lib/indexes.js`)
+`notices`: `{status,createdAt:-1}`, `{type,status}`,
+`{status,priorityRank:-1,publishedAt:-1}`, `{audienceType,targetCustomerIds}`,
+`{revisionOf}`.
+`noticeRecipients`: unique `{noticeId,uid}`, `{uid,deliveredAt:-1}`,
+`{noticeId,readAt}`, `{noticeId,acknowledgedAt}`.
+
+### Delivery strategy
+- Global notices remain a single document. Eligibility is computed from the
+  audience/date/status filter; recipient rows are materialised lazily only
+  when a customer first reads or acknowledges. Admin totals come from one
+  `users.countDocuments({role:"customer"})` per page instead of N inserts.
+- Individual notices validate every uid against the `users` collection, then
+  create bounded recipient rows at publish and fan out existing persistent
+  notification rows + `emitToUser` pushes.
+- Scheduled notices are promoted lazily by `publishDueScheduledNotices()` on
+  customer reads using a cheap due-date count and a status-guarded
+  `findOneAndUpdate`, so no cron or second backend is needed.
+
+### Security / business rules
+- Customer APIs re-check eligibility (`status`, publication time, effective /
+  expiry window, exact uid) before any read or acknowledgement write, so a
+  customer cannot access another customer's notice or forge an audience.
+- Published notice content, audience, effective date and acknowledgement flag
+  are locked; only priority and expiry extension are allowed (with history),
+  and meaningful changes are made as a separate revision. Only drafts delete.
+- Structured rate-change rows are notification metadata only; no ad-account,
+  balance, transaction or billing collection is read for modification.
+- Internal DB error messages are only returned in development.
+
+### Known limitations
+- SSE remains in-process (`lib/sseManager.js`), as in the existing app;
+  multi-process deployments need shared pub/sub (pre-existing constraint).
+- Existing role documents are seeded with `$setOnInsert`, so pre-existing
+  staff roles do not automatically gain the two new permissions; an admin
+  grants them from Roles & Permissions. Admin/director keep full access via
+  the existing bypass.
+
+## 10. Notice fix notes (2026-11-28)
+
+### Defects found and fixed
+1. Admin page crash: `getRecipientStatsForNotices()` did not `await`
+   `countDocuments()`; MongoDB driver promises were JSON-serialized as `{}`.
+   Awaiting the count plus numeric coercion removed the React render crash.
+2. Recipient selection: the picker had no MongoDB `_id`, so selection could
+   not use the stable document key. `searchNoticeRecipients()` now returns
+   `mongoId`; `resolveCustomerIds()` accepts `_id` or legacy `uid` via a
+   single `$or` query and normalizes to the auth uid required by the customer
+   APIs. Email is only a search/display field, never a stored reference.
+3. Publish action on creation: POST ignored `action`, so "Publish Now" from
+   `/admin/notices/new` created a draft. The editor now sends `status` for
+   new notices.
+
+### Delivery / acknowledgement behaviour
+- Live: `notice:published` / `notice:updated` SSE (and the existing `notify`
+  event with `refType: notice`) trigger a server reconciliation in the
+  customer provider. Fallback: 60 s poll, window focus and visibility-change
+  refresh, plus a full fetch on login — no localStorage source of truth.
+- `needsAction` aggregation filter = unread OR (mandatory AND unacknowledged).
+  This makes offline notices pending until the customer returns, including
+  notices published days earlier.
+- Mandatory modal: no outside-click / Escape / close-icon dismissal, disabled
+  confirm while in flight, error text on API failure, acknowledgement written
+  only by the explicit Confirm request; duplicate requests are idempotent via
+  the unique `{noticeId, uid}` index.
+
+### Verification
+28/28 API E2E checks in an isolated database (dropped afterwards) and 20/20
+Playwright browser checks against a production build, including live SSE
+delivery, offline-then-login delivery, cross-customer isolation, bypass
+attempts, duplicate acks, refresh persistence and global independence.
+
+## 11. Notice deletion strategy (2026-11-28)
+- Deletion never touches `users`, ad accounts, transactions or any other
+  collection. Only the selected `notices` document and its matching
+  `noticeRecipients` rows (hard-delete path) are written.
+- Published/archived notices cannot be hard-deleted without silently erasing
+  customer history, so they are tombstoned instead. Customer notice queries
+  already require `status: "published"`, so tombstones stop being delivered
+  immediately; the notice document, its bounded `history[]` and every
+  recipient's read/acknowledgement state remain intact for audit.
+- Admin list filters `status: { $ne: "deleted" }`; counts are unchanged.

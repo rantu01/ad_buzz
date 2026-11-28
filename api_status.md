@@ -79,3 +79,53 @@ and customers receive 403. The upload path remains Bearer-only.
 | Data-layer integration smoke test with real staff/customer uids | ✅ Pass; test records removed, customer chat data untouched |
 | HTTP smoke test with real Firebase ID tokens (401/403, directory, conversations, messages, read/unread, calls) | ✅ Pass; test records removed |
 | Two-device live WebRTC (voice/video, accept/reject/missed, ICE) | ⬜ Requires staging devices + HTTPS/camera/mic |
+
+## Notice & Announcement APIs (2026-11-28)
+
+All routes use verified Firebase ID tokens (`Authorization: Bearer`, attached
+by `lib/authFetch.js`). Admin routes use `requireAdmin` with `view_notices` /
+`manage_notices`; customer routes use `requireNoticeCustomer`, which rejects
+non-customer roles and derives uid from the token — never from query params.
+
+| Endpoint | Auth | Purpose |
+|---|---|---|
+| `GET /api/admin/notices` | staff (`view_notices`) | Paginated list + filters (`status`, `type`, `audienceType`, `search`) + per-notice stats and status counts; `?id=` returns one notice |
+| `POST /api/admin/notices` | staff (`manage_notices`) | Create draft / published / scheduled notice; server validates audience, dates and recipient ids |
+| `GET/PATCH/DELETE /api/admin/notices/[id]` | staff | Detail+history / safe field edits or `action=publish,schedule,archive` / delete draft only |
+| `GET /api/admin/notices/[id]/recipients` | staff (`view_notices`) | Paginated recipients with read/ack timestamps + aggregated stats |
+| `GET /api/admin/notices/customers` | staff (`view_notices`) | Escaped customer search by name, email, custom id, phone or uid |
+| `GET /api/notices` | customer token | Notices addressed to this customer (`unreadOnly`, `importantOnly`, `pendingAck`, paging) |
+| `GET /api/notices/counts` | customer token | Total / unread / pending acknowledgement / important-unread |
+| `GET /api/notices/[id]` | customer token | Eligible notice detail; marks it read for this customer only |
+| `POST /api/notices/[id]/read` | customer token | Idempotent server-side read receipt |
+| `POST /api/notices/[id]/acknowledge` | customer token | Idempotent acknowledgement; preserves the first timestamp |
+
+SSE events added: `notice:published`, `notice:updated` (plus admin channel
+`admin:notices` with `notice.updated`, `notice.scheduled`, `notice.archived`,
+`notice.deleted`). Targeted notices also reuse the existing `notify` event and
+notification log so the current bell stays integrated; global notices avoid
+per-customer notification rows and reconcile from `/api/notices/counts`.
+
+## Notice fixes (2026-11-28)
+- `GET /api/admin/notices` — fixed stats payload: `stats[id].total` and
+  `stats[id].unread` are always numbers (previously an un-awaited promise
+  serialized as `{}` / `null`, which crashed the admin table).
+- `GET /api/admin/notices/customers?q=` — each result now includes `mongoId`
+  (the real users `_id`) alongside `uid`, `email`, `displayName`, `customId`.
+- `POST /api/admin/notices` and `PATCH /api/admin/notices/[id]` — accept
+  recipient references as MongoDB `_id` **or** legacy Firebase uid, resolve
+  them server-side to canonical uids, reject unknown ids with 400, and store
+  `targetCustomerDetails` with both `mongoId` and `uid`.
+- `GET /api/notices?needsAction=1` — new filter returning notices that are
+  unread or mandatory-but-unacknowledged; used by the automatic modal queue.
+- `POST /api/notices/[id]/read` remains read-only; `POST .../acknowledge`
+  remains idempotent and revalidates eligibility against the token uid.
+
+## Notice UI + delete APIs (2026-11-28)
+- `DELETE /api/admin/notices/[id]` — now accepts draft, scheduled, published
+  and archived notices. Draft/scheduled: hard delete of the notice and its own
+  `noticeRecipients` rows (`mode: "hard"`). Published/archived: tombstone with
+  `status: "deleted"`, `deletedAt`, `deletedBy` and a `deleted` history entry;
+  recipient/read/acknowledgement records are preserved (`mode: "soft"`). Still
+  requires `manage_notices` via `requireAdmin`. Tombstones are excluded from
+  `GET /api/admin/notices` and from customer eligibility queries.

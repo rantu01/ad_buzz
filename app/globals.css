@@ -410,7 +410,41 @@ main:has(.admin-chat-layout) { overflow: hidden; }
   }
 }
 
+/* ------------------------------------------------------------------ *
+ * Notice & Announcement content. Kept as plain CSS (not Tailwind's typography
+ * plugin) because notices render HTML saved from the admin rich-text editor
+ * and must display Bengali + English paragraphs, headings and lists cleanly.
+ * ------------------------------------------------------------------ */
+.notice-rich {
+  color: #334155;
+  font-size: 0.8125rem;
+  line-height: 1.75;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  font-family: Arial, "Noto Sans Bengali", "SolaimanLipi", "Segoe UI", sans-serif;
+}
+.notice-rich > *:first-child { margin-top: 0; }
+.notice-rich > *:last-child { margin-bottom: 0; }
+.notice-rich p, .notice-rich div { margin: 0 0 0.75rem; }
+.notice-rich h1 { margin: 0 0 0.75rem; font-size: 1.05rem; font-weight: 700; color: #0f172a; }
+.notice-rich h2 { margin: 0 0 0.6rem; font-size: 0.95rem; font-weight: 700; color: #0f172a; }
+.notice-rich h3 { margin: 0 0 0.5rem; font-size: 0.875rem; font-weight: 700; color: #0f172a; }
+.notice-rich ul, .notice-rich ol { margin: 0 0 0.75rem; padding-left: 1.25rem; }
+.notice-rich ul { list-style: disc; }
+.notice-rich ol { list-style: decimal; }
+.notice-rich li { margin-bottom: 0.35rem; }
+.notice-rich strong, .notice-rich b { font-weight: 700; color: #0f172a; }
+.notice-rich a { color: #135B9A; text-decoration: underline; text-underline-offset: 2px; }
+.notice-rich blockquote { border-left: 3px solid #F48E2B; padding-left: 0.75rem; color: #475569; margin: 0 0 0.75rem; }
+
+@keyframes notice-modal-in {
+  from { opacity: 0; transform: translateY(10px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+.notice-modal-panel { animation: notice-modal-in 180ms ease-out; }
+
 @media (prefers-reduced-motion: reduce) {
+  .notice-modal-panel { animation: none; }
   .chat-interface *,
   .internal-chat *,
   .chat-msg-row * {

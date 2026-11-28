@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import React from "react";
-import { LayoutGrid, Users, User, X, DollarSign, History, Megaphone, RefreshCw, MessageSquare, BarChart3, Settings, LifeBuoy, TrendingUp, CreditCard, ArrowUpCircle, ShieldCheck, ChevronDown, Bell, CircleHelp, MessageCircle, ClipboardList } from "lucide-react";
+import { LayoutGrid, Users, User, X, DollarSign, History, Megaphone, RefreshCw, MessageSquare, BarChart3, Settings, LifeBuoy, TrendingUp, CreditCard, ArrowUpCircle, ShieldCheck, ChevronDown, Bell, BellRing, CircleHelp, MessageCircle, ClipboardList } from "lucide-react";
 import { useSettings } from "@/app/Component/Settings/SettingsProvider";
 import { useAuth } from "@/app/Component/Auth/AuthProvider";
 import { authFetch } from "@/lib/authFetch";
@@ -34,6 +34,7 @@ const ICON_MAP = {
   roles: ShieldCheck,
   profile: User,
   notifications: Bell,
+  notices: BellRing,
 };
 
 const ALL_NAV = [
@@ -48,6 +49,7 @@ const ALL_NAV = [
   { label: "Balance Logs", href: "/admin/balance-logs", key: "balance-logs" },
   { label: "User Management", href: "/admin/user-management", key: "user-management" },
   { label: "Roles & Permissions", href: "/admin/roles", key: "roles" },
+  { label: "Notices", href: "/admin/notices", key: "notices" },
   // { label: "Reports", href: "/admin/reports", key: "reports" },
 ];
 
@@ -133,6 +135,7 @@ export default function DashboardSidebar({ open, onClose }) {
     "balance-logs",
     "user-management",
     "roles",
+    "notices",
     "settings",
   ];
   const orderIndex = (key) => {

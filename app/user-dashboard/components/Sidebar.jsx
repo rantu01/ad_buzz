@@ -3,11 +3,12 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState, useEffect } from "react";
-import { Home, ListChecks, User, CreditCard, X, AppWindowMac, DollarSign, ChevronDown, LifeBuoy, Bell, CircleHelp, MessageCircle, FilePlus2 } from "lucide-react";
+import { Home, ListChecks, User, CreditCard, X, AppWindowMac, DollarSign, ChevronDown, LifeBuoy, Bell, BellRing, CircleHelp, MessageCircle, FilePlus2 } from "lucide-react";
 import { useSettings } from "@/app/Component/Settings/SettingsProvider";
 import { useUserAlerts } from "./UserAlertProvider";
 import { useAuth } from "@/app/Component/Auth/AuthProvider";
 import useSSE from "@/app/Component/Hooks/useSSE";
+import { useNotices } from "@/app/Component/Notices/NoticeProvider";
 
 const navTop = [
     { label: "Dashboard", href: "/user-dashboard", icon: AppWindowMac },
@@ -17,6 +18,7 @@ const navTop = [
 ];
 
 const navBottom = [
+    { label: "Notices", href: "/user-dashboard/notices", icon: BellRing, badgeKey: "notices" },
     { label: "Notifications", href: "/user-dashboard/notifications", icon: Bell, badgeKey: "notifs" },
     { label: "Chat", href: "/user-dashboard/chat", icon: MessageCircle, badgeKey: "chat" },
     { label: "Help Center", href: "/help-center", icon: CircleHelp, matchPrefix: true },
@@ -42,6 +44,7 @@ export default function UserSidebar({ open, onClose }) {
     const secondary = settings?.secondaryColor || "#F48E2B";
     const activeBlue = "#F48E2B";
     const { unread, ticketUnread } = useUserAlerts();
+    const { counts: noticeCounts } = useNotices();
     const { user } = useAuth();
     const [chatUnread, setChatUnread] = useState(0);
     useEffect(() => {
@@ -58,6 +61,7 @@ export default function UserSidebar({ open, onClose }) {
         },
     });
     const badgeFor = (key) => {
+        if (key === "notices") return noticeCounts.unread || 0;
         if (key === "notifs") return unread;
         if (key === "tickets") return ticketUnread;
         if (key === "chat") return chatUnread;

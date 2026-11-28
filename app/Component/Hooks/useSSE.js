@@ -16,6 +16,8 @@ const GRANULAR_EVENTS = [
   "deposit.created",
   "deposit.updated",
   "notify",
+  "notice:published",
+  "notice:updated",
   "chat:message",
   "chat:presence",
   "chat:signal",

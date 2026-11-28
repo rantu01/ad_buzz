@@ -90,3 +90,49 @@
 - [ ] Pre-existing chat/call endpoints still trust `uid` for backwards
       compatibility; new internal endpoints use verified tokens. SSE streams
       still identify clients by uid query param (existing convention).
+
+## Notice & Announcement Management System (2026-11-28) — complete
+- [x] Analyse existing architecture and reuse notification/SSE/RBAC patterns.
+- [x] `notices` + `noticeRecipients` collections with indexes and safe upserts.
+- [x] Admin CRUD, publish, schedule, archive, delete-draft and revision flows.
+- [x] Rich text editor (Bengali/English), audience picker, structured changes.
+- [x] Customer modal queue + Notice Center with server-side read/ack tracking.
+- [x] Global (one document, lazy recipients) and individual/multi targeting.
+- [x] Auth/authorization on every API; customer identity from verified token.
+- [x] RBAC permissions + nav items on both panels; `Ads Buzz` branding only.
+- [x] Tests: 86/86 unit tests, 21/21 isolated end-to-end checks, build + lint.
+
+### Remaining notice verification (needs staging UI/tokens)
+- [ ] Manual browser pass with real admin/customer Firebase accounts: modal
+      animation and keyboard focus on mobile/tablet, toast placement, and
+      two-browser SSE delivery of `notice:published`.
+- [ ] Confirm non-admin staff can see the notices nav item only after an admin
+      grants `view_notices` / `manage_notices` in Roles & Permissions (existing
+      role documents are seeded with `$setOnInsert` and are never overwritten).
+
+## Notice bug-fix pass (2026-11-28) — complete
+- [x] Fix `/admin/notices` React crash (awaited stats count + defensive render).
+- [x] Fix email-based individual selection (Mongo `_id` picker + server-side
+      resolution to canonical auth uid, loading/empty/error states, preview).
+- [x] Fix new-notice Publish/Schedule silently creating drafts.
+- [x] Automatic modal for newly published and pending notices (SSE + polling +
+      focus/login reconciliation).
+- [x] Strict mandatory acknowledgement (no Escape/outside/close bypass, error
+      state, duplicate-request guard, next notice auto-advance).
+- [x] Verified with 86 unit tests, 28 API E2E checks, 20 browser UI checks,
+      lint and production build. No production data was inserted or removed.
+
+### Remaining (needs staging devices)
+- [ ] Multi-process deployment SSE fan-out still requires shared pub/sub (the
+      existing SSE manager is in-process, unchanged by this fix).
+
+## Notice UI loading + delete pass (2026-11-28) — complete
+- [x] Per-action loading states on admin notice rows and confirmation dialogs.
+- [x] Editor save/publish/schedule loading states + duplicate guard; customer
+      search loading indicator.
+- [x] Customer Read notice loading state; Confirm shows a spinner, keeps the
+      modal open on failure and re-enables afterwards.
+- [x] Separate Delete action (with destructive confirmation) next to Archive.
+- [x] Safe deletion strategy: hard delete for draft/scheduled, tombstone for
+      published/archived so customer acknowledgement history survives.
+- [x] Verified: 86 tests, lint, build, 18 browser checks, DB integrity check.
