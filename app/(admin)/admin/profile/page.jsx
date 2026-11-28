@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import Swal from "sweetalert2";
 import {
@@ -366,6 +366,10 @@ export default function AdminProfilePage() {
   // used by the user dashboard; best-effort, never blocks the page).
   useLoginSession(uid, user?.email);
 
+  const queryClient = useQueryClient();
+  const fileInputRef = useRef(null);
+  const [avatarSaving, setAvatarSaving] = useState(false);
+
   const profileQuery = useQuery({
     queryKey: ["admin", "profile", uid],
     queryFn: async () => {
@@ -377,8 +381,64 @@ export default function AdminProfilePage() {
     enabled: Boolean(uid),
   });
   const profile = profileQuery.data;
-  const photoURL = user?.photoURL || "";
+  // Same source of truth as the user dashboard: users.avatar (base64 data URL).
+  // Firebase photoURL is kept only as a legacy fallback.
+  const avatarUrl = profile?.avatar || user?.photoURL || "";
   const refreshingProfile = profileQuery.isFetching && !profileQuery.isLoading;
+
+  // Mirrors the user dashboard upload flow exactly: the same PATCH endpoint,
+  // the same base64 data URL field, and the same cross-page sync event.
+  async function saveAvatar(avatar, successMessage) {
+    setAvatarSaving(true);
+    try {
+      const res = await fetch("/api/user/profile", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ uid, avatar }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.message || "Failed to update profile picture.");
+      await queryClient.invalidateQueries({ queryKey: ["admin", "profile", uid] });
+      await queryClient.refetchQueries({ queryKey: ["admin", "profile", uid] });
+      window.dispatchEvent(new CustomEvent("adbuzz:avatar-updated", { detail: { avatar: data.user?.avatar || null } }));
+      Swal.fire({ icon: "success", title: "Updated!", text: successMessage, timer: 1500, showConfirmButton: false });
+    } catch (err) {
+      Swal.fire("Error", err.message, "error");
+    } finally {
+      setAvatarSaving(false);
+    }
+  }
+
+  function handleAvatarChange(e) {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // allow selecting the same file again
+    if (!file) return;
+    if (!/^image\/(png|jpe?g|webp|gif)$/.test(file.type)) {
+      Swal.fire("Invalid file", "Please choose a PNG, JPG, WEBP or GIF image.", "warning");
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      Swal.fire("Too large", "Profile picture must be smaller than 2 MB.", "warning");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => saveAvatar(String(reader.result), "Your profile picture has been updated.");
+    reader.onerror = () => Swal.fire("Error", "Could not read the selected image.", "error");
+    reader.readAsDataURL(file);
+  }
+
+  function handleRemoveAvatar() {
+    Swal.fire({
+      title: "Remove profile picture?",
+      text: "Your account will go back to showing your initials.",
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonText: "Remove",
+      cancelButtonText: "Cancel",
+    }).then((result) => {
+      if (result.isConfirmed) saveAvatar(null, "Your profile picture has been removed.");
+    });
+  }
 
   async function handleRefreshProfile() {
     // Disabled while a fetch is already in flight, so repeated clicks can
@@ -439,9 +499,9 @@ export default function AdminProfilePage() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
           <div className="flex items-center gap-4">
-            {photoURL ? (
+            {avatarUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={photoURL} alt="Profile" className="h-16 w-16 rounded-2xl object-cover border border-slate-200" />
+              <img src={avatarUrl} alt="Profile" className="h-16 w-16 rounded-2xl object-cover border border-slate-200" />
             ) : (
               <span className="flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-[#135B9A] to-[#F48E2B] text-xl font-bold text-white">
                 {initialsOf(profile.displayName, profile.email)}
@@ -453,6 +513,28 @@ export default function AdminProfilePage() {
               <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-slate-900 px-2.5 py-0.5 text-[11px] font-semibold text-white capitalize">
                 <User className="h-3 w-3" /> {formatRole(profile.role)}
               </span>
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={avatarSaving}
+                  className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm transition hover:border-orange-400 hover:text-orange-600 disabled:opacity-50"
+                >
+                  {avatarSaving ? "Uploading..." : avatarUrl ? "Change picture" : "Upload picture"}
+                </button>
+                {avatarUrl && (
+                  <button
+                    type="button"
+                    onClick={handleRemoveAvatar}
+                    disabled={avatarSaving}
+                    className="rounded-lg px-3 py-1.5 text-xs font-semibold text-red-600 transition hover:bg-red-50 disabled:opacity-50"
+                  >
+                    Remove
+                  </button>
+                )}
+              </div>
+              <p className="mt-1 text-[11px] text-slate-400">PNG, JPG, WEBP or GIF. Max 2 MB.</p>
+              <input ref={fileInputRef} type="file" accept="image/png,image/jpeg,image/webp,image/gif" onChange={handleAvatarChange} className="hidden" aria-label="Upload profile picture" />
             </div>
           </div>
 

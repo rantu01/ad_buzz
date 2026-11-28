@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Menu, ChevronDown, LifeBuoy, Banknote } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/app/Component/Auth/AuthProvider";
@@ -13,13 +13,38 @@ import { formatDateTime } from "@/lib/dateFormat";
 
 export default function DashboardTopbar({ onToggle }) {
     const router = useRouter();
-    const { logout } = useAuth();
+    const { user, logout } = useAuth();
+    const [avatarState, setAvatarState] = useState({ uid: null, url: "" });
+    const avatarUrl = avatarState.uid === user?.uid ? avatarState.url : "";
     const settings = useSettings();
     const logo = settings?.logo || "/logo.jpeg";
     const { canView } = useTicketAlerts();
     const { unread: notifUnread, items: notifItems, markRead: markNotifRead, markAllRead: markAllNotifRead, soundOn, toggleSound, refresh: refreshNotifs } = useNotifications();
     const { canView: canViewDeposits, pending: pendingDeposits, items: depositItems } = useDepositAlerts();
     const [depositOpen, setDepositOpen] = useState(false);
+
+    // Show the admin's uploaded picture here too (same users.avatar field as
+    // the profile page) and keep it live across tabs of the admin panel.
+    useEffect(() => {
+        if (!user?.uid) return;
+        let active = true;
+        const load = async () => {
+            try {
+                const res = await fetch(`/api/user/profile?uid=${encodeURIComponent(user.uid)}`);
+                const data = await res.json();
+                if (active && res.ok && data.success) setAvatarState({ uid: user.uid, url: data.user?.avatar || "" });
+            } catch { /* avatar is cosmetic; never block the shell */ }
+        };
+        load();
+        const onAvatarUpdated = (event) => {
+            if (active) setAvatarState({ uid: user.uid, url: event.detail?.avatar || "" });
+        };
+        window.addEventListener("adbuzz:avatar-updated", onAvatarUpdated);
+        return () => {
+            active = false;
+            window.removeEventListener("adbuzz:avatar-updated", onAvatarUpdated);
+        };
+    }, [user?.uid]);
 
     const handleLogout = async () => {
         await logout();
@@ -198,10 +223,15 @@ export default function DashboardTopbar({ onToggle }) {
                         />
                     )}
                     <div className="flex items-center gap-3 rounded-2xl border border-[#E5DED6] bg-white px-3 py-2 shadow-sm">
-                        <div className="flex h-9 w-9 items-center justify-center rounded-xl text-sm font-bold text-white"
-                            style={{ background: `linear-gradient(135deg, ${settings?.primaryColor || "#135B9A"}, ${settings?.secondaryColor || "#F48E2B"})` }}>
-                            AB
-                        </div>
+                        {avatarUrl ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={avatarUrl} alt="Profile" className="h-9 w-9 rounded-xl object-cover border border-slate-200" />
+                        ) : (
+                            <div className="flex h-9 w-9 items-center justify-center rounded-xl text-sm font-bold text-white"
+                                style={{ background: `linear-gradient(135deg, ${settings?.primaryColor || "#135B9A"}, ${settings?.secondaryColor || "#F48E2B"})` }}>
+                                AB
+                            </div>
+                        )}
                         <div className="hidden sm:block">
                             <p className="text-sm font-semibold text-slate-900">Admin</p>
                             <p className="text-xs text-slate-500">Operations lead</p>

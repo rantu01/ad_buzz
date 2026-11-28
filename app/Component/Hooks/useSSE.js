@@ -20,10 +20,20 @@ const GRANULAR_EVENTS = [
   "chat:signal",
   "chat:call",
   "chat:read",
+  "internal:conversation",
+  "internal:message",
+  "internal:read",
+  "internal:signal",
+  "internal:call",
+  "internal:typing",
+  "internal:presence",
 ];
 
-const SERVER_RETRY_MS = 15000;
-const MAX_BACKOFF_MS = 30000;
+// Fast first retry (network blips should not leave chat stale for 15 s),
+// exponential backoff to a sane ceiling, small jitter to avoid thundering herd.
+const SERVER_RETRY_MS = 1000;
+const MAX_BACKOFF_MS = 15000;
+const JITTER_RATIO = 0.2;
 
 // One physical EventSource per uid per tab. Subscribers declare the channels
 // they need; the connection carries the UNION of all active channel sets, so
@@ -53,6 +63,7 @@ function createConnection(uid) {
     closed: false,
     reconnectTimer: null,
     retryMs: SERVER_RETRY_MS,
+    everOpened: false,
 
     connect() {
       if (conn.closed) return;
@@ -61,6 +72,16 @@ function createConnection(uid) {
       for (const channel of unionChannels(conn.listeners)) params.append("channel", channel);
       const es = new EventSource(`/api/events?${params.toString()}`);
       conn.eventSource = es;
+      es.onopen = () => {
+        conn.retryMs = SERVER_RETRY_MS;
+        if (conn.everOpened) {
+          // A reconnect means events may have been missed while offline.
+          for (const listener of [...conn.listeners]) {
+            try { listener.onReconnect?.(); } catch {}
+          }
+        }
+        conn.everOpened = true;
+      };
       es.onmessage = (event) => conn.notify("message", event);
       for (const type of GRANULAR_EVENTS) {
         es.addEventListener(type, (event) => conn.notify(type, event));
@@ -68,7 +89,7 @@ function createConnection(uid) {
       es.onerror = () => {
         if (conn.closed) return;
         conn.disconnectSource();
-        const jitter = Math.floor(Math.random() * Math.max(1000, conn.retryMs * 0.25));
+        const jitter = Math.floor(Math.random() * Math.max(200, conn.retryMs * JITTER_RATIO));
         const delay = Math.min(conn.retryMs + jitter, MAX_BACKOFF_MS);
         conn.retryMs = Math.min(conn.retryMs * 2, MAX_BACKOFF_MS);
         conn.reconnectTimer = setTimeout(() => conn.connect(), delay);
@@ -103,8 +124,8 @@ function createConnection(uid) {
       conn.eventSource = null;
     },
 
-    subscribe(channels, fn) {
-      const listener = { channels: new Set(channels), fn };
+    subscribe(channels, fn, onReconnect) {
+      const listener = { channels: new Set(channels), fn, onReconnect };
       const before = unionChannels(conn.listeners);
       conn.listeners.add(listener);
       if (conn.listeners.size === 1) {
@@ -143,10 +164,12 @@ function createConnection(uid) {
   return conn;
 }
 
-export default function useSSE({ uid, channels = [], onEvent } = {}) {
+export default function useSSE({ uid, channels = [], onEvent, onReconnect } = {}) {
   const onEventRef = useRef(onEvent);
+  const onReconnectRef = useRef(onReconnect);
   useEffect(() => {
     onEventRef.current = onEvent;
+    onReconnectRef.current = onReconnect;
   });
 
   const channelsKey = [...new Set(channels)].sort().join(",");
@@ -161,7 +184,11 @@ export default function useSSE({ uid, channels = [], onEvent } = {}) {
       connections.set(uid, connection);
     }
 
-    return connection.subscribe(channelList, (type, data) => onEventRef.current?.(type, data));
+    return connection.subscribe(
+      channelList,
+      (type, data) => onEventRef.current?.(type, data),
+      () => onReconnectRef.current?.()
+    );
   }, [uid, channelsKey]);
 
   return null;

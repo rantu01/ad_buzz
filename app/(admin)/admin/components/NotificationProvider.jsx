@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import useSSE from "@/app/Component/Hooks/useSSE";
 import { useNotificationSound } from "@/app/Component/Notifications/useNotificationSound";
 import { useAdmin } from "./AdminProvider";
@@ -37,6 +37,7 @@ export default function NotificationProvider({ children }) {
   const [items, setItems] = useState([]);
   const [total, setTotal] = useState(0);
   const [lastEventSeq, setLastEventSeq] = useState(0);
+  const refreshTimerRef = useRef(null);
   const { soundOn, toggleSound, playFor } = useNotificationSound();
 
   const applyState = useCallback((data) => {
@@ -59,6 +60,14 @@ export default function NotificationProvider({ children }) {
     }
   }, [uid, applyState]);
 
+  const scheduleRefresh = useCallback(() => {
+    if (refreshTimerRef.current) return;
+    refreshTimerRef.current = setTimeout(() => {
+      refreshTimerRef.current = null;
+      refresh();
+    }, 150);
+  }, [refresh]);
+
   useEffect(() => {
     if (!uid) return;
     refresh();
@@ -67,6 +76,7 @@ export default function NotificationProvider({ children }) {
     window.addEventListener("focus", onFocus);
     return () => {
       clearInterval(id);
+      clearTimeout(refreshTimerRef.current);
       window.removeEventListener("focus", onFocus);
     };
   }, [uid, refresh]);
@@ -77,9 +87,11 @@ export default function NotificationProvider({ children }) {
     onEvent: (type, data) => {
       if (type !== "notify") return;
       if (data?.notification) playFor(data.notification);
-      refresh();
+      scheduleRefresh();
       setLastEventSeq((s) => s + 1);
     },
+    // Missed notifications while disconnected are reconciled on reconnect.
+    onReconnect: refresh,
   });
 
   // Mark one log row read; when it references a ticket, also mark that

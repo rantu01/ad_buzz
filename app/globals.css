@@ -50,10 +50,15 @@ body {
 }
 
 .chat-interface,
+.internal-chat,
 .chat-interface button,
+.internal-chat button,
 .chat-interface textarea,
+.internal-chat textarea,
 .chat-interface p,
-.chat-interface span {
+.internal-chat p,
+.chat-interface span,
+.internal-chat span {
   font-family: Arial, Helvetica, "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", sans-serif;
 }
 

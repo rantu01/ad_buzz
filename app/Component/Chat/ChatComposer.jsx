@@ -108,7 +108,13 @@ export default function ChatComposer({ uid, uploadUrl = "/api/user/chat/attachme
       const res = await fetch(uploadUrl, { method: "POST", body: fd });
       const data = await res.json();
       if (data.success && data.attachment) {
-        await onSend({ content: "", messageType: "voice", attachments: [data.attachment], voiceMetadata: { duration: recordSeconds } });
+        await onSend({
+          content: "",
+          messageType: "voice",
+          attachments: [data.attachment],
+          voiceMetadata: { duration: recordSeconds },
+          clientId: `v_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+        });
         setAudioBlob(null);
         setAudioUrl(null);
         setRecordSeconds(0);
@@ -134,6 +140,7 @@ export default function ChatComposer({ uid, uploadUrl = "/api/user/chat/attachme
         messageType: hasAttachments ? (attachments[0].type?.startsWith("image/") ? "image" : "file") : "text",
         attachments: hasAttachments ? attachments : [],
         voiceMetadata: null,
+        clientId: `c_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
       });
       setText("");
       setAttachments([]);

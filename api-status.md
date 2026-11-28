@@ -2,11 +2,14 @@
 
 ## Chat and calling additions
 
-- `POST /api/chat/calls` creates and updates voice calls.
-- `POST /api/chat/signal` sends voice SDP/ICE/end/reject/missed events through
-  SSE `chat:signal`.
-- `chat:message`, `chat:read`, and `notify` remain the live chat/unread
-  delivery events.
+See `api_status.md` for the full updated chat/calling endpoint and SSE contract
+(internal Admin/Staff chat, customer-call fix, presence and authorization).
+
+- `POST /api/chat/calls` creates and updates voice or video calls.
+- `POST /api/chat/signal` sends SDP/ICE/end/reject/missed events through SSE
+  `chat:signal`, with a staff-channel fallback for unassigned/offline targets.
+- `chat:message`, `chat:read`, `chat:call`, `chat:signal`, and `notify` remain
+  the live chat/unread delivery events.
 
 Last updated: 2026-10-12. Covers the centralized Meta synchronization service,
 SSE delivery, and the health endpoint. See `realtime-sync.md` for architecture

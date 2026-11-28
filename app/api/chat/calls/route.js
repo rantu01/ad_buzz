@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 import { createCall, updateCall, getCall, listCalls } from "@/lib/chatModel";
-import { getUserByUid } from "@/lib/chatModel";
+import {
+  getUserByUid,
+  getConversationById,
+  assignConversation,
+} from "@/lib/chatModel";
 import { isStaffRole } from "@/lib/permissions";
 import { emitToUser, emitToChannel } from "@/lib/sseManager";
 
@@ -13,9 +17,32 @@ export async function POST(request) {
     if (!user) return NextResponse.json({ success: false, message: "User not found" }, { status: 404 });
     if (action === "create") {
       if (!conversationId || !callType) return NextResponse.json({ success: false, message: "conversationId and callType required" }, { status: 400 });
-      const call = await createCall({ conversationId, initiatorId: uid, receiverId: receiverId || null, callType });
+      const conv = await getConversationById(conversationId);
+      if (!conv) return NextResponse.json({ success: false, message: "Conversation not found" }, { status: 404 });
+      const callerIsStaff = isStaffRole(user.role);
+      // Validate membership: a customer may only call from their own
+      // conversation; staff may call the conversation's customer.
+      if (!callerIsStaff && conv.customerId !== uid) {
+        return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 403 });
+      }
+      const targetUid = receiverId
+        ? String(receiverId)
+        : callerIsStaff
+          ? conv.customerId
+          : conv.assignedStaffId || null;
+      if (targetUid && targetUid === uid) {
+        return NextResponse.json({ success: false, message: "Invalid receiver" }, { status: 400 });
+      }
+      if (targetUid) {
+        const target = await getUserByUid(targetUid);
+        const targetIsStaff = Boolean(target && isStaffRole(target.role));
+        // Staff call the conversation's customer; customers call staff.
+        if (!target || (callerIsStaff ? targetIsStaff : !targetIsStaff)) {
+          return NextResponse.json({ success: false, message: "Invalid receiver" }, { status: 403 });
+        }
+      }
+      const call = await createCall({ conversationId, initiatorId: uid, receiverId: targetUid, callType });
       // notify other party
-      const conv = await (await import("@/lib/chatModel")).getConversationById(conversationId);
       const payload = { conversationId, call };
       if (conv) {
         if (conv.customerId !== uid) emitToUser(conv.customerId, "chat:call", payload);
@@ -27,6 +54,26 @@ export async function POST(request) {
     if (action === "update" && callId) {
       const existing = await getCall(callId);
       if (!existing) return NextResponse.json({ success: false, message: "Call not found" }, { status: 404 });
+      const callConv = await getConversationById(existing.conversationId);
+      if (!callConv) return NextResponse.json({ success: false, message: "Conversation not found" }, { status: 404 });
+      const actorIsStaff = isStaffRole(user.role);
+      if (!actorIsStaff && callConv.customerId !== uid) {
+        return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 403 });
+      }
+      const isParticipant = existing.initiatorId === uid || existing.receiverId === uid ||
+        callConv.assignedStaffId === uid;
+      if (!actorIsStaff && !isParticipant) {
+        return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 403 });
+      }
+      if (["ended", "rejected", "missed"].includes(status) && actorIsStaff && !isParticipant &&
+          existing.initiatorId !== callConv.customerId) {
+        return NextResponse.json({ success: false, message: "Not your call" }, { status: 403 });
+      }
+      // The first staff member who accepts an unassigned customer call becomes
+      // its owner, so later calls can be signaled directly to them.
+      if (status === "accepted" && actorIsStaff && !callConv.assignedStaffId) {
+        await assignConversation(existing.conversationId, uid, user.displayName || user.email || null);
+      }
       const now = new Date();
       const wasTerminal = existing.status === "ended" || existing.status === "rejected" || existing.status === "missed";
       const updates = {};

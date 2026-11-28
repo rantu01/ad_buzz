@@ -1,5 +1,263 @@
 # Progress — Near-Real-Time Meta Ad Account Sync
 
+## Admin profile upload + reverse infinite scroll chat (2026-11-27)
+
+### Part 1 — Admin profile image upload
+- `app/(admin)/admin/profile/page.jsx`: added the user dashboard's exact upload
+  flow — hidden `<input type="file">`, PNG/JPG/WEBP/GIF type check, 2 MB size
+  check, `FileReader.readAsDataURL`, `PATCH /api/user/profile` with the base64
+  `avatar` field, Remove (sends `null`), the `adbuzz:avatar-updated` sync event,
+  and query invalidation/refetch. The existing initial-letter fallback and card
+  layout are preserved; the image now reads `users.avatar` (with legacy
+  `photoURL` fallback) instead of Firebase `photoURL` alone.
+- `app/(admin)/admin/components/Topbar.jsx`: the admin identity chip now renders
+  the uploaded picture when present (initials fallback unchanged) and listens
+  for `adbuzz:avatar-updated`; state is keyed by uid so stale avatars cannot
+  leak across sign-ins. The fetch listener is cleaned up on unmount.
+- No new API, storage field, schema change, or User Dashboard modification.
+
+### Part 2 — Chat system optimization
+Audit again confirmed exactly three real-time chat surfaces (customer chat,
+admin support chat, staff internal chat; the floating widget embeds the first).
+Support-ticket reply lists remain ticket views, unchanged.
+
+- **NEW `lib/chatPagination.js`** — `CHAT_PAGE_SIZE = 25`, `messageKey`,
+  `dedupeMessages`, `mergeOlderMessages`, `upsertMessage`, `normalizePage`.
+- **NEW `app/Component/Hooks/useChatPagination.js`** — cursor/state machine for
+  newest-page-first loading and one-page-at-a-time older loading, with an
+  in-flight guard, per-conversation reset, cache restore, and `hasOlder` from
+  the server. No polling or repeated requests.
+- **`app/Component/Hooks/useChatScroll.js`** — extended with reverse infinite
+  scroll: requests the next older page when the reader reaches within 120 px of
+  the top, with an anchor guard so duplicate scroll events do not fan out into
+  duplicate fetches. Existing bottom-follow, prepend-anchoring and Scroll to
+  Latest behaviour retained.
+- **NEW `app/Component/Chat/ChatHistoryStatus.jsx`** — shared loading indicator
+  and "Beginning of conversation" end marker on all three pages.
+- **API (backward compatible):** `getMessagesPage()` (`lib/chatModel.js`) and
+  `getInternalMessagesPage()` (`lib/internalChatModel.js`) fetch `limit + 1`
+  to derive `hasMore` without a count query; `getMessages` /
+  `getInternalMessages` still return plain arrays. The three history GET routes
+  now return additive `hasMore` + `nextCursor`; all existing fields unchanged.
+  Customer chat's `before` now accepts the same ISO cursor as internal chat
+  (messageId still supported). No new indexes needed — existing
+  `{conversationId, createdAt}` indexes serve the queries.
+- **Pages:** initial history calls now use `limit=25`; older pages are prepended
+  with dedupe and in-flight guards; per-conversation caches keep the cursor and
+  `hasOlder` flag; SSE echoes/reconnects merge instead of replacing loaded older
+  pages; manual "Load earlier messages" button retained in internal chat; sent
+  messages still pin to the bottom.
+- **NEW `tests/chatPagination.test.js`** (8 tests) added to `npm test`.
+
+### Verification
+- `npm test`: 53/53 pass. `npm run build`: passes (115 routes). ESLint on all
+  touched files: 0 errors (the two pre-existing `admin/chat` warnings remain).
+- **Real-browser test** (headless Chrome + CDP) with a temporary harness using
+  the real hooks: opened at the newest 25 messages with one request; each
+  scroll-to-top fetched exactly one older page (25 → 50 → 75 → 100), no
+  duplicates, viewport stayed anchored on the previously read message, loading
+  stopped at the beginning with the end marker; incoming message while reading
+  older messages did not move `scrollTop` and kept the button visible; button
+  smoothly returned to the bottom and hid. Harness and CDP scripts removed.
+- Read-only API smoke: `GET /api/user/profile` 200,
+  `GET /api/user/chat/messages?limit=25` 200 with pagination metadata, invalid
+  avatar PATCH correctly rejected with HTTP 400 (no data written).
+- **Not verifiable here:** authenticated two-device live send/receive and a real
+  image upload round trip (no Firebase credentials); require staging checks.
+  `createdAt`-only cursors can skip messages sharing an identical millisecond
+  timestamp in very high bursts; existing IDs/timestamps make this unlikely.
+
+## Chat scrolling behaviour — all chat interfaces (2026-11-27)
+
+### Scope
+Full-project audit found three real-time chat interfaces; all three now share
+one scrolling implementation (the floating dashboard widget embeds the user
+chat component, so it inherits the behaviour too):
+
+| Route / surface | File |
+|---|---|
+| `/admin/chat` | `app/(admin)/admin/chat/page.jsx` |
+| `/admin/internal-chat` | `app/(admin)/admin/internal-chat/page.jsx` |
+| `/user-dashboard/chat` + floating widget | `app/Component/Chat/UserChatInterface.jsx` |
+
+Support-ticket reply threads (`/admin/support-tickets`, `/user-dashboard/support-tickets`)
+are ticket-detail views, not chat interfaces; they were reviewed and left
+unchanged under the "do not modify unrelated modules" restriction.
+
+### Changes
+- **NEW `app/Component/Hooks/useChatScroll.js`** — reusable hook that owns the
+  message-container scroll state: instant jump to the newest message on mount /
+  reload / history load / conversation switch, `atBottom` tracking from the
+  element's real geometry (80 px threshold), follow-on-new-message only when
+  already at the bottom, viewport-preserving prepend for older-history
+  pagination, `pinToBottom()` for outgoing messages, and smooth
+  `scrollToLatest()` for the button. It uses refs for mutable values and a
+  layout effect (SSR-safe fallback) so jumps happen before paint, with no
+  polling or extra renders per message.
+- **NEW `app/Component/Chat/ScrollToLatestButton.jsx`** — modern floating white
+  pill with Lucide `ArrowDown`, hidden automatically at the bottom, matching
+  the existing orange-accent UI; keyboard focus ring and reduced-motion aware.
+- Removed the three ad-hoc `scrollTop = scrollHeight` effects / SSE timeouts
+  and internal chat's duplicate `atBottomRef`/`handleScroll`; each page now
+  calls `onScroll={handleScroll}`, renders the shared button in a `relative`
+  wrapper around the existing scrollable list, and calls `pinToBottom()` when
+  sending. Chat markup, styling, messages, composer, calls, pagination,
+  search, attachments, SSE, APIs, DB and auth are unchanged.
+
+### Verification
+- `npm test`: 45/45 pass. `npm run build`: passes (115 routes, no new route
+  left behind). `npx eslint` on all five new/changed files: 0 errors (only the
+  two pre-existing `exhaustive-deps` warnings in `admin/chat`).
+- **Real-browser test** (headless Chrome + DevTools Protocol) drove a temporary
+  harness using the actual hook and button; all scenarios passed:
+  initial mount `scrollTop = scrollHeight - clientHeight` (bottom, no button);
+  scroll up → button appears; button click → smooth scroll back to bottom and
+  button hides; incoming message while scrolled up → `scrollTop` unchanged,
+  button stays; incoming message at bottom → follows to new bottom; prepend of
+  older messages → `scrollTop` shifts by the added height (position preserved);
+  send while scrolled up → jumps to newest; conversation switch → bottom.
+  The temporary harness page and Chrome/CDP scripts were removed afterwards.
+- All three chat routes return HTTP 200 in dev; unauthenticated visits redirect
+  to `/login` (pre-existing auth), so authenticated two-device live-message
+  and call flows still require staging credentials/browser verification.
+
+## Fix: Internal Chat image preview (2026-11-26)
+
+- Root cause: `/api/internal-chat/attachments` GET required a Bearer header,
+  but `<img src>` / `<a href>` subresource requests cannot send one, so every
+  image preview returned 401. Customer chat worked because its URL carries a
+  `uid` query param.
+- Fix: GET now accepts a `uid` query param (and still accepts Bearer tokens).
+  It requires an existing **staff** account and membership of the conversation
+  that actually references the attachment; customers and non-member staff get
+  403. Bubbles append `uid` to attachment URLs and cap image width.
+- Verified with a real 1x1 PNG and real tokens: upload 200, message stored with
+  attachment, image GET without Authorization header 200 `image/png` with
+  correct byte length, non-member staff 403, customer 403. Probe records removed.
+
+## Fix: "((intermediate value) || []).find is not a function" (2026-11-26)
+
+- Root cause: `GET /api/internal-chat/conversations` returns `unread` as a
+  **number**, while the new client-side `normalizeConv()` treated it as the raw
+  `[{uid,count}]` array from MongoDB. With unread = 0 the fallback `[]` hid it;
+  as soon as another role/user had unread messages (e.g. unread = 2) `.find`
+  threw and the list showed only "Retry".
+- Fix: `unreadOf()` in the internal chat page now accepts both shapes; server
+  helpers (`unreadOf`, `peerOf`, `personOf`) are guarded with `Array.isArray` so
+  legacy/malformed documents cannot throw either.
+- Verified with real tokens for `technical_manager` (unread = 2) and
+  `key_manager`: HTTP 200 and client normalization passes with no exception.
+
+## Chat performance pass (2026-11-26)
+
+### Bottleneck found
+Measured with a production-server probe using real Firebase ID tokens and real
+user uids. Latencies were quantised in ~250 ms steps: each step is one MongoDB
+round trip. Sending a message performed 8 sequential round trips (~2.0 s); a
+new conversation waited for ~5 serial client requests before showing a thread.
+
+### Changes
+- Backend: single-query token/staff auth, atomic conversation upsert, batched
+  user lookups, immutable-membership cache, combined conversation write,
+  no count/aggregation on list/unread, ISO cursor pagination, projections,
+  `clientId` idempotency for both chat systems, targeted index bootstrap.
+- Frontend: optimistic conversation open with "Opening..." skeleton, optimistic
+  messages with sending spinner + retry, per-conversation caches, coalesced SSE
+  refreshes, instant SSE reconnect (1 s), `onReconnect` resync for unread /
+  notifications, `internal:conversation` event for the other participant,
+  memoized list items/bubbles, lazy images, near-bottom auto-scroll, "Load
+  earlier messages" cursor pagination.
+- Notifications: desktop Notification API with single permission prompt on a
+  user gesture, hidden-tab-only display, per-id dedupe, no toast for the active
+  conversation, missed-call notifications.
+
+### Measured results (median, ms; full samples in `backend_analysis.md`)
+| Endpoint | Before | After |
+|---|---|---|
+| directory | 755.8 | 496.1 |
+| conversation list | 757.3 | 495.5 |
+| get-or-create | 1008.1 | 740.2 |
+| message history | 1008.5 | 496.9 |
+| unread | 760.4 | 492.5 |
+| call history | 1007.8 | 496.0 |
+| send message | 2017.8 | 1239.7 |
+
+Verification: `npm test` 45/45; `npm run build` passes; lint shows no new
+errors in changed files; SSE `internal:conversation`, internal + customer
+`clientId` idempotency verified end to end with real tokens (probe records
+removed; customer conversations preserved).
+
+Not verifiable here: two-device live WebRTC media, browser permission UX on a
+real desktop, and mobile rendering — require staging devices.
+
+## Internal chat, calling & branding (2026-11-26)
+
+### Phase 1–2 — analysis and plan (done)
+- Full codebase analysis recorded in new `backend_analysis.md`.
+- Customer-call root causes confirmed: conversation is born unassigned
+  (`chatModel.js`), the customer button was disabled until manual assignment,
+  signaling had no staff-channel/offline fallback, `chat:call` notices had no
+  UI consumer, and ICE candidates were neither buffered nor correlated to a
+  call id.
+- `todo.md` / `api_status.md` updated with the plan and endpoint inventory.
+
+### Phase 3 — System B internal Admin/Staff chat (done)
+- New collections `internalConversations`, `internalMessages`, `internalCalls`
+  with indexes in `lib/indexes.js`. Canonical sorted participant key gives
+  race-safe get-or-create; no customer-chat collection is read or written.
+- `lib/internalChatModel.js`: membership-scoped queries, per-participant unread
+  counters, read receipts, message history pagination, call records/history.
+- Verified-token + staff-role authorization on every endpoint via
+  `lib/internalChatAuth.js`; SSE emits are targeted with `emitToUser` only.
+- New page `/admin/internal-chat` with searchable staff directory, new-chat
+  modal, conversation list, WhatsApp-style thread, attachments/voice notes,
+  typing indicator, read receipts, call history, skeletons, empty/error
+  states, responsive list/thread split, and sidebar entry with unread badge.
+- Presence: `sseManager.getOnlineUids/isUidOnline` + staff-only
+  `internal:presence` events; explicit `admin:chat|admin:meta` channel
+  subscriptions are now staff-only in `app/api/events/route.js`.
+
+### Phase 4 — customer → admin calling fix (done)
+- Customer call button no longer depends on manual staff assignment; the
+  server resolves the target or broadcasts the offer to the staff channel.
+  First accept wins via an `accepted` claim marker.
+- Call create/update validates caller membership and receiver role and
+  auto-assigns the accepting staff member to previously unassigned chats.
+- `CentralCallProvider` now supports both systems and real voice/video:
+  `getUserMedia` audio/video tracks, remote/local `<video>`, camera toggle,
+  outgoing + incoming ICE buffering, connection failure cleanup, accepted/
+  connecting/connected/disconnected states, duration, mute/minimize, and
+  cleanup on unmount.
+
+### Phase 5 — branding (done)
+- All 10 user-facing `AdsFixer` strings replaced with `Ad Buzz`
+  (`UserChatInterface.jsx`, `NewTicketModal.jsx`); root browser title is
+  `Ad Buzz Portal`. No DB names, routes, env vars or credentials renamed.
+
+### Verification so far
+- `npm test`: 45/45 pass (unchanged baseline).
+- `npm run build`: pass, 115 routes including `/admin/internal-chat` and all
+  new internal APIs.
+- `npm run lint`: no new errors in changed files (remaining errors are
+  pre-existing React Compiler rules in unrelated pages; warnings are `<img>`
+  and one pre-existing exhaustive-deps warning).
+- Data-layer integration smoke test against the live MongoDB using **real**
+  admin/staff/customer records: canonical conversation dedupe, peer lookup,
+  customer 403 isolation, message persistence, unread + read receipts, call
+  create/accept/end and history — PASS. Only the test records created by the
+  smoke test were removed; customer-chat data untouched.
+- HTTP smoke test on `next dev` with a real Firebase ID token: unauthenticated
+  requests → 401, customer token → 403, staff directory → 200, conversation
+  create (twice → same id), message send/history, read/unread, call history and
+  offline receiver → `unavailable: true` + missed record — all PASS. All test
+  records were removed afterwards.
+
+### Still required (manual staging)
+- Two-device/browser WebRTC verification: voice + video, accept/reject/missed,
+  mute/camera, ICE on a lossy network, navigation cleanup, and a customer call
+  to an unassigned conversation. Cannot be completed from a code-only session
+  (needs camera/mic, HTTPS and two authenticated devices).
+
 ## Chat and voice calling update
 
 - Added a centralized, app-wide voice call provider using the existing SSE

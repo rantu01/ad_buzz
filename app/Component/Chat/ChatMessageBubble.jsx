@@ -69,7 +69,7 @@ function callStatusLabel(meta, content) {
   return known || (key ? key.replace(/_/g, " ") : "Call");
 }
 
-export default function ChatMessageBubble({ message, isOwn, showSender = true }) {
+function ChatMessageBubble({ message, isOwn, showSender = true, onRetry }) {
   const m = message || {};
   const type = m.messageType || "text";
   const time = formatTime(m.createdAt);
@@ -200,9 +200,19 @@ export default function ChatMessageBubble({ message, isOwn, showSender = true })
         </div>
         <div className={`mt-1 flex items-center gap-1 text-[10px] text-slate-400 ${isOwn ? "justify-end" : "justify-start"}`}>
           <span>{time}</span>
-          {isOwn && (m.readBy && m.readBy.length > 1 ? <CheckCheck size={12} className="text-blue-500" /> : <Check size={12} />)}
+          {m.status === "sending" && (
+            <span className="h-3 w-3 animate-spin rounded-full border-2 border-slate-300 border-t-orange-500" aria-label="Sending message" />
+          )}
+          {m.status === "failed" && (
+            <button type="button" onClick={() => onRetry?.(m)} className="font-semibold text-red-500 hover:underline" aria-label="Retry sending message">Retry</button>
+          )}
+          {!m.status && isOwn && (m.readBy && m.readBy.length > 1
+            ? <CheckCheck size={12} className="text-blue-500" />
+            : <Check size={12} />)}
         </div>
       </div>
     </div>
   );
 }
+
+export default React.memo(ChatMessageBubble);

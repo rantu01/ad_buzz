@@ -29,6 +29,10 @@ export default function FloatingChatWidget() {
       if (type !== "chat:message" && type !== "chat:read") return;
       fetch(`/api/user/chat/unread?uid=${encodeURIComponent(uid)}`).then((r) => r.json()).then((d) => { if (d.success) setUnread(d.unread || 0); }).catch(() => {});
     },
+    onReconnect: () => {
+      fetch(`/api/user/chat/unread?uid=${encodeURIComponent(uid)}`)
+        .then((r) => r.json()).then((d) => { if (d.success) setUnread(d.unread || 0); }).catch(() => {});
+    },
   });
 
   useEffect(() => {

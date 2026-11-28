@@ -1,62 +1,92 @@
-# TODO — Meta Sync Follow-ups
+# TODO — Ad Buzz chat, calling & branding work
 
-## Chat and calling
+## Bug fixes (2026-11-26) — complete
+- [x] Fixed `.find is not a function` crash for users with unread counts by
+      normalizing both numeric (API) and array (SSE) `unread` shapes, plus
+      defensive array guards in the data layer and routes.
+- [x] Fixed internal Chat image preview: attachment GET now authorizes
+      `<img>`/`<a>` subresource requests via a uid param while enforcing staff
+      role + conversation membership (verified with real PNG and tokens).
 
-- [x] Central app-wide voice call provider
-- [x] Incoming call, ringtone, accept/reject, mute, and minimize/restore
-- [x] Removed video calling controls
-- [x] Website-wide chat SSE notifications and unread updates
-- [ ] Perform manual two-device WebRTC, ringtone, network-loss, and
-  navigation test on staging
+## Performance pass (2026-11-26) — complete
+- [x] Measured actual before/after API latency with real tokens (no invented numbers).
+- [x] Removed sequential DB round trips (auth, role lookup, N+1 user reads,
+      post-write conversation reads, count/aggregation).
+- [x] Atomic conversation upsert + unique key + `clientId` idempotency in both systems.
+- [x] Optimistic conversation opening and sending with retry, caches, coalesced
+      SSE refreshes, cursor pagination, memoization, lazy images.
+- [x] Fast SSE reconnect + resync hook; unread/notification reconciliation.
+- [x] Desktop notifications with one-time permission, dedupe, hidden-tab gating.
+- [x] `npm test` 45/45, `npm run build`, lint (no new errors), SSE + idempotency smoke tests.
 
-## Done (2026-10-12)
+### Remaining verification (needs staging devices)
+- [ ] Real two-device WebRTC (voice/video) and mobile rendering.
+- [ ] Browser notification permission UX in a real browser (cannot be automated
+      from this environment).
+- [ ] Web Push after browser close — requires service worker + VAPID keys, not
+      present; documented as a limitation rather than faked.
 
-- [x] Scoped SSE account delivery (`lib/metaEvents.js`): staff channel +
-  assigned-owner targeting; role-aware `admin:meta` auto-subscribe.
-- [x] Failure-timestamp fix: `syncAllAdAccounts` errors no longer advance
-  `lastSyncedAt`; `lastAttemptedSyncAt` recorded on both paths.
-- [x] Health endpoint: `GET /api/admin/meta-api/sync?type=status`.
-- [x] Pure-logic extraction (`lib/syncMath.js`, `lib/prepaid.js`,
-  `lib/accountMath.js`, `lib/webhookAuth.js`) + 27 `node --test` unit tests.
-- [x] `api-status.md` created; `progress.md` / `realtime-sync.md` updated.
+## Phase 1 — Codebase analysis (complete)
+- [x] Map project structure, auth/roles, SSE realtime transport, DB models/indexes.
+- [x] Trace System A (customer ↔ admin) chat + call flow end to end.
+- [x] Identify customer-call root causes (unassigned conversation + disabled button,
+      single-uid signaling with no staff-channel fallback, no `chat:call` listener,
+      no ICE buffering, no authorization).
+- [x] Locate all user-facing legacy branding strings.
+- [x] Record findings in `backend_analysis.md`.
 
-## Remaining (ordered by value)
+## Phase 2 — Documentation (complete)
+- [x] `backend_analysis.md` — architecture, defects, DB/API plan.
+- [x] `todo.md` — ordered implementation checklist.
+- [x] `progress.md` — progress log (updated as work landed).
+- [x] `api_status.md` — new/changed endpoint + event status.
 
-0. **Confirm the stuck-page fix in production** — open two admin tabs, start
-   a Sync Spend, and navigate via the sidebar in both tabs. DevTools →
-   Network should show exactly 1 `api/events` stream per tab (was 3).
-   If a freeze recurs, capture: tab count, pending requests in Network,
-   and whether the stream count exceeds 1/tab.
-1. **Confirm the stale-balance fix in production** — after deploy:
-   (a) `GET /api/admin/meta-api/sync?type=status` → `autoFetch.state`
-   must be `synced` with a recent `lastRunAt` (was frozen at the
-   reported incident); (b) watch `syncLogs` for `[Auto-fetch]
-   Reconcile error` every ~5 min — recurring errors mean the token
-   or network needs attention, not code; (c) compare one account's
-   `spend_cap`/`amount_spent` from the Meta Graph API response to
-   `metaAdAccounts` (the join source for the displayed Remaining
-   Balance) to confirm fresh values land.
+## Phase 3 — Internal Admin/Staff chat (complete)
+- [x] `lib/internalChatModel.js` — conversations/messages/calls, membership checks,
+      unread counters, get-or-create with race-safe canonical key.
+- [x] Indexes for the three new collections in `lib/indexes.js`.
+- [x] Presence helpers in `lib/sseManager.js` (`getOnlineUids`, `isUidOnline`,
+      `internal:presence`) and staff-only channel hardening in `app/api/events/route.js`.
+- [x] Internal APIs (verified token + staff role on every route):
+      users, conversations, messages, read, unread, typing, attachments,
+      calls, signal.
+- [x] `app/(admin)/admin/internal-chat/page.jsx` + components: directory/new
+      chat, conversation list, thread, bubbles, composer, call history,
+      responsive layouts, skeletons/empty/error states, toasts.
+- [x] Sidebar navigation item with unread badge.
+- [x] Realtime wiring: `internal:message`, `internal:read`, `internal:signal`,
+      `internal:call`, `internal:typing`, `internal:presence`.
 
-1. **Live end-to-end verification on staging** — rename/add/remove an account
-   in the BM and confirm row-level SSE updates (checklist in
-   `realtime-sync.md` → Testing). Needs a staging BM + webhook subscription;
-   cannot be done from code alone.
-2. **Verify SSE role mapping against real staff uids** — confirm every staff
-   `users.role` value is non-`customer` so admin dashboards keep receiving
-   `admin:meta` after the auto-subscribe change. Spot-check
-   `/api/admin/meta-api/sync?type=status` (`adminMetaSubscribers`) after deploy.
-3. **Consider Firebase ID-token verification on `/api/events`** — currently the
-   `uid` query param is trusted (pre-existing convention across all API
-   routes). Verifying the token per SSE connect would close deliberate
-   `?channel=admin:meta` snooping by non-staff. Bigger change; do together
-   with route-wide auth hardening, not alone.
-4. **Multi-process SSE** — `sseManager` is in-process memory. If Hostinger ever
-   runs ≥2 Node processes, add a shared pub/sub before scaling out (status
-   endpoint exposes connection counts to detect this).
-5. **Meta webhook production subscription** — callback URL, verify token,
-   `effective_status` field, and `subscribed_apps` per ad account (steps in
-   `realtime-sync.md`). Until then, rename detection latency = reconcile
-   interval (by design, documented in UI timestamps).
-6. **Optional:** extend tests to DB-backed paths (incremental diff
-   persistence, priority-queue coalescing) with a test MongoDB instance.
-   Pure-logic coverage exists; integration coverage does not.
+## Phase 4 — Customer → Admin calling fix (complete)
+- [x] Enable customer call button when a conversation exists; target assigned
+      staff when available, otherwise broadcast to the staff channel.
+- [x] Server-side resolution/fan-out of offers + accepted marker in
+      `/api/chat/signal`; existing event names and payload shapes preserved.
+- [x] Auto-assign accepting staff to unassigned conversations in
+      `/api/chat/calls`; validate caller membership and receiver role.
+- [x] Add ICE buffering, video support and cleanup to `CentralCallProvider`
+      without breaking existing customer voice calls.
+- [x] Verify System A history/APIs unchanged; no data migration.
+
+## Phase 5 — Branding (complete)
+- [x] Replaced all 10 `AdsFixer` strings with `Ad Buzz` in
+      `UserChatInterface.jsx` and `NewTicketModal.jsx`.
+- [x] Root metadata title `Adsbuzz Portal` → `Ad Buzz Portal`.
+- [x] Re-scanned case-insensitively; no user-facing legacy name remains.
+
+## Phase 6 — Verification
+- [x] `npm test` (45/45), `npm run build` (115 routes), `npm run lint` (no new
+      errors in changed files; pre-existing unrelated errors remain).
+- [x] API/data-layer smoke test with real Firebase user uids against MongoDB
+      (no dummy data; test records removed afterwards).
+- [ ] Manual two-device WebRTC checklist (needs staging devices, HTTPS,
+      camera/mic): voice, video, accept/reject/missed, mute/camera, ICE on a
+      lossy network, navigation cleanup, customer call to unassigned chat.
+
+## Remaining / known limitations
+- [ ] SSE manager is in-process; multi-process deployments need shared pub/sub
+      (documented limitation; no second realtime architecture introduced).
+- [ ] Live WebRTC verification cannot be completed from a code-only environment.
+- [ ] Pre-existing chat/call endpoints still trust `uid` for backwards
+      compatibility; new internal endpoints use verified tokens. SSE streams
+      still identify clients by uid query param (existing convention).

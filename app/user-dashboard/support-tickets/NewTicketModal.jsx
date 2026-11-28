@@ -197,7 +197,7 @@ export default function NewTicketModal({ open, onClose, user, adAccounts = [], o
               <CircleHelp size={18} />
             </div>
             <div>
-              <p className="text-sm font-bold text-slate-900">AdsFixer LLC Support</p>
+              <p className="text-sm font-bold text-slate-900">Ad Buzz Support</p>
               <p className="flex items-center gap-1.5 text-xs text-slate-500">
                 <span className="inline-block h-2 w-2 rounded-full bg-emerald-500" />
                 Online · we usually reply in a few minutes
@@ -247,7 +247,7 @@ export default function NewTicketModal({ open, onClose, user, adAccounts = [], o
           {step === 2 && (
             <>
               <div className="mb-4">
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">AdsFixer LLC Support</p>
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Ad Buzz Support</p>
                 <p className="text-xs text-slate-500">Online · we usually reply in a few minutes</p>
                 <h2 className="mt-2 text-lg font-bold text-slate-900">New Ticket</h2>
                 <p className="text-sm text-slate-500">
@@ -373,7 +373,7 @@ export default function NewTicketModal({ open, onClose, user, adAccounts = [], o
           {step === 3 && (
             <>
               <div className="mb-4">
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">AdsFixer LLC Support</p>
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Ad Buzz Support</p>
                 <h2 className="mt-2 text-lg font-bold text-slate-900">Review Ticket</h2>
                 <p className="text-sm text-slate-500">Step 3 of 3</p>
               </div>

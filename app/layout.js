@@ -16,7 +16,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata = {
-  title: "Adsbuzz Portal",
+  title: "Ad Buzz Portal",
   description: "Ad Buzz - Ad Account Management Platform",
   icons: { icon: "/favicon.png" },
 };

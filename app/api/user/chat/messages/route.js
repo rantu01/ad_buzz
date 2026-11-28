@@ -1,5 +1,5 @@
 ﻿import { NextResponse } from "next/server";
-import { getOrCreateConversation, getMessages, createMessage, markRead, getConversationByCustomer } from "@/lib/chatModel";
+import { getOrCreateConversation, getMessagesPage, createMessage, markRead, getConversationByCustomer } from "@/lib/chatModel";
 import { getUserByUid } from "@/lib/chatModel";
 import { emitToUser, emitToChannel } from "@/lib/sseManager";
 import { createNotification, createNotificationsForUids } from "@/lib/notificationModel";
@@ -19,8 +19,8 @@ export async function GET(request) {
     let conv = conversationId ? await (await import("@/lib/chatModel")).getConversationById(conversationId) : await getConversationByCustomer(uid);
     if (!conv) conv = await getOrCreateConversation({ customerId: uid, customerName: user.displayName || user.email || "", customerEmail: user.email || "" });
     if (conv.customerId !== uid) return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 403 });
-    const messages = await getMessages(conv.conversationId, { before, limit });
-    return NextResponse.json({ success: true, conversationId: conv.conversationId, messages });
+    const { messages, hasMore, nextCursor } = await getMessagesPage(conv.conversationId, { before, limit });
+    return NextResponse.json({ success: true, conversationId: conv.conversationId, messages, hasMore, nextCursor });
   } catch (error) {
     return NextResponse.json({ success: false, message: error.message }, { status: 500 });
   }
@@ -29,7 +29,7 @@ export async function GET(request) {
 export async function POST(request) {
   try {
     const body = await request.json();
-    const { uid, conversationId, content, messageType = "text", attachments = [], voiceMetadata = null, callMetadata = null } = body || {};
+    const { uid, conversationId, content, messageType = "text", attachments = [], voiceMetadata = null, callMetadata = null, clientId = null } = body || {};
     if (!uid) return NextResponse.json({ success: false, message: "uid required" }, { status: 400 });
     const user = await getUserByUid(uid);
     if (!user) return NextResponse.json({ success: false, message: "User not found" }, { status: 404 });
@@ -51,9 +51,11 @@ export async function POST(request) {
       attachments,
       voiceMetadata,
       callMetadata,
+      clientId,
     });
-    // real-time notify staff
-    const payload = { conversationId: conv.conversationId, message: msg, conversation: await (await import("@/lib/chatModel")).getConversationById(conv.conversationId) };
+    // real-time notify staff (skip duplicates from an optimistic retry)
+    const payload = { conversationId: conv.conversationId, message: msg, conversation: msg._conversation || conv };
+    if (msg._duplicate) return NextResponse.json({ success: true, message: msg, conversationId: conv.conversationId, duplicate: true });
     emitToChannel("admin:chat", "chat:message", payload);
     // also notify assigned staff if any
     if (conv.assignedStaffId) emitToUser(conv.assignedStaffId, "chat:message", payload);

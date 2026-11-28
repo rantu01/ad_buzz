@@ -1,13 +1,19 @@
 ﻿"use client";
 
-import React, { useEffect, useRef, useState } from "react";
-import { Phone, Search, User as UserIcon } from "lucide-react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import { Phone, Video, Search, User as UserIcon } from "lucide-react";
 import { useAuth } from "@/app/Component/Auth/AuthProvider";
 import { useAdmin } from "../components/AdminProvider";
 import ChatMessageBubble from "@/app/Component/Chat/ChatMessageBubble";
 import ChatComposer from "@/app/Component/Chat/ChatComposer";
 import { useCentralCall } from "@/app/Component/Chat/CentralCallProvider";
 import useSSE from "@/app/Component/Hooks/useSSE";
+import useChatScroll from "@/app/Component/Hooks/useChatScroll";
+import useChatPagination from "@/app/Component/Hooks/useChatPagination";
+import ScrollToLatestButton from "@/app/Component/Chat/ScrollToLatestButton";
+import ChatHistoryStatus from "@/app/Component/Chat/ChatHistoryStatus";
+import { CHAT_PAGE_SIZE, mergeOlderMessages, upsertMessage } from "@/lib/chatPagination";
+import { setActiveConversation } from "@/lib/activeChat";
 
 export default function AdminChatPage() {
   const { user } = useAuth();
@@ -18,97 +24,198 @@ export default function AdminChatPage() {
   const [selectedConv, setSelectedConv] = useState(null);
   const [messages, setMessages] = useState([]);
   const [search, setSearch] = useState("");
+  const searchRef = useRef("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [staffList, setStaffList] = useState([]);
   const [loading, setLoading] = useState(true);
   const listRef = useRef(null);
   const convIdRef = useRef(null);
+  const selectedConvRef = useRef(null);
+  const pendingPayloadRef = useRef(new Map());
+  const messageCacheRef = useRef(new Map());
+  const refreshTimerRef = useRef(null);
+  const openSeqRef = useRef(0);
+
+  const fetchPage = useCallback(async ({ before, limit }) => {
+    const cid = convIdRef.current;
+    if (!uid || !cid) return { messages: [], hasMore: false, nextCursor: null };
+    const url = `/api/admin/chat/messages?uid=${encodeURIComponent(uid)}&conversationId=${encodeURIComponent(cid)}&limit=${limit}${before ? `&before=${encodeURIComponent(before)}` : ""}`;
+    const res = await fetch(url);
+    const data = await res.json();
+    if (!res.ok || !data.success) throw new Error(data.message || "Could not load messages");
+    return data;
+  }, [uid]);
+
+  const {
+    hasOlder,
+    loadingOlder,
+    applyPage,
+    loadOlder,
+    restorePage,
+    getState,
+  } = useChatPagination({ key: selectedId, fetchPage, enabled: Boolean(uid) });
+
+  const handleLoadOlder = useCallback(async () => {
+    const older = await loadOlder();
+    if (!older?.length) return;
+    setMessages((prev) => {
+      const merged = mergeOlderMessages(prev, older);
+      const cid = convIdRef.current;
+      if (cid) messageCacheRef.current.set(cid, { ...getState(), messages: merged, at: Date.now() });
+      return merged;
+    });
+  }, [loadOlder, getState]);
+
+  const { showScrollToLatest, handleScroll, scrollToLatest, pinToBottom } = useChatScroll({
+    listRef,
+    messages,
+    conversationKey: selectedId,
+    loading,
+    onLoadOlder: handleLoadOlder,
+    hasOlder,
+    loadingOlder,
+  });
 
   const call = useCentralCall();
 
-  const fetchConversations = async () => {
+  const fetchConversations = useCallback(async () => {
     if (!uid) return;
     try {
-      const url = `/api/admin/chat/conversations?uid=${encodeURIComponent(uid)}&status=${encodeURIComponent(statusFilter)}&search=${encodeURIComponent(search)}&limit=50`;
+      const url = `/api/admin/chat/conversations?uid=${encodeURIComponent(uid)}&status=${encodeURIComponent(statusFilter)}&search=${encodeURIComponent(searchRef.current)}&limit=50`;
       const res = await fetch(url);
       const data = await res.json();
       if (data.success) setConversations(data.items || []);
     } catch {}
-  };
+  }, [uid, statusFilter]);
 
-  const fetchStaff = async () => {
+  const fetchStaff = useCallback(async () => {
     if (!uid) return;
     try {
       const res = await fetch(`/api/admin/chat/staff?uid=${encodeURIComponent(uid)}`);
       const data = await res.json();
       if (data.success) setStaffList(data.staff || []);
     } catch {}
-  };
+  }, [uid]);
 
-  const openConversation = async (conv) => {
-    if (!uid) return;
-    setSelectedId(conv.conversationId);
+  const scheduleListRefresh = useCallback(() => {
+    if (refreshTimerRef.current) return;
+    refreshTimerRef.current = setTimeout(() => {
+      refreshTimerRef.current = null;
+      fetchConversations();
+    }, 120);
+  }, [fetchConversations]);
+
+  const openConversation = useCallback(async (conv) => {
+    if (!uid || !conv?.conversationId) return;
+    const cid = conv.conversationId;
+    const seq = ++openSeqRef.current;
+    setSelectedId(cid);
     setSelectedConv(conv);
-    convIdRef.current = conv.conversationId;
-    setLoading(true);
+    selectedConvRef.current = conv;
+    convIdRef.current = cid;
+    const cached = messageCacheRef.current.get(cid);
+    setMessages(cached ? cached.messages : []);
+    restorePage(cached ? { cursor: cached.cursor, hasMore: cached.hasOlder } : {});
+    setLoading(!cached);
     try {
-      const res = await fetch(`/api/admin/chat/messages?uid=${encodeURIComponent(uid)}&conversationId=${encodeURIComponent(conv.conversationId)}&limit=50`);
+      const res = await fetch(`/api/admin/chat/messages?uid=${encodeURIComponent(uid)}&conversationId=${encodeURIComponent(cid)}&limit=${CHAT_PAGE_SIZE}`);
       const data = await res.json();
-      if (data.success) setMessages(data.messages || []);
-      fetch(`/api/admin/chat/read`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ uid, conversationId: conv.conversationId }) }).catch(() => {});
+      if (seq !== openSeqRef.current) return; // a newer conversation was opened
+      const list = data.success ? applyPage(data) : [];
+      const state = data.success ? getState() : { cursor: null, hasOlder: false };
+      messageCacheRef.current.set(cid, { ...state, messages: list, at: Date.now() });
+      setMessages(list);
+      fetch(`/api/admin/chat/read`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ uid, conversationId: cid }) }).catch(() => {});
     } catch {}
-    finally { setLoading(false); }
-  };
+    finally { if (seq === openSeqRef.current) setLoading(false); }
+    scheduleListRefresh();
+  }, [uid, scheduleListRefresh, applyPage, restorePage, getState]);
+
+  useEffect(() => { searchRef.current = search; }, [search]);
 
   useEffect(() => {
     if (!uid) return;
     const t = setTimeout(() => { fetchConversations(); fetchStaff(); }, 0);
     return () => clearTimeout(t);
-  }, [uid, statusFilter]);
+  }, [uid, statusFilter, fetchConversations, fetchStaff]);
 
   useEffect(() => {
     if (!uid) return;
-    const handle = () => fetchConversations();
-    const t = setTimeout(handle, 300);
+    const t = setTimeout(fetchConversations, 300);
     return () => clearTimeout(t);
-  }, [search]);
+  }, [search, fetchConversations]);
+
+  useEffect(() => {
+    setActiveConversation(selectedConv?.pending ? null : selectedConv?.conversationId || null, "customer");
+    return () => setActiveConversation(null, null);
+  }, [selectedConv?.conversationId]);
 
   useSSE({
     uid,
     channels: [],
     onEvent: (type, data) => {
-      if (type === "chat:message") {
-        if (data?.message) {
-          if (data.conversationId === selectedId || data?.message?.conversationId === selectedId) {
-            setMessages((prev) => prev.some((m) => m.messageId === data.message.messageId) ? prev : [...prev, data.message]);
-            setTimeout(() => { if (listRef.current) listRef.current.scrollTop = listRef.current.scrollHeight; }, 50);
-          }
-          fetchConversations();
+      if (type === "chat:message" && data?.message) {
+        const cid = data.conversationId || data.message.conversationId;
+        if (cid === convIdRef.current) {
+          setMessages((prev) => upsertMessage(prev, { ...data.message, status: "sent" }));
         }
+        scheduleListRefresh();
         if (data?.conversation) {
           setSelectedConv((prev) => prev?.conversationId === data.conversation.conversationId ? data.conversation : prev);
         }
       }
-      if (type === "chat:read") fetchConversations();
+      if (type === "chat:read") scheduleListRefresh();
+    },
+    onReconnect: () => {
+      fetchConversations();
+      if (convIdRef.current) openConversation(selectedConvRef.current || { conversationId: convIdRef.current });
     },
   });
 
-  useEffect(() => {
-    if (listRef.current) listRef.current.scrollTop = listRef.current.scrollHeight;
-  }, [messages.length]);
-
-  const handleSend = async (payload) => {
-    if (!uid || !selectedConv) return;
-    const res = await fetch("/api/admin/chat/messages", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ uid, conversationId: selectedConv.conversationId, ...payload }),
-    });
-    const data = await res.json();
-    if (data.success && data.message) {
-      setMessages((prev) => prev.some((m) => m.messageId === data.message.messageId) ? prev : [...prev, data.message]);
+  const handleSend = useCallback(async (payload) => {
+    if (!uid || !selectedConvRef.current) throw new Error("No conversation selected");
+    const clientId = payload.clientId || `c_${uid}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const temp = {
+      messageId: `tmp_${clientId}`,
+      clientId,
+      conversationId: selectedConvRef.current.conversationId,
+      senderId: uid,
+      senderNameSnapshot: user?.displayName || user?.email || "Staff",
+      messageType: payload.messageType || "text",
+      content: payload.content || "",
+      attachments: payload.attachments || [],
+      voiceMetadata: payload.voiceMetadata || null,
+      readBy: [uid],
+      createdAt: new Date().toISOString(),
+      status: "sending",
+    };
+    pendingPayloadRef.current.set(clientId, payload);
+    pinToBottom();
+    setMessages((prev) => [...prev, temp]);
+    try {
+      const res = await fetch("/api/admin/chat/messages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ uid, conversationId: selectedConvRef.current.conversationId, ...payload, clientId }),
+      });
+      const data = await res.json();
+      if (!data.success || !data.message) throw new Error(data.message || "Could not send message");
+      pendingPayloadRef.current.delete(clientId);
+      setMessages((prev) => prev.map((m) => m.clientId === clientId ? { ...data.message, status: "sent" } : m));
+      scheduleListRefresh();
+      return data.message;
+    } catch (err) {
+      setMessages((prev) => prev.map((m) => m.clientId === clientId ? { ...m, status: "failed" } : m));
+      throw err;
     }
-  };
+  }, [uid, user, scheduleListRefresh, pinToBottom]);
+
+  const retryMessage = useCallback((message) => {
+    const payload = pendingPayloadRef.current.get(message.clientId);
+    if (!payload) return;
+    setMessages((prev) => prev.map((m) => m.clientId === message.clientId ? { ...m, status: "sending" } : m));
+    handleSend({ ...payload, clientId: message.clientId }).catch(() => {});
+  }, [handleSend]);
 
   const assignTo = async (staffUid) => {
     if (!uid || !selectedConv) return;
@@ -133,12 +240,14 @@ export default function AdminChatPage() {
     fetchConversations();
   };
 
-  const startCall = () => {
+  const startCall = (callType = "voice") => {
     if (!selectedConv) return;
     call?.startCall({
       conversationId: selectedConv.conversationId,
       targetUid: selectedConv.customerId,
       targetName: selectedConv.customerName || selectedConv.customerEmail || "Customer",
+      callType,
+      system: "customer",
     });
   };
 
@@ -196,14 +305,19 @@ export default function AdminChatPage() {
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                <button type="button" onClick={startCall} className="rounded-full p-2 text-slate-600 hover:bg-slate-100" aria-label="Voice call"><Phone size={18} /></button>
+                <button type="button" onClick={() => startCall("voice")} className="rounded-full p-2 text-slate-600 hover:bg-slate-100" aria-label="Voice call"><Phone size={18} /></button>
+                <button type="button" onClick={() => startCall("video")} className="rounded-full p-2 text-slate-600 hover:bg-slate-100" aria-label="Video call"><Video size={18} /></button>
               </div>
             </div>
-            <div ref={listRef} className="flex-1 overflow-y-auto bg-slate-50 p-3">
-              {loading && <p className="text-center text-xs text-slate-400">Loading...</p>}
-              {messages.map((m) => (
-                <ChatMessageBubble key={m.messageId} message={m} isOwn={m.senderId === uid} showSender={m.senderId !== uid} />
-              ))}
+            <div className="relative min-h-0 flex-1">
+              <div ref={listRef} onScroll={handleScroll} className="h-full overflow-y-auto bg-slate-50 p-3">
+                {loading && <p className="text-center text-xs text-slate-400">Loading...</p>}
+                <ChatHistoryStatus loadingOlder={loadingOlder} showBeginning={!hasOlder && !loading && messages.length > 0} />
+                {messages.map((m) => (
+                  <ChatMessageBubble key={m.clientId || m.messageId} message={m} isOwn={m.senderId === uid} showSender={m.senderId !== uid} onRetry={retryMessage} />
+                ))}
+              </div>
+              <ScrollToLatestButton visible={showScrollToLatest} onClick={() => scrollToLatest()} />
             </div>
             <ChatComposer uid={uid} uploadUrl="/api/user/chat/attachments" onSend={handleSend} />
           </>

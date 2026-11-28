@@ -9,34 +9,40 @@ startAutoMetaFetch();
 
 const DB_NAME = process.env.MONGODB_DB_NAME || "ad_buzz";
 
-// Staff roles are anything that is not a plain customer (admin,
-// technical_manager, key_manager, accounts_manager, support_executive, ...).
-async function isStaffUid(uid) {
-  if (!uid) return false;
+// One lookup per long-lived connection: staff gating (unchanged semantics)
+// plus "known user" gating for presence, so only real user documents can be
+// marked online. No fake/dummy presence rows are ever created.
+async function getSseIdentity(uid) {
+  if (!uid) return { staff: false, known: false };
   try {
     const client = await clientPromise;
     const db = client.db(DB_NAME);
     const user = await db.collection("users").findOne({ uid }, { projection: { role: 1 } });
-    // Unknown uid (lookup miss): treat as non-staff so account payloads are
-    // only delivered to verified owners. Staff pages always have a users doc.
-    return Boolean(user) && user.role !== "customer";
+    return {
+      known: Boolean(user),
+      staff: Boolean(user) && user.role !== "customer",
+    };
   } catch (err) {
-    // DB outage must not break the admin UI: fail open to the previous
-    // behavior (subscribe) and log. Account-data scoping in metaEvents.js
-    // still limits customer delivery to assigned owners.
+    // DB outage must not break the admin UI: keep the previous fail-open
+    // staff behavior, but do not publish presence for an unverified uid.
     console.error("[sse] Staff lookup failed, subscribing to admin:meta:", err.message);
-    return true;
+    return { staff: true, known: false };
   }
 }
 
 export async function GET(request) {
   const { searchParams } = new URL(request.url);
   const uid = searchParams.get("uid") || null;
-  const channels = searchParams.getAll("channel");
   // Resolve staff membership once per (long-lived) connection so only staff
   // dashboards auto-receive the admin:meta account feed. Customers receive
   // only their own assigned accounts via targeted emitToUser delivery.
-  const staff = await isStaffUid(uid);
+  const { staff, known } = await getSseIdentity(uid);
+  // Staff-only channels must never be subscribable by a customer-supplied
+  // query param: they carry account payloads and WebRTC signaling.
+  const STAFF_ONLY_CHANNELS = new Set(["admin:meta", "admin:chat"]);
+  const channels = searchParams
+    .getAll("channel")
+    .filter((channel) => !STAFF_ONLY_CHANNELS.has(channel) || staff);
 
   const encoder = new TextEncoder();
   let streamCleanup = null;
@@ -55,7 +61,7 @@ export async function GET(request) {
 
       const clientId = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 
-      unregister = registerClient({ id: clientId, uid, write });
+      unregister = registerClient({ id: clientId, uid, write, presence: known, announce: known && staff });
       for (const c of channels) {
         try { subscribeChannel(clientId, c); } catch {}
       }
@@ -69,7 +75,12 @@ export async function GET(request) {
       }
 
       heartbeat = setInterval(() => {
-        try { sendHeartbeat(clientId); } catch {}
+        try {
+          // A failed heartbeat means the socket is gone (half-open connection,
+          // sleeping device, etc.). Close the stream so presence is reaped by
+          // server-side disconnect handling rather than relying on beforeunload.
+          if (!sendHeartbeat(clientId)) cleanup();
+        } catch {}
       }, 25000);
 
       const cleanup = () => {

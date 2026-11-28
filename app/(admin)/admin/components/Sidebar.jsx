@@ -5,6 +5,8 @@ import { usePathname } from "next/navigation";
 import React from "react";
 import { LayoutGrid, Users, User, X, DollarSign, History, Megaphone, RefreshCw, MessageSquare, BarChart3, Settings, LifeBuoy, TrendingUp, CreditCard, ArrowUpCircle, ShieldCheck, ChevronDown, Bell, CircleHelp, MessageCircle, ClipboardList } from "lucide-react";
 import { useSettings } from "@/app/Component/Settings/SettingsProvider";
+import { useAuth } from "@/app/Component/Auth/AuthProvider";
+import { authFetch } from "@/lib/authFetch";
 import { useAdmin } from "./AdminProvider";
 import { useTicketAlerts } from "./TicketAlertProvider";
 import { useDepositAlerts } from "./DepositAlertProvider";
@@ -20,6 +22,7 @@ const ICON_MAP = {
   "payment-methods": CreditCard,
   "support-tickets": LifeBuoy,
   "chat": MessageCircle,
+  "internal-chat": MessageSquare,
   "balance-logs": History,
   "top-up-insights": TrendingUp,
   "ad-accounts-topup": ArrowUpCircle,
@@ -58,21 +61,44 @@ export default function DashboardSidebar({ open, onClose }) {
   const pathname = usePathname();
   const settings = useSettings();
   const { profile, access } = useAdmin();
+  const { user } = useAuth();
   const { unread } = useTicketAlerts();
   const { pending: pendingDeposits } = useDepositAlerts();
   const { unread: notifUnread } = useNotifications();
   const [chatUnread, setChatUnread] = React.useState(0);
+  const [internalUnread, setInternalUnread] = React.useState(0);
   React.useEffect(() => {
     if (!profile?.uid) return;
     const load = () => fetch(`/api/admin/chat/unread?uid=${encodeURIComponent(profile.uid)}`).then(r=>r.json()).then(d=>{ if(d.success) setChatUnread(d.unread||0); }).catch(()=>{});
+    const loadInternal = async () => {
+      try {
+        const res = await authFetch("/api/internal-chat/unread", {}, user);
+        const data = await res.json();
+        if (data.success) setInternalUnread(data.unread || 0);
+      } catch {}
+    };
     load();
-  }, [profile?.uid]);
+    loadInternal();
+  }, [profile?.uid, user]);
   useSSE({
     uid: profile?.uid,
     channels: [],
     onEvent: (type) => {
+      if (type === "internal:message" || type === "internal:read" || type === "internal:call") {
+        authFetch("/api/internal-chat/unread", {}, user)
+          .then((r) => r.json())
+          .then((d) => { if (d.success) setInternalUnread(d.unread || 0); })
+          .catch(() => {});
+        return;
+      }
       if (type !== "chat:message" && type !== "chat:read") return;
       fetch(`/api/admin/chat/unread?uid=${encodeURIComponent(profile.uid)}`).then((r) => r.json()).then((d) => { if (d.success) setChatUnread(d.unread || 0); }).catch(() => {});
+    },
+    onReconnect: () => {
+      fetch(`/api/admin/chat/unread?uid=${encodeURIComponent(profile.uid)}`)
+        .then((r) => r.json()).then((d) => { if (d.success) setChatUnread(d.unread || 0); }).catch(() => {});
+      authFetch("/api/internal-chat/unread", {}, user)
+        .then((r) => r.json()).then((d) => { if (d.success) setInternalUnread(d.unread || 0); }).catch(() => {});
     },
   });
   const badgeFor = (key) => {
@@ -80,6 +106,7 @@ export default function DashboardSidebar({ open, onClose }) {
     if (key === "deposits") return pendingDeposits;
     if (key === "notifications") return notifUnread;
     if (key === "chat") return chatUnread;
+    if (key === "internal-chat") return internalUnread;
     return 0;
   };
   const logo = settings?.logo || "/logo.jpeg";
@@ -290,6 +317,7 @@ export default function DashboardSidebar({ open, onClose }) {
               </div>
             )}
             {renderNavItem({ label: "Chat", href: "/admin/chat", key: "chat" })}
+            {renderNavItem({ label: "Internal Chat", href: "/admin/internal-chat", key: "internal-chat" })}
             {renderNavItem({ label: "Notifications", href: "/admin/notifications", key: "notifications" })}
             {renderNavItem({ label: "Profile", href: "/admin/profile", key: "profile" })}
           </div>
